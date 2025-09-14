@@ -1,0 +1,9 @@
+{
+  "/not-found": "app/not-found.js",
+  "/terms/page": "app/terms/page.js",
+  "/privacy/page": "app/privacy/page.js",
+  "/contact/page": "app/contact/page.js",
+  "/auth/login/page": "app/auth/login/page.js",
+  "/setup-demo/page": "app/setup-demo/page.js",
+  "/api/fix-contractor-membership/route": "app/api/fix-contractor-membership/route.js"
+}

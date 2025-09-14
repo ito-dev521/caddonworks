@@ -1,0 +1,135 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { supabase } from '@/lib/supabase'
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const {
+      email,
+      password,
+      displayName,
+      specialties,
+      qualifications,
+      portfolioUrl
+    } = body
+
+    // バリデーション
+    if (!email || !password || !displayName) {
+      return NextResponse.json(
+        { message: '必須項目が入力されていません' },
+        { status: 400 }
+      )
+    }
+
+    // メールアドレスの形式チェック
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(email)) {
+      return NextResponse.json(
+        { message: '正しいメールアドレスを入力してください' },
+        { status: 400 }
+      )
+    }
+
+    // 既存のユーザーをチェック
+    const { data: existingUser } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', email)
+      .single()
+
+    if (existingUser) {
+      return NextResponse.json(
+        { message: 'このメールアドレスは既に登録されています' },
+        { status: 400 }
+      )
+    }
+
+    // 1. Supabase Authでユーザーを作成
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          display_name: displayName,
+          role: 'Contractor'
+        }
+      }
+    })
+
+    if (authError) {
+      console.error('Auth signup error:', authError)
+      return NextResponse.json(
+        { message: 'ユーザー作成に失敗しました: ' + authError.message },
+        { status: 400 }
+      )
+    }
+
+    if (!authData.user) {
+      return NextResponse.json(
+        { message: 'ユーザー作成に失敗しました' },
+        { status: 400 }
+      )
+    }
+
+    // 2. ユーザープロフィールを作成
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .insert({
+        auth_user_id: authData.user.id,
+        email,
+        display_name: displayName,
+        specialties: specialties || [],
+        qualifications: qualifications || [],
+        portfolio_url: portfolioUrl || null
+      })
+      .select()
+      .single()
+
+    if (userError) {
+      console.error('User profile creation error:', userError)
+      // Authユーザーを削除（ロールバック）
+      await supabase.auth.admin.deleteUser(authData.user.id)
+      return NextResponse.json(
+        { message: 'ユーザープロフィール作成に失敗しました: ' + userError.message },
+        { status: 400 }
+      )
+    }
+
+    // 3. 受注者としてのメンバーシップを作成
+    // 受注者は特定の組織に所属しないため、org_idはnull
+    const { error: membershipError } = await supabase
+      .from('memberships')
+      .insert({
+        org_id: null,
+        user_id: userData.id,
+        role: 'Contractor'
+      })
+
+    if (membershipError) {
+      console.error('Membership creation error:', membershipError)
+      // ユーザーとAuthユーザーを削除（ロールバック）
+      await supabase.from('users').delete().eq('id', userData.id)
+      await supabase.auth.admin.deleteUser(authData.user.id)
+      return NextResponse.json(
+        { message: '権限設定に失敗しました: ' + membershipError.message },
+        { status: 400 }
+      )
+    }
+
+    // 成功レスポンス
+    return NextResponse.json({
+      message: '受注者登録が完了しました',
+      data: {
+        userId: userData.id,
+        authUserId: authData.user.id
+      }
+    }, { status: 200 })
+
+  } catch (error) {
+    console.error('Contractor registration error:', error)
+    return NextResponse.json(
+      { message: 'サーバーエラーが発生しました' },
+      { status: 500 }
+    )
+  }
+}

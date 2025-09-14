@@ -1,0 +1,288 @@
+"use client"
+
+import React, { useState } from "react"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { motion } from "framer-motion"
+import {
+  Home,
+  FolderOpen,
+  Users,
+  FileText,
+  BarChart3,
+  Settings,
+  Bell,
+  Search,
+  Menu,
+  X,
+  User,
+  LogOut,
+  ChevronDown
+} from "lucide-react"
+import { Button } from "../ui/button"
+import { Badge } from "../ui/badge"
+import { useAuth } from "@/contexts/auth-context"
+import { useRoleAccess } from "../auth/auth-guard"
+import { cn } from "@/lib/utils"
+
+interface NavigationProps {
+  userRole?: "OrgAdmin" | "Staff" | "Contractor" | "Reviewer" | "Auditor"
+}
+
+const navigationItems = {
+  OrgAdmin: [
+    { icon: Home, label: "ダッシュボード", href: "/dashboard", badge: null },
+    { icon: FolderOpen, label: "プロジェクト", href: "/projects", badge: "3" },
+    { icon: Users, label: "チーム管理", href: "/team", badge: null },
+    { icon: FileText, label: "契約管理", href: "/contracts", badge: "2" },
+    { icon: BarChart3, label: "会計・請求", href: "/billing", badge: "新" },
+  ],
+  Contractor: [
+    { icon: Home, label: "ダッシュボード", href: "/dashboard", badge: null },
+    { icon: FolderOpen, label: "案件一覧", href: "/projects", badge: "5" },
+    { icon: FileText, label: "提出物", href: "/deliverables", badge: "1" },
+    { icon: BarChart3, label: "報酬・支払", href: "/payouts", badge: null },
+  ],
+  Reviewer: [
+    { icon: Home, label: "ダッシュボード", href: "/dashboard", badge: null },
+    { icon: FolderOpen, label: "審査案件", href: "/reviews", badge: "7" },
+    { icon: FileText, label: "評価履歴", href: "/evaluations", badge: null },
+  ],
+  Auditor: [
+    { icon: Home, label: "ダッシュボード", href: "/dashboard", badge: null },
+    { icon: FileText, label: "監査ログ", href: "/audit-logs", badge: null },
+    { icon: BarChart3, label: "レポート", href: "/reports", badge: null },
+  ]
+}
+
+export function Navigation({ userRole: propUserRole }: NavigationProps) {
+  const { user, userProfile, userRole, signOut } = useAuth()
+  const router = useRouter()
+  const [isExpanded, setIsExpanded] = useState(true)
+  const [isMobileOpen, setIsMobileOpen] = useState(false)
+
+  const navItems = navigationItems[userRole] || navigationItems.OrgAdmin
+
+  return (
+    <>
+      {/* Desktop Navigation */}
+      <motion.nav
+        initial={{ x: -250 }}
+        animate={{ x: 0 }}
+        className={cn(
+          "hidden md:flex fixed left-0 top-0 h-full bg-white border-r border-gray-200 z-40 transition-all duration-300",
+          isExpanded ? "w-64" : "w-16"
+        )}
+      >
+        <div className="flex flex-col w-full">
+          {/* Header */}
+          <div className="flex items-center justify-between p-4 border-b border-gray-200">
+            <motion.div
+              className="flex items-center gap-3"
+              animate={{ opacity: isExpanded ? 1 : 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <div className="w-8 h-8 bg-engineering-blue rounded-lg flex items-center justify-center">
+                <span className="text-white font-bold text-sm">土</span>
+              </div>
+              {isExpanded && (
+                <div>
+                  <h1 className="font-bold text-lg text-engineering-blue">
+                    土木プラットフォーム
+                  </h1>
+                  <p className="text-xs text-gray-500">Civil Engineering</p>
+                </div>
+              )}
+            </motion.div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="shrink-0"
+            >
+              <Menu className="w-4 h-4" />
+            </Button>
+          </div>
+
+          {/* Navigation Items */}
+          <div className="flex-1 px-2 py-4 space-y-2">
+            {navItems.map((item, index) => (
+              <motion.div
+                key={item.href}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: index * 0.1 }}
+              >
+                <Link href={item.href}>
+                  <div className={cn(
+                    "flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-engineering-blue/10 transition-colors group relative",
+                    "hover-lift"
+                  )}>
+                    <item.icon className="w-5 h-5 text-gray-600 group-hover:text-engineering-blue" />
+                    <motion.span
+                      className="text-gray-700 group-hover:text-engineering-blue font-medium"
+                      animate={{ opacity: isExpanded ? 1 : 0 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      {isExpanded ? item.label : ""}
+                    </motion.span>
+                    {item.badge && isExpanded && (
+                      <Badge
+                        variant="engineering"
+                        className="ml-auto text-xs"
+                      >
+                        {item.badge}
+                      </Badge>
+                    )}
+
+                    {/* Tooltip for collapsed state */}
+                    {!isExpanded && (
+                      <div className="absolute left-full ml-2 px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">
+                        {item.label}
+                      </div>
+                    )}
+                  </div>
+                </Link>
+              </motion.div>
+            ))}
+          </div>
+
+          {/* User Profile */}
+          <div className="p-4 border-t border-gray-200">
+            <div className="relative group">
+              <motion.div
+                className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 cursor-pointer"
+                animate={{ justifyContent: isExpanded ? "flex-start" : "center" }}
+              >
+                <div className="w-8 h-8 bg-engineering-blue rounded-full flex items-center justify-center">
+                  <span className="text-white text-sm font-medium">
+                    {userProfile?.display_name?.charAt(0) || user?.email?.charAt(0) || 'U'}
+                  </span>
+                </div>
+                <motion.div
+                  animate={{ opacity: isExpanded ? 1 : 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="flex-1"
+                >
+                  {isExpanded && (
+                    <div>
+                      <p className="font-medium text-sm">
+                        {userProfile?.display_name || 'ユーザー'}
+                      </p>
+                      <p className="text-xs text-gray-500">{userRole}</p>
+                    </div>
+                  )}
+                </motion.div>
+                {isExpanded && (
+                  <ChevronDown className="w-4 h-4 text-gray-400 group-hover:text-gray-600" />
+                )}
+              </motion.div>
+
+              {/* User Dropdown Menu */}
+              {isExpanded && (
+                <div className="absolute bottom-full left-0 right-0 mb-2 opacity-0 group-hover:opacity-100 transition-opacity bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
+                  <Link href="/profile">
+                    <div className="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 transition-colors">
+                      <User className="w-4 h-4 text-gray-600" />
+                      <span className="text-sm text-gray-700">プロフィール</span>
+                    </div>
+                  </Link>
+                  <Link href="/settings">
+                    <div className="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 transition-colors">
+                      <Settings className="w-4 h-4 text-gray-600" />
+                      <span className="text-sm text-gray-700">設定</span>
+                    </div>
+                  </Link>
+                  <hr className="my-2" />
+                  <button
+                    onClick={async () => {
+                      await signOut()
+                      router.push('/')
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-2 hover:bg-red-50 transition-colors text-red-600"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span className="text-sm">ログアウト</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Tooltip for collapsed state */}
+              {!isExpanded && (
+                <div className="absolute left-full ml-2 px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">
+                  {userProfile?.display_name || 'ユーザー'}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </motion.nav>
+
+      {/* Mobile Navigation Button */}
+      <Button
+        variant="ghost"
+        size="icon"
+        className="md:hidden fixed top-4 left-4 z-50"
+        onClick={() => setIsMobileOpen(true)}
+      >
+        <Menu className="w-5 h-5" />
+      </Button>
+
+      {/* Mobile Navigation Overlay */}
+      {isMobileOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="md:hidden fixed inset-0 bg-black/50 z-50"
+          onClick={() => setIsMobileOpen(false)}
+        >
+          <motion.div
+            initial={{ x: -300 }}
+            animate={{ x: 0 }}
+            exit={{ x: -300 }}
+            className="w-64 h-full bg-white"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-4 border-b">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-engineering-blue rounded-lg flex items-center justify-center">
+                  <span className="text-white font-bold text-sm">土</span>
+                </div>
+                <h1 className="font-bold text-lg text-engineering-blue">
+                  土木プラットフォーム
+                </h1>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsMobileOpen(false)}
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+            <div className="p-4 space-y-2">
+              {navItems.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setIsMobileOpen(false)}
+                >
+                  <div className="flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-engineering-blue/10 transition-colors">
+                    <item.icon className="w-5 h-5 text-gray-600" />
+                    <span className="text-gray-700 font-medium">{item.label}</span>
+                    {item.badge && (
+                      <Badge variant="engineering" className="ml-auto text-xs">
+                        {item.badge}
+                      </Badge>
+                    )}
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </>
+  )
+}
