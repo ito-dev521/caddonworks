@@ -44,6 +44,25 @@ export async function POST(request: NextRequest) {
 
     // ユーザーの組織情報を取得
     console.log('ユーザーID:', user.id)
+    console.log('ユーザーEmail:', user.email)
+    
+    // まず、usersテーブルでユーザーが存在するか確認
+    const { data: userProfile, error: userError } = await supabase
+      .from('users')
+      .select('id, email, display_name')
+      .eq('auth_user_id', user.id)
+      .single()
+
+    console.log('ユーザープロフィール:', userProfile)
+    console.log('ユーザープロフィールエラー:', userError)
+
+    if (userError || !userProfile) {
+      console.error('ユーザープロフィールが見つかりません:', userError)
+      return NextResponse.json(
+        { message: 'ユーザープロフィールが見つかりません。デモアカウントを再作成してください。' },
+        { status: 403 }
+      )
+    }
     
     const { data: memberships, error: membershipError } = await supabase
       .from('memberships')
@@ -55,7 +74,7 @@ export async function POST(request: NextRequest) {
           name
         )
       `)
-      .eq('user_id', user.id)
+      .eq('user_id', userProfile.id)
 
     console.log('メンバーシップ情報:', memberships)
     console.log('メンバーシップエラー:', membershipError)
@@ -140,6 +159,20 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // まず、usersテーブルでユーザーが存在するか確認
+    const { data: userProfile, error: userError } = await supabase
+      .from('users')
+      .select('id, email, display_name')
+      .eq('auth_user_id', user.id)
+      .single()
+
+    if (userError || !userProfile) {
+      return NextResponse.json(
+        { message: 'ユーザープロフィールが見つかりません。デモアカウントを再作成してください。' },
+        { status: 403 }
+      )
+    }
+
     // ユーザーの組織情報を取得
     const { data: memberships, error: membershipError } = await supabase
       .from('memberships')
@@ -151,7 +184,7 @@ export async function GET(request: NextRequest) {
           name
         )
       `)
-      .eq('user_id', user.id)
+      .eq('user_id', userProfile.id)
 
     if (membershipError || !memberships || memberships.length === 0) {
       return NextResponse.json(

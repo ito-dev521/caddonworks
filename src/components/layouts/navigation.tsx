@@ -17,7 +17,8 @@ import {
   X,
   User,
   LogOut,
-  ChevronDown
+  ChevronDown,
+  MessageCircle
 } from "lucide-react"
 import { Button } from "../ui/button"
 import { Badge } from "../ui/badge"
@@ -33,6 +34,7 @@ const navigationItems = {
   OrgAdmin: [
     { icon: Home, label: "ダッシュボード", href: "/dashboard", badge: null },
     { icon: FolderOpen, label: "案件管理", href: "/projects", badge: "3" },
+    { icon: MessageCircle, label: "チャット", href: "/chat", badge: "2" },
     { icon: FileText, label: "契約管理", href: "/contracts", badge: "2" },
     { icon: BarChart3, label: "会計・請求", href: "/billing", badge: "新" },
     { icon: Users, label: "お気に入り会員", href: "/favorites", badge: null },
@@ -40,17 +42,20 @@ const navigationItems = {
   Contractor: [
     { icon: Home, label: "ダッシュボード", href: "/dashboard", badge: null },
     { icon: FolderOpen, label: "案件一覧", href: "/projects", badge: "5" },
+    { icon: MessageCircle, label: "チャット", href: "/chat", badge: "3" },
     { icon: FileText, label: "提出物", href: "/deliverables", badge: "1" },
     { icon: BarChart3, label: "報酬・支払", href: "/payouts", badge: null },
   ],
   Reviewer: [
     { icon: Home, label: "ダッシュボード", href: "/dashboard", badge: null },
     { icon: FolderOpen, label: "審査案件", href: "/reviews", badge: "7" },
+    { icon: MessageCircle, label: "チャット", href: "/chat", badge: "1" },
     { icon: FileText, label: "評価履歴", href: "/evaluations", badge: null },
   ],
   Auditor: [
     { icon: Home, label: "ダッシュボード", href: "/dashboard", badge: null },
     { icon: FileText, label: "監査ログ", href: "/audit-logs", badge: null },
+    { icon: MessageCircle, label: "チャット", href: "/chat", badge: null },
     { icon: BarChart3, label: "レポート", href: "/reports", badge: null },
   ]
 }
