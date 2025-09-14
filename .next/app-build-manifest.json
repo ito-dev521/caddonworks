@@ -41,10 +41,30 @@
       "static/chunks/main-app.js",
       "static/chunks/app/setup-demo/page.js"
     ],
-    "/not-found": [
+    "/dashboard/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/not-found.js"
+      "static/chunks/app/dashboard/page.js"
+    ],
+    "/projects/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/projects/page.js"
+    ],
+    "/profile/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/profile/page.js"
+    ],
+    "/reviews/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/reviews/page.js"
+    ],
+    "/auth/signup/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/auth/signup/page.js"
     ]
   }
 }

@@ -46,7 +46,7 @@ export function ProjectChart() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <TrendingUp className="w-5 h-5 text-engineering-blue" />
-          プロジェクト推移
+          案件推移
         </CardTitle>
       </CardHeader>
       <CardContent>

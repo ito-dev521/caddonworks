@@ -27,8 +27,8 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { MetricCard } from "@/components/ui/metric-card"
 import { ReviewCard } from "@/components/reviews/review-card"
-import { ReviewModal } from "@/components/reviews/review-modal"
-import { PerformanceChart } from "@/components/reviews/performance-chart"
+// import { ReviewModal } from "@/components/reviews/review-modal"
+// import { PerformanceChart } from "@/components/reviews/performance-chart"
 
 export default function ReviewsPage() {
   const [selectedTab, setSelectedTab] = useState<'pending' | 'completed' | 'analytics'>('pending')
@@ -405,7 +405,14 @@ export default function ReviewsPage() {
                 <h2 className="text-xl font-semibold text-gray-900">パフォーマンス分析</h2>
 
                 {/* Performance Chart */}
-                <PerformanceChart />
+                <Card>
+                  <CardHeader>
+                    <CardTitle>パフォーマンス分析</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-gray-600">パフォーマンス分析チャートは準備中です。</p>
+                  </CardContent>
+                </Card>
 
                 {/* Top Performers */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -492,10 +499,21 @@ export default function ReviewsPage() {
 
       {/* Review Modal */}
       {showReviewModal && (
-        <ReviewModal
-          reviewId={showReviewModal}
-          onClose={() => setShowReviewModal(null)}
-        />
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <Card className="w-full max-w-2xl mx-4">
+            <CardHeader>
+              <CardTitle>評価モーダル</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-gray-600">評価モーダルは準備中です。</p>
+              <div className="mt-4 flex justify-end">
+                <Button onClick={() => setShowReviewModal(null)}>
+                  閉じる
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       )}
     </div>
   )

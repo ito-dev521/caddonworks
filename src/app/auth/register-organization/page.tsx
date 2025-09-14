@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { PasswordField } from "@/components/ui/password-field"
+import { validateEmail } from "@/lib/email-validation"
 
 export default function OrganizationRegisterPage() {
   const [currentStep, setCurrentStep] = useState(1)
@@ -61,6 +62,7 @@ export default function OrganizationRegisterPage() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [emailValidation, setEmailValidation] = useState<{ [key: string]: any }>({})
 
   const router = useRouter()
 
@@ -70,6 +72,18 @@ export default function OrganizationRegisterPage() {
 
   const handleInputChange = (field: string, value: string | boolean | number) => {
     setFormData(prev => ({ ...prev, [field]: value }))
+
+    // メールアドレスの場合は検証を実行
+    if (field === 'billingEmail' || field === 'adminEmail') {
+      if (typeof value === 'string' && value.length > 0) {
+        const validation = validateEmail(value, {
+          requireBusiness: field === 'billingEmail' // 請求先は企業メール推奨
+        })
+        setEmailValidation(prev => ({ ...prev, [field]: validation }))
+      } else {
+        setEmailValidation(prev => ({ ...prev, [field]: null }))
+      }
+    }
   }
 
   const generateSecurePassword = () => {
@@ -342,11 +356,44 @@ export default function OrganizationRegisterPage() {
                             type="email"
                             value={formData.billingEmail}
                             onChange={(e) => handleInputChange('billingEmail', e.target.value)}
-                            className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
+                            className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent ${
+                              emailValidation.billingEmail?.isValid === false
+                                ? 'border-red-300 bg-red-50'
+                                : emailValidation.billingEmail?.isValid
+                                  ? 'border-green-300 bg-green-50'
+                                  : 'border-gray-300'
+                            }`}
                             placeholder="billing@company.co.jp"
                             required
                           />
                         </div>
+                        {emailValidation.billingEmail?.error && (
+                          <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+                            <AlertCircle className="w-3 h-3" />
+                            {emailValidation.billingEmail.error}
+                          </p>
+                        )}
+                        {emailValidation.billingEmail?.suggestions && emailValidation.billingEmail.suggestions.length > 0 && (
+                          <div className="mt-1">
+                            <p className="text-xs text-blue-600 mb-1">もしかして:</p>
+                            {emailValidation.billingEmail.suggestions.map((suggestion: string, index: number) => (
+                              <button
+                                key={index}
+                                type="button"
+                                onClick={() => handleInputChange('billingEmail', suggestion)}
+                                className="text-xs text-blue-600 hover:text-blue-800 underline mr-2"
+                              >
+                                {suggestion}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {emailValidation.billingEmail?.isValid && !emailValidation.billingEmail?.error && (
+                          <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                            <CheckCircle className="w-3 h-3" />
+                            有効なメールアドレスです
+                          </p>
+                        )}
                       </div>
 
                       <div>
@@ -455,11 +502,44 @@ export default function OrganizationRegisterPage() {
                             type="email"
                             value={formData.adminEmail}
                             onChange={(e) => handleInputChange('adminEmail', e.target.value)}
-                            className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
-                            placeholder="admin@organization.go.jp"
+                            className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent ${
+                              emailValidation.adminEmail?.isValid === false
+                                ? 'border-red-300 bg-red-50'
+                                : emailValidation.adminEmail?.isValid
+                                  ? 'border-green-300 bg-green-50'
+                                  : 'border-gray-300'
+                            }`}
+                            placeholder="admin@company.co.jp"
                             required
                           />
                         </div>
+                        {emailValidation.adminEmail?.error && (
+                          <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+                            <AlertCircle className="w-3 h-3" />
+                            {emailValidation.adminEmail.error}
+                          </p>
+                        )}
+                        {emailValidation.adminEmail?.suggestions && emailValidation.adminEmail.suggestions.length > 0 && (
+                          <div className="mt-1">
+                            <p className="text-xs text-blue-600 mb-1">もしかして:</p>
+                            {emailValidation.adminEmail.suggestions.map((suggestion: string, index: number) => (
+                              <button
+                                key={index}
+                                type="button"
+                                onClick={() => handleInputChange('adminEmail', suggestion)}
+                                className="text-xs text-blue-600 hover:text-blue-800 underline mr-2"
+                              >
+                                {suggestion}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {emailValidation.adminEmail?.isValid && !emailValidation.adminEmail?.error && (
+                          <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                            <CheckCircle className="w-3 h-3" />
+                            有効なメールアドレスです
+                          </p>
+                        )}
                       </div>
 
                       <div>

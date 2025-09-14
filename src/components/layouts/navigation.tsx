@@ -32,10 +32,10 @@ interface NavigationProps {
 const navigationItems = {
   OrgAdmin: [
     { icon: Home, label: "ダッシュボード", href: "/dashboard", badge: null },
-    { icon: FolderOpen, label: "プロジェクト", href: "/projects", badge: "3" },
-    { icon: Users, label: "チーム管理", href: "/team", badge: null },
+    { icon: FolderOpen, label: "案件管理", href: "/projects", badge: "3" },
     { icon: FileText, label: "契約管理", href: "/contracts", badge: "2" },
     { icon: BarChart3, label: "会計・請求", href: "/billing", badge: "新" },
+    { icon: Users, label: "お気に入り会員", href: "/favorites", badge: null },
   ],
   Contractor: [
     { icon: Home, label: "ダッシュボード", href: "/dashboard", badge: null },
