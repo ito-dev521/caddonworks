@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { supabase, createSupabaseAdmin } from '@/lib/supabase'
 
 export async function POST(request: NextRequest) {
   try {
@@ -98,8 +98,9 @@ export async function POST(request: NextRequest) {
 
     const company = membership.organizations as any
 
-    // 新規案件を作成
-    const { data: projectData, error: projectError } = await supabase
+    // 新規案件を作成（Service Role Keyを使用してRLSをバイパス）
+    const supabaseAdmin = createSupabaseAdmin()
+    const { data: projectData, error: projectError } = await supabaseAdmin
       .from('projects')
       .insert({
         title,
@@ -204,8 +205,9 @@ export async function GET(request: NextRequest) {
 
     const company = membership.organizations as any
 
-    // 組織の案件データを取得（会社間分離）
-    const { data: projectsData, error: projectsError } = await supabase
+    // 組織の案件データを取得（会社間分離、Service Role Keyを使用）
+    const supabaseAdmin = createSupabaseAdmin()
+    const { data: projectsData, error: projectsError } = await supabaseAdmin
       .from('projects')
       .select(`
         id,

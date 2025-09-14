@@ -5,6 +5,20 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
+// Service Role Key用のクライアント（サーバーサイドでのみ使用）
+export const createSupabaseAdmin = () => {
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+  if (!supabaseServiceKey) {
+    throw new Error('SUPABASE_SERVICE_ROLE_KEY is required for admin client')
+  }
+  return createClient(supabaseUrl, supabaseServiceKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  })
+}
+
 // Database types
 export interface User {
   id: string

@@ -65,6 +65,11 @@
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/auth/signup/page.js"
+    ],
+    "/(dashboard)/chat/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/(dashboard)/chat/page.js"
     ]
   }
 }
