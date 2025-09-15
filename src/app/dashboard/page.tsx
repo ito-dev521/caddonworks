@@ -139,16 +139,29 @@ export default function DashboardPage() {
             budget,
             start_date,
             end_date,
-            contractor_id,
-            users!projects_contractor_id_fkey (
-              display_name
-            )
+            contractor_id
           `)
           .eq('org_id', company.id) // 組織IDでフィルタリング
 
         if (projectsError) {
           console.error('プロジェクトデータの取得に失敗:', projectsError)
         } else {
+          // 受注者情報を取得
+          const contractorIds = [...new Set(projectsData?.map(p => p.contractor_id).filter(Boolean) || [])]
+          let contractorMap: any = {}
+          
+          if (contractorIds.length > 0) {
+            const { data: contractors } = await supabase
+              .from('users')
+              .select('id, display_name')
+              .in('id', contractorIds)
+            
+            contractorMap = contractors?.reduce((acc: any, contractor: any) => {
+              acc[contractor.id] = contractor
+              return acc
+            }, {}) || {}
+          }
+
           const formattedProjects = projectsData?.map(project => ({
             id: project.id,
             title: project.title,
@@ -158,7 +171,7 @@ export default function DashboardPage() {
             start_date: project.start_date,
             end_date: project.end_date,
             contractor_id: project.contractor_id,
-            contractor_name: (project.users as any)?.display_name || '未割当',
+            contractor_name: contractorMap[project.contractor_id]?.display_name || '未割当',
             progress: Math.floor(Math.random() * 100) // 実際の進捗計算ロジックに置き換え
           })) || []
           setProjects(formattedProjects)
@@ -170,91 +183,138 @@ export default function DashboardPage() {
           .select(`
             id,
             project_id,
-            projects!inner (
-              title,
-              org_id
-            ),
-            users!contracts_contractor_id_fkey (
-              display_name
-            ),
+            contractor_id,
             status,
-            amount,
-            signed_date
+            contract_amount,
+            org_signed_at,
+            contractor_signed_at
           `)
-          .eq('projects.org_id', company.id) // 組織IDでフィルタリング
+          .eq('org_id', company.id) // 組織IDでフィルタリング
 
         if (contractsError) {
           console.error('契約データの取得に失敗:', contractsError)
         } else {
+          // 案件情報を取得
+          const projectIds = [...new Set(contractsData?.map(c => c.project_id) || [])]
+          let projectMap: any = {}
+          
+          if (projectIds.length > 0) {
+            const { data: projects } = await supabase
+              .from('projects')
+              .select('id, title')
+              .in('id', projectIds)
+            
+            projectMap = projects?.reduce((acc: any, project: any) => {
+              acc[project.id] = project
+              return acc
+            }, {}) || {}
+          }
+
+          // 受注者情報を取得
+          const contractorIds = [...new Set(contractsData?.map(c => c.contractor_id) || [])]
+          let contractorMap: any = {}
+          
+          if (contractorIds.length > 0) {
+            const { data: contractors } = await supabase
+              .from('users')
+              .select('id, display_name')
+              .in('id', contractorIds)
+            
+            contractorMap = contractors?.reduce((acc: any, contractor: any) => {
+              acc[contractor.id] = contractor
+              return acc
+            }, {}) || {}
+          }
+
           const formattedContracts = contractsData?.map(contract => ({
             id: contract.id,
             project_id: contract.project_id,
-            project_title: (contract.projects as any)?.title || '',
-            contractor_name: (contract.users as any)?.display_name || '',
+            project_title: projectMap[contract.project_id]?.title || '',
+            contractor_name: contractorMap[contract.contractor_id]?.display_name || '',
             status: contract.status,
-            amount: contract.amount,
-            signed_date: contract.signed_date
+            amount: contract.contract_amount,
+            signed_date: contract.org_signed_at || contract.contractor_signed_at
           })) || []
           setContracts(formattedContracts)
         }
 
         // 請求データを取得（会社間分離）
-        const { data: billingData, error: billingError } = await supabase
-          .from('billing')
-          .select(`
-            id,
-            project_id,
-            projects!inner (
-              title,
-              org_id
-            ),
-            amount,
-            status,
-            due_date,
-            paid_date
-          `)
-          .eq('projects.org_id', company.id) // 組織IDでフィルタリング
+        // 注意: billingテーブルが存在しない場合は空の配列を設定
+        try {
+          const { data: billingData, error: billingError } = await supabase
+            .from('billing')
+            .select(`
+              id,
+              project_id,
+              amount,
+              status,
+              due_date,
+              paid_date
+            `)
+            .eq('org_id', company.id) // 組織IDでフィルタリング
 
-        if (billingError) {
-          console.error('請求データの取得に失敗:', billingError)
-        } else {
-          const formattedBilling = billingData?.map(bill => ({
-            id: bill.id,
-            project_id: bill.project_id,
-            project_title: (bill.projects as any)?.title || '',
-            amount: bill.amount,
-            status: bill.status,
-            due_date: bill.due_date,
-            paid_date: bill.paid_date
-          })) || []
-          setBilling(formattedBilling)
+          if (billingError) {
+            console.error('請求データの取得に失敗:', billingError)
+            setBilling([])
+          } else {
+            const formattedBilling = billingData?.map(bill => ({
+              id: bill.id,
+              project_id: bill.project_id,
+              project_title: '', // 案件タイトルは別途取得が必要
+              amount: bill.amount,
+              status: bill.status,
+              due_date: bill.due_date,
+              paid_date: bill.paid_date
+            })) || []
+            setBilling(formattedBilling)
+          }
+        } catch (error) {
+          console.error('請求データの取得エラー:', error)
+          setBilling([])
         }
 
         // お気に入り受注者を取得（会社間分離）
-        const { data: favoritesData, error: favoritesError } = await supabase
-          .from('favorite_contractors')
-          .select(`
-            contractor_id,
-            users!favorite_contractors_contractor_id_fkey (
-              id,
-              display_name,
-              specialties,
-              rating
-            )
-          `)
-          .eq('org_id', company.id) // 組織IDでフィルタリング
+        // 注意: favorite_contractorsテーブルが存在しない場合は空の配列を設定
+        try {
+          const { data: favoritesData, error: favoritesError } = await supabase
+            .from('favorite_contractors')
+            .select(`
+              contractor_id
+            `)
+            .eq('org_id', company.id) // 組織IDでフィルタリング
 
-        if (favoritesError) {
-          console.error('お気に入り受注者データの取得に失敗:', favoritesError)
-        } else {
-          const formattedFavorites = favoritesData?.map(fav => ({
-            id: fav.contractor_id,
-            name: (fav.users as any)?.display_name || '',
-            specialties: (fav.users as any)?.specialties || [],
-            rating: (fav.users as any)?.rating || 0,
-            completed_projects: Math.floor(Math.random() * 20) + 1 // 実際の完了プロジェクト数に置き換え
-          })) || []
-          setFavoriteContractors(formattedFavorites)
+          if (favoritesError) {
+            console.error('お気に入り受注者データの取得に失敗:', favoritesError)
+            setFavoriteContractors([])
+          } else {
+            // 受注者情報を取得
+            const contractorIds = favoritesData?.map(fav => fav.contractor_id) || []
+            let contractorMap: any = {}
+            
+            if (contractorIds.length > 0) {
+              const { data: contractors } = await supabase
+                .from('users')
+                .select('id, display_name, specialties, rating')
+                .in('id', contractorIds)
+              
+              contractorMap = contractors?.reduce((acc: any, contractor: any) => {
+                acc[contractor.id] = contractor
+                return acc
+              }, {}) || {}
+            }
+
+            const formattedFavorites = favoritesData?.map(fav => ({
+              id: fav.contractor_id,
+              name: contractorMap[fav.contractor_id]?.display_name || '',
+              specialties: contractorMap[fav.contractor_id]?.specialties || [],
+              rating: contractorMap[fav.contractor_id]?.rating || 0,
+              completed_projects: Math.floor(Math.random() * 20) + 1 // 実際の完了プロジェクト数に置き換え
+            })) || []
+            setFavoriteContractors(formattedFavorites)
+          }
+        } catch (error) {
+          console.error('お気に入り受注者データの取得エラー:', error)
+          setFavoriteContractors([])
         }
 
       } catch (error) {

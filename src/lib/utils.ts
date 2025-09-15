@@ -12,6 +12,10 @@ export function formatCurrency(amount: number): string {
   }).format(amount)
 }
 
+export function formatBudget(amount: number): string {
+  return new Intl.NumberFormat('ja-JP').format(amount) + '円'
+}
+
 export function formatDate(date: Date | string): string {
   return new Intl.DateTimeFormat('ja-JP', {
     year: 'numeric',

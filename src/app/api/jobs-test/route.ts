@@ -16,80 +16,50 @@ export async function GET(request: NextRequest) {
   try {
     console.log('jobs-test API: 開始')
 
-    // 受注者向けの案件一覧を取得（入札可能な案件のみ）
-    const { data: jobsData, error: jobsError } = await supabaseAdmin
+    // 案件データを取得（認証なしでテスト）
+    const { data: projects, error: projectsError } = await supabaseAdmin
       .from('projects')
-      .select(`
-        id,
-        title,
-        description,
-        status,
-        budget,
-        start_date,
-        end_date,
-        category,
-        created_at,
-        assignee_name,
-        bidding_deadline,
-        requirements,
-        location,
-        org_id
-      `)
-      .eq('status', 'bidding') // 入札中の案件のみ
+      .select('*')
+      .eq('status', 'bidding')
       .order('created_at', { ascending: false })
 
-    if (jobsError) {
-      console.error('jobs-test API: 案件データ取得エラー:', jobsError)
-      return NextResponse.json(
-        { message: '案件データの取得に失敗しました: ' + jobsError.message },
-        { status: 400 }
-      )
+    if (projectsError) {
+      console.error('案件取得エラー:', projectsError)
+      return NextResponse.json({ message: '案件の取得に失敗しました' }, { status: 500 })
     }
 
-    console.log('jobs-test API: 案件データ取得成功, 件数:', jobsData?.length || 0)
+    console.log('案件データ取得成功:', { count: projects?.length })
 
-    // 組織名を取得
-    const orgIds = [...new Set(jobsData?.map(job => job.org_id) || [])]
-    const { data: orgsData } = await supabaseAdmin
-      .from('organizations')
-      .select('id, name')
-      .in('id', orgIds)
+    // 組織情報を個別に取得
+    const orgIds = [...new Set(projects?.map(p => p.org_id) || [])]
+    let orgMap: any = {}
+    
+    if (orgIds.length > 0) {
+      const { data: organizations } = await supabaseAdmin
+        .from('organizations')
+        .select('id, name')
+        .in('id', orgIds)
+      
+      orgMap = organizations?.reduce((acc: any, org: any) => {
+        acc[org.id] = org
+        return acc
+      }, {}) || {}
+    }
 
-    const orgMap = orgsData?.reduce((acc: any, org: any) => {
-      acc[org.id] = org.name
-      return acc
-    }, {}) || {}
-
-    const formattedJobs = jobsData?.map(job => ({
-      id: job.id,
-      title: job.title,
-      description: job.description,
-      status: job.status,
-      budget: job.budget,
-      start_date: job.start_date,
-      end_date: job.end_date,
-      category: job.category || '道路設計',
-      created_at: job.created_at,
-      org_name: orgMap[job.org_id] || '不明な組織',
-      org_id: job.org_id,
-      assignee_name: job.assignee_name,
-      bidding_deadline: job.bidding_deadline,
-      requirements: job.requirements,
-      location: job.location
+    // データを結合
+    const jobsData = projects?.map(project => ({
+      ...project,
+      org_name: orgMap[project.org_id]?.name || '不明な組織'
     })) || []
 
-    console.log('jobs-test API: レスポンス準備完了')
+    console.log('jobs-test API: レスポンス準備完了', { jobsCount: jobsData.length })
 
-    return NextResponse.json({
-      message: 'テスト用案件データ取得成功',
-      jobs: formattedJobs,
-      count: formattedJobs.length
-    }, { status: 200 })
+    return NextResponse.json({ jobs: jobsData }, { status: 200 })
 
   } catch (error) {
-    console.error('jobs-test API: サーバーエラー:', error)
+    console.error('jobs-test API: エラー:', error)
     return NextResponse.json(
-      { message: 'サーバーエラーが発生しました: ' + (error instanceof Error ? error.message : '不明なエラー') },
+      { message: 'サーバーエラーが発生しました' },
       { status: 500 }
     )
   }

@@ -19,14 +19,21 @@ export async function POST(request: NextRequest) {
       project_id,
       bid_amount,
       proposal,
-      estimated_duration,
-      start_date
+      budget_approved
     } = body
 
     // バリデーション
-    if (!project_id || !bid_amount || !proposal || !estimated_duration || !start_date) {
+    if (!project_id || !bid_amount || budget_approved === undefined) {
       return NextResponse.json(
         { message: '必須項目が入力されていません' },
+        { status: 400 }
+      )
+    }
+
+    // 予算承認チェック
+    if (!budget_approved) {
+      return NextResponse.json(
+        { message: '発注者側の予算に同意してください' },
         { status: 400 }
       )
     }
@@ -134,6 +141,27 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // 募集人数チェック（承認済み入札数が募集人数に達していないかチェック）
+    const { data: approvedBids, error: approvedBidsError } = await supabaseAdmin
+      .from('bids')
+      .select('id')
+      .eq('project_id', project_id)
+      .eq('status', 'approved')
+
+    if (approvedBidsError) {
+      console.error('承認済み入札数取得エラー:', approvedBidsError)
+    }
+
+    const requiredContractors = project.required_contractors || 1
+    const approvedCount = approvedBids?.length || 0
+
+    if (approvedCount >= requiredContractors) {
+      return NextResponse.json(
+        { message: `この案件の募集は終了しています（募集人数: ${requiredContractors}名、承認済み: ${approvedCount}名）` },
+        { status: 400 }
+      )
+    }
+
     // 入札データを挿入
     const { data: bidData, error: bidError } = await supabaseAdmin
       .from('bids')
@@ -141,9 +169,10 @@ export async function POST(request: NextRequest) {
         project_id,
         contractor_id: userProfile.id,
         bid_amount: Number(bid_amount),
-        proposal,
-        estimated_duration: Number(estimated_duration),
-        start_date,
+        proposal: proposal || '',
+        budget_approved: budget_approved,
+        estimated_duration: null, // 古いフィールドはnullに設定
+        start_date: null, // 古いフィールドはnullに設定
         status: 'submitted'
       })
       .select()

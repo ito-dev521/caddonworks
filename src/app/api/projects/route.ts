@@ -26,13 +26,15 @@ export async function POST(request: NextRequest) {
       budget,
       start_date,
       end_date,
+      bidding_deadline,
       category,
       contractor_id,
-      assignee_name
+      assignee_name,
+      required_contractors = 1
     } = body
 
     // バリデーション
-    if (!title || !description || !budget || !start_date || !end_date || !category) {
+    if (!title || !description || !budget || !start_date || !end_date || !bidding_deadline || !category) {
       return NextResponse.json(
         { message: '必須項目が入力されていません' },
         { status: 400 }
@@ -122,9 +124,11 @@ export async function POST(request: NextRequest) {
       budget: Number(budget),
       start_date,
       end_date,
+      bidding_deadline,
       category,
       contractor_id: contractor_id || null,
       assignee_name: assignee_name || null,
+      required_contractors: Number(required_contractors),
       org_id: company.id,
       status: 'bidding' // デフォルトは入札中
     }

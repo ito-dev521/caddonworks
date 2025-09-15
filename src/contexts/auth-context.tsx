@@ -37,13 +37,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // Get initial session
     const getInitialSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      setUser(session?.user ?? null)
+      try {
+        console.log('AuthProvider: 初期セッション取得開始')
+        const { data: { session }, error } = await supabase.auth.getSession()
+        
+        if (error) {
+          console.error('AuthProvider: セッション取得エラー:', error)
+          setLoading(false)
+          return
+        }
 
-      if (session?.user) {
-        await fetchUserProfile(session.user.id)
+        console.log('AuthProvider: セッション取得結果:', { 
+          hasSession: !!session, 
+          userId: session?.user?.id,
+          hasAccessToken: !!session?.access_token,
+          tokenLength: session?.access_token?.length
+        })
+        
+        setUser(session?.user ?? null)
+
+        if (session?.user && session?.access_token) {
+          console.log('AuthProvider: ユーザープロフィール取得開始')
+          await fetchUserProfile(session.user.id)
+        } else {
+          console.log('AuthProvider: セッションまたはトークンなし、ローディング終了')
+        }
+      } catch (error) {
+        console.error('AuthProvider: 初期化エラー:', error)
+        // エラーが発生してもローディング状態を解除
+        setUser(null)
+        setUserProfile(null)
+        setUserRole(null)
+        setUserOrganization(null)
+      } finally {
+        setLoading(false)
       }
-      setLoading(false)
     }
 
     getInitialSession()
@@ -59,11 +87,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           console.log('Auth state change: SIGNED_IN, fetching profile')
           await fetchUserProfile(session.user.id)
         } else if (event === 'SIGNED_OUT') {
+          console.log('Auth state change: SIGNED_OUT, clearing profile')
           setUserProfile(null)
           setUserRole(null)
           setUserOrganization(null)
         }
-        setLoading(false)
+        
+        // ローディング状態を更新（初期化後は常にfalse）
+        if (event !== 'INITIAL_SESSION') {
+          setLoading(false)
+        }
       }
     )
 

@@ -58,12 +58,14 @@ function ProjectsPageContent() {
   const [newProject, setNewProject] = useState({
     title: '',
     description: '',
-    budget: 0,
+    budget: '',
     start_date: '',
     end_date: '',
+    bidding_deadline: '',
     category: '',
     contractor_id: '',
-    assignee_name: ''
+    assignee_name: '',
+    required_contractors: 1
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [chatMessages, setChatMessages] = useState<any[]>([])
@@ -76,6 +78,19 @@ function ProjectsPageContent() {
   const [attachments, setAttachments] = useState<any[]>([])
   const [isLoadingAttachments, setIsLoadingAttachments] = useState(false)
   const [isUploadingFile, setIsUploadingFile] = useState(false)
+
+  // 予算のフォーマット処理
+  const formatBudget = (value: string) => {
+    // 数字以外を除去
+    const numericValue = value.replace(/[^\d]/g, '')
+    // 3桁ごとにカンマを追加
+    return numericValue.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+  }
+
+  // 予算の値を数値に変換
+  const parseBudget = (value: string) => {
+    return parseInt(value.replace(/[^\d]/g, ''), 10) || 0
+  }
 
   // 案件データを取得する関数
   const fetchProjects = useCallback(async () => {
@@ -170,7 +185,10 @@ function ProjectsPageContent() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`
         },
-        body: JSON.stringify(newProject)
+        body: JSON.stringify({
+          ...newProject,
+          budget: parseBudget(newProject.budget)
+        })
       })
 
       const result = await response.json()
@@ -181,12 +199,14 @@ function ProjectsPageContent() {
         setNewProject({
           title: '',
           description: '',
-          budget: 0,
+          budget: '',
           start_date: '',
           end_date: '',
+          bidding_deadline: '',
           category: '',
           contractor_id: '',
-          assignee_name: ''
+          assignee_name: '',
+          required_contractors: 1
         })
         // 案件一覧を再読み込み
         fetchProjects()
@@ -663,14 +683,26 @@ function ProjectsPageContent() {
 
                       {/* 案件詳細 */}
                       <div className="space-y-2 text-sm">
+                        {project.bidding_deadline && (
+                          <div className="flex items-center gap-2 text-orange-600 font-medium">
+                            <Clock className="w-4 h-4" />
+                            入札締切: {new Date(project.bidding_deadline).toLocaleDateString('ja-JP')}
+                          </div>
+                        )}
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <DollarSign className="w-4 h-4" />
+                          {project.budget ? project.budget.toLocaleString('ja-JP') : '未設定'}円
+                        </div>
                         <div className="flex items-center gap-2 text-gray-600">
                           <Calendar className="w-4 h-4" />
                           納期: {new Date(project.end_date).toLocaleDateString('ja-JP')}
                         </div>
-                        <div className="flex items-center gap-2 text-gray-600">
-                          <DollarSign className="w-4 h-4" />
-                          {formatCurrency(project.budget)}
-                        </div>
+                        {project.required_contractors && project.required_contractors > 1 && (
+                          <div className="flex items-center gap-2 text-blue-600">
+                            <User className="w-4 h-4" />
+                            募集人数: {project.required_contractors}名
+                          </div>
+                        )}
                       </div>
 
                       {/* 担当者・受注者情報 */}
@@ -849,19 +881,41 @@ function ProjectsPageContent() {
                       />
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                          予算 *
+                          予算 * (円)
                         </label>
                         <input
-                          type="number"
+                          type="text"
                           value={newProject.budget}
-                          onChange={(e) => setNewProject({ ...newProject, budget: Number(e.target.value) })}
+                          onChange={(e) => {
+                            const formatted = formatBudget(e.target.value)
+                            setNewProject({ ...newProject, budget: formatted })
+                          }}
+                          placeholder="例: 10,000"
                           className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
                           required
                         />
                       </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          募集人数 *
+                        </label>
+                        <select
+                          value={newProject.required_contractors}
+                          onChange={(e) => setNewProject({ ...newProject, required_contractors: Number(e.target.value) })}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
+                          required
+                        >
+                          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(num => (
+                            <option key={num} value={num}>{num}名</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                           開始日 *
@@ -882,6 +936,18 @@ function ProjectsPageContent() {
                           type="date"
                           value={newProject.end_date}
                           onChange={(e) => setNewProject({ ...newProject, end_date: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          入札締切日 *
+                        </label>
+                        <input
+                          type="date"
+                          value={newProject.bidding_deadline}
+                          onChange={(e) => setNewProject({ ...newProject, bidding_deadline: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
                           required
                         />

@@ -22,7 +22,7 @@ import { Navigation } from "@/components/layouts/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { formatCurrency } from "@/lib/utils"
+import { formatCurrency, formatBudget } from "@/lib/utils"
 import { useAuth } from "@/contexts/auth-context"
 import { supabase } from "@/lib/supabase"
 import { AuthGuard } from "@/components/auth/auth-guard"
@@ -47,10 +47,9 @@ interface JobData {
 
 interface BidData {
   project_id: string
-  bid_amount: number
+  bid_amount: string
   proposal: string
-  estimated_duration: number
-  start_date: string
+  budget_approved: boolean
 }
 
 function JobsPageContent() {
@@ -64,13 +63,39 @@ function JobsPageContent() {
   const [dataLoading, setDataLoading] = useState(true)
   const [bidData, setBidData] = useState<BidData>({
     project_id: '',
-    bid_amount: 0,
+    bid_amount: '',
     proposal: '',
-    estimated_duration: 0,
-    start_date: ''
+    budget_approved: false
   })
   const [isSubmittingBid, setIsSubmittingBid] = useState(false)
   const [showJobDetail, setShowJobDetail] = useState<string | null>(null)
+
+  // 予算のフォーマット処理
+  const formatBudget = (value: string | number | undefined | null) => {
+    // 値が存在しない場合は0を返す
+    if (value === null || value === undefined) {
+      return '0'
+    }
+    
+    // 文字列に変換
+    const stringValue = String(value)
+    
+    // 数字以外を除去
+    const numericValue = stringValue.replace(/[^\d]/g, '')
+    
+    // 3桁ごとにカンマを追加
+    return numericValue.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+  }
+
+  // 予算の値を数値に変換
+  const parseBudget = (value: string | number | undefined | null) => {
+    if (value === null || value === undefined) {
+      return 0
+    }
+    
+    const stringValue = String(value)
+    return parseInt(stringValue.replace(/[^\d]/g, ''), 10) || 0
+  }
 
   // 案件データを取得する関数
   const fetchJobs = useCallback(async () => {
@@ -84,15 +109,23 @@ function JobsPageContent() {
       if (!session) {
         console.error('fetchJobs: セッションが見つかりません')
         setDataLoading(false)
+        // ログインページにリダイレクト
+        window.location.href = '/auth/login'
         return
       }
 
-      console.log('fetchJobs: APIリクエスト開始')
+      console.log('fetchJobs: APIリクエスト開始', {
+        hasAccessToken: !!session.access_token,
+        tokenLength: session.access_token?.length,
+        tokenPreview: session.access_token?.substring(0, 20) + '...'
+      })
+      
       // 受注者向けの案件一覧を取得（入札可能な案件のみ）
       const response = await fetch('/api/jobs', {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${session.access_token}`
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
         }
       })
 
@@ -105,13 +138,33 @@ function JobsPageContent() {
         setJobs(result.jobs)
         setFilteredJobs(result.jobs)
       } else {
-        console.error('fetchJobs: 案件データの取得に失敗:', result.message)
+        console.error('fetchJobs: 案件データの取得に失敗:', {
+          status: response.status,
+          statusText: response.statusText,
+          message: result.message
+        })
+        
+        // 認証エラーの場合はログインページにリダイレクト
+        if (response.status === 401) {
+          console.log('fetchJobs: 認証エラー、ログインページにリダイレクト')
+          window.location.href = '/auth/login'
+          return
+        }
+        
         setJobs([])
         setFilteredJobs([])
       }
 
     } catch (error) {
       console.error('fetchJobs: データ取得エラー:', error)
+      
+      // 認証エラーの場合はログインページにリダイレクト
+      if (error instanceof Error && error.message.includes('401')) {
+        console.log('fetchJobs: 認証エラー、ログインページにリダイレクト')
+        window.location.href = '/auth/login'
+        return
+      }
+      
       setJobs([])
       setFilteredJobs([])
     } finally {
@@ -124,16 +177,29 @@ function JobsPageContent() {
     console.log('useEffect: 認証状態確認', {
       userProfile: userProfile ? 'あり' : 'なし',
       userRole: userRole,
-      loading: loading
+      loading: loading,
+      userProfileId: userProfile?.id,
+      userEmail: userProfile?.email
     })
     
     if (!userProfile || userRole !== 'Contractor') {
-      console.log('useEffect: 認証条件未満のため、データ取得をスキップ')
+      console.log('useEffect: 認証条件未満のため、データ取得をスキップ', {
+        hasUserProfile: !!userProfile,
+        userRole: userRole,
+        expectedRole: 'Contractor'
+      })
       setDataLoading(false)
+      
+      // Contractorロールでない場合はダッシュボードにリダイレクト
+      if (userProfile && userRole && userRole !== 'Contractor') {
+        console.log('useEffect: 権限不足でリダイレクト', { userRole })
+        alert('このページにアクセスするには受注者権限が必要です')
+        window.location.href = '/dashboard'
+      }
       return
     }
 
-    console.log('useEffect: 認証OK、データ取得開始')
+    console.log('useEffect: 認証OK、データ取得開始', { userRole, userProfileId: userProfile.id })
     fetchJobs()
   }, [userProfile, userRole, fetchJobs])
 
@@ -171,6 +237,18 @@ function JobsPageContent() {
     e.preventDefault()
     if (!showBidModal) return
 
+    // バリデーション
+    if (!bidData.budget_approved) {
+      alert('発注者側の予算に同意してください')
+      return
+    }
+    
+    // 予算承認済みでない場合は入札金額をチェック
+    if (!bidData.budget_approved && (!bidData.bid_amount || parseBudget(bidData.bid_amount) <= 0)) {
+      alert('有効な入札金額を入力してください')
+      return
+    }
+
     setIsSubmittingBid(true)
     
     try {
@@ -187,8 +265,12 @@ function JobsPageContent() {
           'Authorization': `Bearer ${session.access_token}`
         },
         body: JSON.stringify({
-          ...bidData,
-          project_id: showBidModal
+          project_id: showBidModal,
+          bid_amount: bidData.budget_approved 
+            ? parseBudget(formatBudget(jobs.find(j => j.id === showBidModal)?.budget || 0))
+            : parseBudget(bidData.bid_amount),
+          proposal: bidData.proposal,
+          budget_approved: bidData.budget_approved
         })
       })
 
@@ -197,13 +279,12 @@ function JobsPageContent() {
       if (response.ok) {
         alert('入札が正常に送信されました')
         setShowBidModal(null)
-        setBidData({
-          project_id: '',
-          bid_amount: 0,
-          proposal: '',
-          estimated_duration: 0,
-          start_date: ''
-        })
+      setBidData({
+        project_id: '',
+        bid_amount: '',
+        proposal: '',
+        budget_approved: false
+      })
         // 案件一覧を再読み込み
         fetchJobs()
       } else {
@@ -221,10 +302,9 @@ function JobsPageContent() {
     setShowBidModal(jobId)
     setBidData({
       project_id: jobId,
-      bid_amount: 0,
+      bid_amount: '',
       proposal: '',
-      estimated_duration: 0,
-      start_date: ''
+      budget_approved: false
     })
   }
 
@@ -273,7 +353,23 @@ function JobsPageContent() {
       <div className="min-h-screen bg-gradient-mesh flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-engineering-blue mx-auto mb-4"></div>
-          <p className="text-gray-600">案件データを読み込み中...</p>
+          <p className="text-gray-600">
+            {loading ? '認証情報を読み込み中...' : '案件データを読み込み中...'}
+          </p>
+          <div className="mt-4 text-xs text-gray-500">
+            <p>Loading: {loading ? 'true' : 'false'}</p>
+            <p>DataLoading: {dataLoading ? 'true' : 'false'}</p>
+            <p>User: {userProfile ? 'あり' : 'なし'}</p>
+            <p>Role: {userRole || 'なし'}</p>
+          </div>
+          <div className="mt-4">
+            <button 
+              onClick={() => window.location.reload()} 
+              className="text-blue-600 hover:underline text-sm"
+            >
+              ページを再読み込み
+            </button>
+          </div>
         </div>
       </div>
     )
@@ -281,6 +377,7 @@ function JobsPageContent() {
 
   // 権限チェック
   if (userRole !== 'Contractor') {
+    console.log('JobsPage: 権限チェック失敗', { userRole, userProfile: !!userProfile })
     return (
       <div className="min-h-screen bg-gradient-mesh flex items-center justify-center">
         <Card className="w-full max-w-md">
@@ -288,6 +385,21 @@ function JobsPageContent() {
             <Building className="w-12 h-12 text-red-500 mx-auto mb-4" />
             <h2 className="text-xl font-semibold text-gray-900 mb-2">アクセス権限がありません</h2>
             <p className="text-gray-600">このページは受注者（Contractor）のみアクセス可能です。</p>
+            <div className="mt-4 text-xs text-gray-500">
+              <p>現在のロール: {userRole || 'なし'}</p>
+              <p>ユーザープロフィール: {userProfile ? 'あり' : 'なし'}</p>
+            </div>
+            <div className="mt-4 space-y-2">
+              <a href="/auth/login" className="block text-blue-600 hover:underline">
+                ログインページへ
+              </a>
+              <button 
+                onClick={() => window.location.reload()} 
+                className="block text-blue-600 hover:underline"
+              >
+                ページを再読み込み
+              </button>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -413,24 +525,24 @@ function JobsPageContent() {
                     <CardContent className="space-y-4">
                       {/* 案件詳細 */}
                       <div className="space-y-2 text-sm">
+                        {job.bidding_deadline && (
+                          <div className="flex items-center gap-2 text-orange-600 font-medium">
+                            <Clock className="w-4 h-4" />
+                            入札締切: {new Date(job.bidding_deadline).toLocaleDateString('ja-JP')}
+                          </div>
+                        )}
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <DollarSign className="w-4 h-4" />
+                          {formatBudget(job.budget)}
+                        </div>
                         <div className="flex items-center gap-2 text-gray-600">
                           <Calendar className="w-4 h-4" />
                           納期: {new Date(job.end_date).toLocaleDateString('ja-JP')}
-                        </div>
-                        <div className="flex items-center gap-2 text-gray-600">
-                          <DollarSign className="w-4 h-4" />
-                          {formatCurrency(job.budget)}
                         </div>
                         {job.location && (
                           <div className="flex items-center gap-2 text-gray-600">
                             <MapPin className="w-4 h-4" />
                             {job.location}
-                          </div>
-                        )}
-                        {job.bidding_deadline && (
-                          <div className="flex items-center gap-2 text-orange-600">
-                            <Clock className="w-4 h-4" />
-                            入札締切: {new Date(job.bidding_deadline).toLocaleDateString('ja-JP')}
                           </div>
                         )}
                       </div>
@@ -537,62 +649,92 @@ function JobsPageContent() {
                     入札フォーム
                   </CardTitle>
                   <CardDescription>
-                    {jobs.find(j => j.id === showBidModal)?.title} への入札
+                    {(() => {
+                      const job = jobs.find(j => j.id === showBidModal)
+                      return job ? `${job.title} への入札` : '入札フォーム'
+                    })()}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <form onSubmit={handleBidSubmit} className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          入札金額 *
-                        </label>
-                        <input
-                          type="number"
-                          value={bidData.bid_amount}
-                          onChange={(e) => setBidData({ ...bidData, bid_amount: Number(e.target.value) })}
-                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
-                          required
-                        />
+                    {/* 発注者側の予算表示 */}
+                    <div className="bg-blue-50 p-4 rounded-lg">
+                      <div className="flex items-center gap-2 mb-2">
+                        <DollarSign className="w-5 h-5 text-blue-600" />
+                        <span className="font-medium text-blue-900">発注者側の予算</span>
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          想定期間（日数） *
-                        </label>
-                        <input
-                          type="number"
-                          value={bidData.estimated_duration}
-                          onChange={(e) => setBidData({ ...bidData, estimated_duration: Number(e.target.value) })}
-                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
-                          required
-                        />
+                      <div className="text-2xl font-bold text-blue-900">
+                        {(() => {
+                          const job = jobs.find(j => j.id === showBidModal)
+                          return job ? formatBudget(job.budget) + '円' : '読み込み中...'
+                        })()}
                       </div>
                     </div>
 
+                    {/* 予算承認チェック */}
+                    <div className="flex items-center gap-3 p-4 border border-gray-200 rounded-lg">
+                      <input
+                        type="checkbox"
+                        id="budget_approved"
+                        checked={bidData.budget_approved}
+                        onChange={(e) => {
+                          const isApproved = e.target.checked
+                          const currentJob = jobs.find(j => j.id === showBidModal)
+                          
+                          setBidData({ 
+                            ...bidData, 
+                            budget_approved: isApproved,
+                            bid_amount: isApproved ? formatBudget(currentJob?.budget || 0) : bidData.bid_amount
+                          })
+                        }}
+                        className="w-4 h-4 text-engineering-blue border-gray-300 rounded focus:ring-engineering-blue"
+                      />
+                      <label htmlFor="budget_approved" className="text-sm font-medium text-gray-700">
+                        上記の予算で問題ありません
+                      </label>
+                    </div>
+
+                    {/* 入札金額 */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        開始予定日 *
+                        入札金額 * (円)
                       </label>
                       <input
-                        type="date"
-                        value={bidData.start_date}
-                        onChange={(e) => setBidData({ ...bidData, start_date: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
+                        type="text"
+                        value={bidData.budget_approved ? formatBudget(jobs.find(j => j.id === showBidModal)?.budget || 0) : bidData.bid_amount}
+                        onChange={(e) => {
+                          if (!bidData.budget_approved) {
+                            const formatted = formatBudget(e.target.value)
+                            setBidData({ ...bidData, bid_amount: formatted })
+                          }
+                        }}
+                        placeholder="例: 500,000"
+                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent ${
+                          bidData.budget_approved 
+                            ? 'border-gray-300 bg-gray-100 text-gray-500 cursor-not-allowed' 
+                            : 'border-gray-200'
+                        }`}
+                        disabled={bidData.budget_approved}
                         required
                       />
+                      {bidData.budget_approved && (
+                        <p className="mt-1 text-sm text-gray-500">
+                          予算承認済みのため、発注者側の予算と同じ金額で入札されます
+                        </p>
+                      )}
                     </div>
 
+                    {/* コメント */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        提案内容 *
+                        コメント
                       </label>
                       <textarea
                         value={bidData.proposal}
                         onChange={(e) => setBidData({ ...bidData, proposal: e.target.value })}
                         rows={4}
-                        placeholder="案件に対する提案やアプローチ方法を記入してください..."
+                        placeholder="案件に対する提案やアプローチ方法を記入してください（任意）..."
                         className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
-                        required
                       />
                     </div>
 

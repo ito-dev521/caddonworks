@@ -33,8 +33,10 @@ interface Contract {
 function ContractsPageContent() {
   const { userProfile, userRole } = useAuth()
   const [contracts, setContracts] = useState<Contract[]>([])
+  const [pendingContracts, setPendingContracts] = useState<Contract[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [selectedTab, setSelectedTab] = useState<'signed' | 'pending'>('signed')
 
   // 契約一覧を取得
   const fetchContracts = async () => {
@@ -49,7 +51,7 @@ function ContractsPageContent() {
         return
       }
 
-      console.log('契約取得開始:', { userId: session.user.id })
+      console.log('契約取得開始:', { userId: session.user.id, tokenLength: session.access_token.length })
 
       const response = await fetch('/api/contracts', {
         headers: {
@@ -58,16 +60,42 @@ function ContractsPageContent() {
         }
       })
 
+      console.log('契約取得APIレスポンス:', { status: response.status, statusText: response.statusText })
+
       const result = await response.json()
+      console.log('契約取得API結果:', result)
 
       if (response.ok) {
-        setContracts(result.contracts || [])
+        const allContracts = result.contracts || []
+        console.log('契約データ取得成功:', { totalContracts: allContracts.length })
+        
+        if (allContracts.length === 0) {
+          console.log('契約データなし - 空の配列を設定')
+          setContracts([])
+          setPendingContracts([])
+        } else {
+          // 署名済み契約と署名待ち契約を分ける
+          const signedContracts = allContracts.filter(contract => 
+            contract.status === 'signed' || contract.status === 'completed'
+          )
+          const pendingContracts = allContracts.filter(contract => 
+            contract.status === 'pending' || contract.status === 'org_signed' || contract.status === 'contractor_signed'
+          )
+          
+          console.log('契約分類完了:', { signedCount: signedContracts.length, pendingCount: pendingContracts.length })
+          
+          setContracts(signedContracts)
+          setPendingContracts(pendingContracts)
+        }
       } else {
+        console.error('契約取得エラー:', result.message)
         setError(result.message || '契約データの取得に失敗しました')
       }
     } catch (err: any) {
       console.error('契約取得エラー:', err)
-      setError('サーバーエラーが発生しました')
+      setError(`サーバーエラーが発生しました: ${err.message || '不明なエラー'}`)
+      setContracts([])
+      setPendingContracts([])
     } finally {
       setLoading(false)
     }
@@ -78,6 +106,29 @@ function ContractsPageContent() {
       fetchContracts()
     }
   }, [userProfile, userRole])
+
+  // 契約を月毎にグループ化
+  const groupContractsByMonth = (contracts: Contract[]) => {
+    const grouped = contracts.reduce((acc, contract) => {
+      const date = new Date(contract.created_at)
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+      const monthName = date.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' })
+      
+      if (!acc[monthKey]) {
+        acc[monthKey] = {
+          monthName,
+          contracts: []
+        }
+      }
+      acc[monthKey].contracts.push(contract)
+      return acc
+    }, {} as Record<string, { monthName: string; contracts: Contract[] }>)
+
+    // 月順でソート
+    return Object.entries(grouped)
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([_, data]) => data)
+  }
 
   // ステータスに応じたバッジの色を取得
   const getStatusBadge = (status: string) => {
@@ -123,7 +174,7 @@ function ContractsPageContent() {
 
       if (response.ok) {
         // 契約一覧を再取得
-        fetchContracts()
+        await fetchContracts()
       } else {
         setError(result.message || '契約の署名に失敗しました')
       }
@@ -133,14 +184,26 @@ function ContractsPageContent() {
     }
   }
 
-  if (!userProfile || !userRole || loading) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-gradient-mesh flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-engineering-blue mx-auto mb-4"></div>
-          <p className="text-gray-600">
-            {!userProfile || !userRole ? 'ユーザー情報を読み込み中...' : '契約データを読み込み中...'}
-          </p>
+          <p className="text-gray-600">認証確認中...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!userProfile || !userRole) {
+    return (
+      <div className="min-h-screen bg-gradient-mesh flex items-center justify-center">
+        <div className="text-center bg-white p-8 rounded-lg shadow-xl max-w-md">
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">ログインが必要です</h2>
+          <p className="text-gray-600 mb-4">契約一覧を表示するにはログインしてください。</p>
+          <Button onClick={() => window.location.href = '/auth/login'} variant="engineering">
+            ログインページへ
+          </Button>
         </div>
       </div>
     )
@@ -178,107 +241,234 @@ function ContractsPageContent() {
             </p>
           </div>
 
-          {/* 契約一覧 */}
-          {contracts.length === 0 ? (
-            <Card className="p-8 text-center">
-              <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">契約がありません</h3>
-              <p className="text-gray-600">
-                {userRole === 'OrgAdmin' 
-                  ? 'まだ契約が作成されていません。案件から契約を作成してください。'
-                  : 'まだ契約がありません。入札が承認されると契約が作成されます。'
-                }
-              </p>
-            </Card>
-          ) : (
-            <div className="grid gap-6">
-              {contracts.map((contract) => (
-                <motion.div
-                  key={contract.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3 }}
+          {/* タブ */}
+          <div className="mb-6">
+            <div className="border-b border-gray-200">
+              <nav className="-mb-px flex space-x-8">
+                <button
+                  onClick={() => setSelectedTab('signed')}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                    selectedTab === 'signed'
+                      ? 'border-engineering-blue text-engineering-blue'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
                 >
-                  <Card className="p-6 hover:shadow-lg transition-shadow">
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex-1">
-                        <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                          {contract.project_title || '案件名不明'}
-                        </h3>
-                        <div className="flex items-center gap-4 text-sm text-gray-600">
-                          <div className="flex items-center gap-1">
-                            <User className="w-4 h-4" />
-                            {userRole === 'OrgAdmin' ? contract.contractor_name : contract.org_name}
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <DollarSign className="w-4 h-4" />
-                            ¥{contract.contract_amount.toLocaleString()}
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <Calendar className="w-4 h-4" />
-                            {new Date(contract.start_date).toLocaleDateString('ja-JP')} - {new Date(contract.end_date).toLocaleDateString('ja-JP')}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        {getStatusBadge(contract.status)}
-                        {contract.status === 'pending' && userRole === 'Contractor' && (
-                          <Button
-                            onClick={() => handleSignContract(contract.id)}
-                            variant="engineering"
-                            size="sm"
-                          >
-                            署名する
-                          </Button>
-                        )}
-                        {contract.status === 'org_signed' && userRole === 'Contractor' && (
-                          <Button
-                            onClick={() => handleSignContract(contract.id)}
-                            variant="engineering"
-                            size="sm"
-                          >
-                            署名する
-                          </Button>
-                        )}
-                        {contract.status === 'contractor_signed' && userRole === 'OrgAdmin' && (
-                          <Button
-                            onClick={() => handleSignContract(contract.id)}
-                            variant="engineering"
-                            size="sm"
-                          >
-                            署名する
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* 署名状況 */}
-                    <div className="border-t pt-4">
-                      <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div>
-                          <span className="text-gray-600">発注者署名:</span>
-                          <span className={`ml-2 ${contract.org_signed_at ? 'text-green-600' : 'text-gray-400'}`}>
-                            {contract.org_signed_at 
-                              ? new Date(contract.org_signed_at).toLocaleString('ja-JP')
-                              : '未署名'
-                            }
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-gray-600">受注者署名:</span>
-                          <span className={`ml-2 ${contract.contractor_signed_at ? 'text-green-600' : 'text-gray-400'}`}>
-                            {contract.contractor_signed_at 
-                              ? new Date(contract.contractor_signed_at).toLocaleString('ja-JP')
-                              : '未署名'
-                            }
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </Card>
-                </motion.div>
-              ))}
+                  署名済み契約
+                  {contracts.length > 0 && (
+                    <span className="ml-2 bg-engineering-blue text-white text-xs px-2 py-1 rounded-full">
+                      {contracts.length}
+                    </span>
+                  )}
+                </button>
+                <button
+                  onClick={() => setSelectedTab('pending')}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                    selectedTab === 'pending'
+                      ? 'border-engineering-blue text-engineering-blue'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  署名待ち契約
+                  {pendingContracts.length > 0 && (
+                    <span className="ml-2 bg-yellow-500 text-white text-xs px-2 py-1 rounded-full">
+                      {pendingContracts.length}
+                    </span>
+                  )}
+                </button>
+              </nav>
             </div>
+          </div>
+
+          {/* 契約一覧 */}
+          {selectedTab === 'signed' ? (
+            // 署名済み契約（月毎にグループ化）
+            contracts.length === 0 ? (
+              <Card className="p-8 text-center">
+                <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">署名済み契約がありません</h3>
+                <p className="text-gray-600">
+                  まだ署名済みの契約がありません。
+                </p>
+              </Card>
+            ) : (
+              <div className="space-y-8">
+                {groupContractsByMonth(contracts).map((monthGroup, monthIndex) => (
+                  <div key={monthIndex}>
+                    <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+                      <Calendar className="w-5 h-5 mr-2" />
+                      {monthGroup.monthName}
+                      <span className="ml-2 text-sm font-normal text-gray-500">
+                        ({monthGroup.contracts.length}件)
+                      </span>
+                    </h2>
+                    <div className="grid gap-4">
+                      {monthGroup.contracts.map((contract) => (
+                        <motion.div
+                          key={contract.id}
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.3 }}
+                        >
+                          <Card className="p-6 hover:shadow-lg transition-shadow">
+                            <div className="flex items-start justify-between mb-4">
+                              <div className="flex-1">
+                                <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                                  {contract.project_title || '案件名不明'}
+                                </h3>
+                                <div className="flex items-center gap-4 text-sm text-gray-600">
+                                  <div className="flex items-center gap-1">
+                                    <User className="w-4 h-4" />
+                                    {userRole === 'OrgAdmin' ? contract.contractor_name : contract.org_name}
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <DollarSign className="w-4 h-4" />
+                                    ¥{contract.contract_amount.toLocaleString()}
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <Calendar className="w-4 h-4" />
+                                    {new Date(contract.start_date).toLocaleDateString('ja-JP')} - {new Date(contract.end_date).toLocaleDateString('ja-JP')}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                {getStatusBadge(contract.status)}
+                              </div>
+                            </div>
+
+                            {/* 署名状況 */}
+                            <div className="border-t pt-4">
+                              <div className="grid grid-cols-2 gap-4 text-sm">
+                                <div>
+                                  <span className="text-gray-600">発注者署名:</span>
+                                  <span className={`ml-2 ${contract.org_signed_at ? 'text-green-600' : 'text-gray-400'}`}>
+                                    {contract.org_signed_at 
+                                      ? new Date(contract.org_signed_at).toLocaleString('ja-JP')
+                                      : '未署名'
+                                    }
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="text-gray-600">受注者署名:</span>
+                                  <span className={`ml-2 ${contract.contractor_signed_at ? 'text-green-600' : 'text-gray-400'}`}>
+                                    {contract.contractor_signed_at 
+                                      ? new Date(contract.contractor_signed_at).toLocaleString('ja-JP')
+                                      : '未署名'
+                                    }
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          </Card>
+                        </motion.div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
+          ) : (
+            // 署名待ち契約
+            pendingContracts.length === 0 ? (
+              <Card className="p-8 text-center">
+                <Clock className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">署名待ち契約がありません</h3>
+                <p className="text-gray-600">
+                  {userRole === 'OrgAdmin' 
+                    ? '現在、署名待ちの契約はありません。'
+                    : '現在、署名待ちの契約はありません。'
+                  }
+                </p>
+              </Card>
+            ) : (
+              <div className="grid gap-6">
+                {pendingContracts.map((contract) => (
+                  <motion.div
+                    key={contract.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <Card className="p-6 hover:shadow-lg transition-shadow border-l-4 border-l-yellow-400">
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex-1">
+                          <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                            {contract.project_title || '案件名不明'}
+                          </h3>
+                          <div className="flex items-center gap-4 text-sm text-gray-600">
+                            <div className="flex items-center gap-1">
+                              <User className="w-4 h-4" />
+                              {userRole === 'OrgAdmin' ? contract.contractor_name : contract.org_name}
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <DollarSign className="w-4 h-4" />
+                              ¥{contract.contract_amount.toLocaleString()}
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Calendar className="w-4 h-4" />
+                              {new Date(contract.start_date).toLocaleDateString('ja-JP')} - {new Date(contract.end_date).toLocaleDateString('ja-JP')}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          {getStatusBadge(contract.status)}
+                          {contract.status === 'pending' && userRole === 'Contractor' && (
+                            <Button
+                              onClick={() => handleSignContract(contract.id)}
+                              variant="engineering"
+                              size="sm"
+                            >
+                              署名する
+                            </Button>
+                          )}
+                          {contract.status === 'org_signed' && userRole === 'Contractor' && (
+                            <Button
+                              onClick={() => handleSignContract(contract.id)}
+                              variant="engineering"
+                              size="sm"
+                            >
+                              署名する
+                            </Button>
+                          )}
+                          {contract.status === 'contractor_signed' && userRole === 'OrgAdmin' && (
+                            <Button
+                              onClick={() => handleSignContract(contract.id)}
+                              variant="engineering"
+                              size="sm"
+                            >
+                              署名する
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* 署名状況 */}
+                      <div className="border-t pt-4">
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <span className="text-gray-600">発注者署名:</span>
+                            <span className={`ml-2 ${contract.org_signed_at ? 'text-green-600' : 'text-gray-400'}`}>
+                              {contract.org_signed_at 
+                                ? new Date(contract.org_signed_at).toLocaleString('ja-JP')
+                                : '未署名'
+                              }
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-gray-600">受注者署名:</span>
+                            <span className={`ml-2 ${contract.contractor_signed_at ? 'text-green-600' : 'text-gray-400'}`}>
+                              {contract.contractor_signed_at 
+                                ? new Date(contract.contractor_signed_at).toLocaleString('ja-JP')
+                                : '未署名'
+                              }
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </Card>
+                  </motion.div>
+                ))}
+              </div>
+            )
           )}
         </motion.div>
       </div>
