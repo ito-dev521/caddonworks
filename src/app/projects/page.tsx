@@ -425,25 +425,64 @@ function ProjectsPageContent() {
 
   const uploadFile = async (projectId: string, file: File) => {
     setIsUploadingFile(true)
+    console.log('=== フロントエンド: ファイルアップロード開始 ===', { 
+      projectId, 
+      fileName: file.name, 
+      fileSize: file.size,
+      fileType: file.type,
+      timestamp: new Date().toISOString()
+    })
+    
     try {
+      console.log('セッション取得開始')
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
+        console.error('セッションがありません')
         alert('ログインが必要です')
         return
       }
+      console.log('セッション取得成功:', { 
+        hasAccessToken: !!session.access_token,
+        tokenLength: session.access_token?.length 
+      })
 
+      console.log('FormData作成開始')
       const formData = new FormData()
       formData.append('file', file)
+      console.log('FormData作成完了')
+
+      console.log('APIリクエスト送信開始:', {
+        url: `/api/projects/${projectId}/attachments`,
+        method: 'POST',
+        hasAuthHeader: !!session.access_token
+      })
+      
+      // タイムアウト処理を追加（5分）
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => {
+        console.error('リクエストタイムアウト（5分）')
+        controller.abort()
+      }, 5 * 60 * 1000)
 
       const response = await fetch(`/api/projects/${projectId}/attachments`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.access_token}`
         },
-        body: formData
+        body: formData,
+        signal: controller.signal
       })
 
+      clearTimeout(timeoutId)
+      console.log('=== フロントエンド: APIレスポンス受信 ===', { 
+        status: response.status, 
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers.entries())
+      })
+
+      console.log('レスポンスJSON解析開始')
       const result = await response.json()
+      console.log('=== フロントエンド: APIレスポンス解析完了 ===', result)
 
       if (response.ok) {
         alert('ファイルが正常にアップロードされました')
@@ -458,13 +497,31 @@ function ProjectsPageContent() {
         if (result.details) {
           errorMessage += '\n詳細: ' + result.details
         }
+        if (result.duration) {
+          errorMessage += `\n処理時間: ${result.duration}`
+        }
         alert(errorMessage)
       }
     } catch (error) {
-      console.error('ファイルアップロードエラー:', error)
-      alert('ネットワークエラーが発生しました')
+      console.error('=== フロントエンド: ファイルアップロードエラー ===', {
+        error: error,
+        errorName: error instanceof Error ? error.name : 'Unknown',
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString()
+      })
+      
+      if (error instanceof Error && error.name === 'AbortError') {
+        alert('ファイルアップロードがタイムアウトしました（5分）')
+      } else if (error instanceof Error && error.message.includes('fetch')) {
+        alert('ネットワークエラーが発生しました。サーバーが起動しているか確認してください。')
+      } else {
+        alert('エラーが発生しました: ' + (error instanceof Error ? error.message : 'Unknown error'))
+      }
     } finally {
       setIsUploadingFile(false)
+      console.log('=== フロントエンド: ファイルアップロード処理完了 ===', {
+        timestamp: new Date().toISOString()
+      })
     }
   }
 
@@ -1158,7 +1215,7 @@ function ProjectsPageContent() {
                           uploadFile(showAttachmentsModal, file)
                         }
                       }}
-                      accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                      accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.gif,.webp,.txt,.zip,.rar,.dwg,.p21,.sfc,.bfo"
                       disabled={isUploadingFile}
                     />
                     <Button
@@ -1169,7 +1226,7 @@ function ProjectsPageContent() {
                       {isUploadingFile ? 'アップロード中...' : 'ファイルを選択'}
                     </Button>
                     <p className="text-xs text-gray-500 mt-2">
-                      対応形式: PDF, Word, Excel, 画像 (最大200MB)
+                      対応形式: PDF, Word, Excel, PowerPoint, 画像, ZIP, RAR, DWG, P21, SFC, BFO (最大200MB)
                     </p>
                   </div>
                 </div>

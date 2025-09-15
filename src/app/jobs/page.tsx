@@ -401,6 +401,14 @@ function JobsPageContent() {
     if (fileType.includes('image')) return '🖼️'
     if (fileType.includes('word')) return '📝'
     if (fileType.includes('excel') || fileType.includes('spreadsheet')) return '📊'
+    if (fileType.includes('powerpoint') || fileType.includes('presentation')) return '📽️'
+    if (fileType.includes('zip') || fileType.includes('rar')) return '🗜️'
+    if (fileType.includes('text') || fileType.includes('plain')) return '📃'
+    // CADファイル形式
+    if (fileType.includes('dwg')) return '🏗️'
+    if (fileType.includes('step') || fileType.includes('p21')) return '🔧'
+    if (fileType.includes('sfc')) return '⚙️'
+    if (fileType.includes('bfo')) return '📐'
     return '📎'
   }
 
