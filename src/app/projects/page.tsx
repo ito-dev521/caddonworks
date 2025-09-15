@@ -450,7 +450,15 @@ function ProjectsPageContent() {
         // 添付資料一覧を再読み込み
         await loadAttachments(projectId)
       } else {
-        alert('ファイルのアップロードに失敗しました: ' + result.message)
+        console.error('ファイルアップロードエラー:', result)
+        let errorMessage = 'ファイルのアップロードに失敗しました'
+        if (result.message) {
+          errorMessage += ': ' + result.message
+        }
+        if (result.details) {
+          errorMessage += '\n詳細: ' + result.details
+        }
+        alert(errorMessage)
       }
     } catch (error) {
       console.error('ファイルアップロードエラー:', error)
@@ -1161,7 +1169,7 @@ function ProjectsPageContent() {
                       {isUploadingFile ? 'アップロード中...' : 'ファイルを選択'}
                     </Button>
                     <p className="text-xs text-gray-500 mt-2">
-                      対応形式: PDF, Word, Excel, 画像 (最大10MB)
+                      対応形式: PDF, Word, Excel, 画像 (最大200MB)
                     </p>
                   </div>
                 </div>

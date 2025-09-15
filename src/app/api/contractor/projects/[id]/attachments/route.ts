@@ -1,0 +1,119 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase'
+
+const supabase = createClient()
+
+// 受注者向けの案件添付資料一覧取得
+export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    const { id: projectId } = params
+
+    // 認証チェック
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader) {
+      return NextResponse.json({ message: '認証が必要です' }, { status: 401 })
+    }
+
+    const token = authHeader.replace('Bearer ', '')
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+    
+    if (authError || !user) {
+      return NextResponse.json({ message: '認証に失敗しました' }, { status: 401 })
+    }
+
+    // ユーザープロフィールを取得
+    const { data: userProfile, error: userError } = await supabase
+      .from('users')
+      .select('id, email, display_name')
+      .eq('auth_user_id', user.id)
+      .single()
+
+    if (userError || !userProfile) {
+      return NextResponse.json({ message: 'ユーザープロフィールが見つかりません' }, { status: 403 })
+    }
+
+    // 案件の存在確認
+    const { data: project, error: projectError } = await supabase
+      .from('projects')
+      .select('id, title, org_id, contractor_id')
+      .eq('id', projectId)
+      .single()
+
+    if (projectError || !project) {
+      return NextResponse.json({ message: '案件が見つかりません' }, { status: 404 })
+    }
+
+    // 受注者権限チェック（契約者または組織メンバー）
+    let hasAccess = false
+
+    // 1. 直接契約者として指定されている場合
+    if (project.contractor_id === userProfile.id) {
+      hasAccess = true
+    }
+
+    // 2. 組織メンバーとしてアクセス権がある場合
+    if (!hasAccess) {
+      const { data: membership, error: membershipError } = await supabase
+        .from('memberships')
+        .select('role')
+        .eq('user_id', userProfile.id)
+        .eq('org_id', project.org_id)
+        .eq('role', 'Contractor')
+        .single()
+
+      if (!membershipError && membership) {
+        hasAccess = true
+      }
+    }
+
+    if (!hasAccess) {
+      return NextResponse.json({ message: 'この案件へのアクセス権限がありません' }, { status: 403 })
+    }
+
+    // 添付資料一覧を取得
+    const { data: attachments, error: attachmentsError } = await supabase
+      .from('project_attachments')
+      .select(`
+        id,
+        file_name,
+        file_path,
+        file_size,
+        file_type,
+        uploaded_by,
+        created_at,
+        users!project_attachments_uploaded_by_fkey (
+          display_name
+        )
+      `)
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: false })
+
+    if (attachmentsError) {
+      console.error('添付資料取得エラー:', attachmentsError)
+      return NextResponse.json({ message: '添付資料の取得に失敗しました' }, { status: 500 })
+    }
+
+    // ファイルのダウンロードURLを生成
+    const attachmentsWithUrls = await Promise.all(
+      (attachments || []).map(async (attachment) => {
+        const { data: { publicUrl } } = supabase.storage
+          .from('project-attachments')
+          .getPublicUrl(attachment.file_path)
+
+        return {
+          ...attachment,
+          download_url: publicUrl,
+          uploaded_by_name: (attachment.users as any)?.display_name || '不明'
+        }
+      })
+    )
+
+    return NextResponse.json({
+      attachments: attachmentsWithUrls
+    })
+
+  } catch (error) {
+    console.error('受注者添付資料取得エラー:', error)
+    return NextResponse.json({ message: 'サーバーエラーが発生しました' }, { status: 500 })
+  }
+}

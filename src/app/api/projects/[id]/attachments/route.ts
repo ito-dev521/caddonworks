@@ -68,23 +68,43 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return NextResponse.json({ message: '認証に失敗しました' }, { status: 401 })
     }
 
-    // 案件の存在確認と権限チェック
+    // ユーザープロフィールを取得
+    const { data: userProfile, error: userError } = await supabase
+      .from('users')
+      .select('id, email, display_name')
+      .eq('auth_user_id', user.id)
+      .single()
+
+    if (userError || !userProfile) {
+      return NextResponse.json({ message: 'ユーザープロフィールが見つかりません' }, { status: 403 })
+    }
+
+    // 案件の存在確認
     const { data: project, error: projectError } = await supabase
       .from('projects')
-      .select(`
-        id,
-        org_id,
-        memberships!inner (
-          user_id,
-          role
-        )
-      `)
+      .select('id, org_id, title')
       .eq('id', projectId)
-      .eq('memberships.user_id', user.id)
       .single()
 
     if (projectError || !project) {
-      return NextResponse.json({ message: '案件が見つからないか、アクセス権限がありません' }, { status: 404 })
+      return NextResponse.json({ message: '案件が見つかりません' }, { status: 404 })
+    }
+
+    // ユーザーの権限チェック（発注者または受注者）
+    const { data: membership, error: membershipError } = await supabase
+      .from('memberships')
+      .select('role, org_id')
+      .eq('user_id', userProfile.id)
+      .eq('org_id', project.org_id)
+      .single()
+
+    if (membershipError || !membership) {
+      return NextResponse.json({ message: 'この案件へのアクセス権限がありません' }, { status: 403 })
+    }
+
+    // 権限チェック（発注者または受注者）
+    if (!['OrgAdmin', 'Contractor'].includes(membership.role)) {
+      return NextResponse.json({ message: 'ファイルアップロードの権限がありません' }, { status: 403 })
     }
 
     // ファイルアップロード処理（簡易実装）
@@ -95,9 +115,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return NextResponse.json({ message: 'ファイルが選択されていません' }, { status: 400 })
     }
 
-    // ファイルサイズチェック（10MB制限）
-    if (file.size > 10 * 1024 * 1024) {
-      return NextResponse.json({ message: 'ファイルサイズが大きすぎます（10MB以下）' }, { status: 400 })
+    // ファイルサイズチェック（200MB制限）
+    if (file.size > 200 * 1024 * 1024) {
+      return NextResponse.json({ message: 'ファイルサイズが大きすぎます（最大200MB）' }, { status: 400 })
     }
 
     // ファイルタイプチェック
@@ -112,16 +132,43 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const filePath = `projects/${projectId}/${fileName}`
 
     // Supabase Storageにファイルをアップロード
+    console.log('ファイルアップロード開始:', {
+      filePath,
+      fileName: file.name,
+      fileSize: file.size,
+      fileType: file.type
+    })
+
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('project-attachments')
       .upload(filePath, file)
 
     if (uploadError) {
-      console.error('ファイルアップロードエラー:', uploadError)
-      return NextResponse.json({ message: 'ファイルのアップロードに失敗しました' }, { status: 400 })
+      console.error('ファイルアップロードエラー:', {
+        error: uploadError,
+        filePath,
+        fileName: file.name,
+        fileSize: file.size
+      })
+      return NextResponse.json({ 
+        message: 'ファイルのアップロードに失敗しました',
+        error: uploadError.message,
+        details: 'Storage bucket "project-attachments" が存在しないか、アクセス権限がありません'
+      }, { status: 400 })
     }
 
+    console.log('ファイルアップロード成功:', uploadData)
+
     // データベースに添付資料情報を保存
+    console.log('データベース保存開始:', {
+      project_id: projectId,
+      file_name: file.name,
+      file_path: filePath,
+      file_size: file.size,
+      file_type: file.type,
+      uploaded_by: userProfile.id
+    })
+
     const { data: attachmentData, error: attachmentError } = await supabase
       .from('project_attachments')
       .insert({
@@ -130,17 +177,27 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         file_path: filePath,
         file_size: file.size,
         file_type: file.type,
-        uploaded_by: user.id
+        uploaded_by: userProfile.id
       })
       .select()
       .single()
 
     if (attachmentError) {
-      console.error('添付資料保存エラー:', attachmentError)
+      console.error('添付資料保存エラー:', {
+        error: attachmentError,
+        project_id: projectId,
+        uploaded_by: userProfile.id
+      })
       // アップロードしたファイルを削除
       await supabase.storage.from('project-attachments').remove([filePath])
-      return NextResponse.json({ message: '添付資料の保存に失敗しました' }, { status: 400 })
+      return NextResponse.json({ 
+        message: '添付資料の保存に失敗しました',
+        error: attachmentError.message,
+        details: 'project_attachmentsテーブルが存在しないか、アクセス権限がありません'
+      }, { status: 400 })
     }
+
+    console.log('データベース保存成功:', attachmentData)
 
     return NextResponse.json({
       message: 'ファイルが正常にアップロードされました',

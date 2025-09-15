@@ -180,6 +180,19 @@ export async function POST(request: NextRequest) {
 
     if (bidError) {
       console.error('入札作成エラー:', bidError)
+      
+      // データベース制約エラーの特別な処理
+      if (bidError.message.includes('estimated_duration') || bidError.message.includes('start_date')) {
+        return NextResponse.json(
+          { 
+            message: 'データベーススキーマが古いです。bidsテーブルの制約を修正してください。',
+            error: bidError.message,
+            suggestion: 'SupabaseのSQLエディタでfix-bids-table-constraints.sqlを実行してください。'
+          },
+          { status: 500 }
+        )
+      }
+      
       return NextResponse.json(
         { message: '入札の作成に失敗しました: ' + bidError.message },
         { status: 400 }
@@ -203,6 +216,11 @@ export async function POST(request: NextRequest) {
       console.error('案件情報取得エラー:', projectInfoError)
     } else {
       // 発注者に通知を送信
+      console.log('発注者取得開始:', {
+        org_id: projectInfo.org_id,
+        project_title: projectInfo.title
+      })
+
       const { data: orgAdmins, error: orgAdminsError } = await supabaseAdmin
         .from('memberships')
         .select('user_id')
@@ -210,8 +228,15 @@ export async function POST(request: NextRequest) {
         .eq('role', 'OrgAdmin')
 
       if (orgAdminsError) {
-        console.error('発注者取得エラー:', orgAdminsError)
+        console.error('発注者取得エラー:', {
+          error: orgAdminsError,
+          org_id: projectInfo.org_id
+        })
       } else {
+        console.log('発注者取得成功:', {
+          count: orgAdmins?.length || 0,
+          orgAdmins: orgAdmins
+        })
         // 各発注者に通知を作成
         const notifications = orgAdmins.map(admin => ({
           user_id: admin.user_id,
@@ -229,14 +254,31 @@ export async function POST(request: NextRequest) {
           }
         }))
 
-        const { error: notificationError } = await supabaseAdmin
+        console.log('通知作成開始:', {
+          notificationsCount: notifications.length,
+          notifications: notifications.map(n => ({
+            user_id: n.user_id,
+            type: n.type,
+            title: n.title
+          }))
+        })
+
+        const { data: insertedNotifications, error: notificationError } = await supabaseAdmin
           .from('notifications')
           .insert(notifications)
+          .select()
 
         if (notificationError) {
-          console.error('通知作成エラー:', notificationError)
+          console.error('通知作成エラー:', {
+            error: notificationError,
+            notifications: notifications,
+            projectInfo: projectInfo
+          })
         } else {
-          console.log('入札通知を送信しました:', notifications.length, '件')
+          console.log('入札通知を送信しました:', {
+            count: insertedNotifications?.length || 0,
+            notifications: insertedNotifications
+          })
         }
       }
     }

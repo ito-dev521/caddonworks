@@ -43,6 +43,10 @@ interface JobData {
   bidding_deadline?: string
   requirements?: string
   location?: string
+  required_contractors: number
+  current_bid_count: number
+  is_full: boolean
+  can_bid: boolean
 }
 
 interface BidData {
@@ -69,6 +73,8 @@ function JobsPageContent() {
   })
   const [isSubmittingBid, setIsSubmittingBid] = useState(false)
   const [showJobDetail, setShowJobDetail] = useState<string | null>(null)
+  const [attachments, setAttachments] = useState<any[]>([])
+  const [loadingAttachments, setLoadingAttachments] = useState(false)
 
   // 予算のフォーマット処理
   const formatBudget = (value: string | number | undefined | null) => {
@@ -95,6 +101,28 @@ function JobsPageContent() {
     
     const stringValue = String(value)
     return parseInt(stringValue.replace(/[^\d]/g, ''), 10) || 0
+  }
+
+  // 入札締切日までの残り日数を計算
+  const getDaysUntilDeadline = (deadline: string) => {
+    if (!deadline) return null
+    
+    const now = new Date()
+    const deadlineDate = new Date(deadline)
+    const diffTime = deadlineDate.getTime() - now.getTime()
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    
+    return diffDays
+  }
+
+  // 入札締切日の色を決定
+  const getDeadlineColor = (deadline: string) => {
+    const daysLeft = getDaysUntilDeadline(deadline)
+    
+    if (daysLeft === null) return 'text-gray-600'
+    if (daysLeft <= 0) return 'text-red-600'
+    if (daysLeft <= 3) return 'text-orange-600 font-medium'
+    return 'text-gray-600'
   }
 
   // 案件データを取得する関数
@@ -215,6 +243,15 @@ function JobsPageContent() {
       filtered = []
     }
 
+    // 入札締切日フィルタ（締切切れの案件を除外）
+    const now = new Date()
+    filtered = filtered.filter(job => {
+      if (!job.bidding_deadline) return true // 締切日が設定されていない場合は表示
+      
+      const deadline = new Date(job.bidding_deadline)
+      return deadline > now // 締切日が現在時刻より後のみ表示
+    })
+
     // カテゴリフィルタ
     if (selectedCategory) {
       filtered = filtered.filter(j => j.category === selectedCategory)
@@ -236,6 +273,13 @@ function JobsPageContent() {
   const handleBidSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!showBidModal) return
+
+    // 募集人数制限をチェック
+    const currentJob = jobs.find(j => j.id === showBidModal)
+    if (currentJob && !currentJob.can_bid) {
+      alert('この案件の募集人数に達しているため、入札できません')
+      return
+    }
 
     // バリデーション
     if (!bidData.budget_approved) {
@@ -308,8 +352,61 @@ function JobsPageContent() {
     })
   }
 
+  // 添付資料を取得する関数
+  const loadAttachments = async (projectId: string) => {
+    setLoadingAttachments(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        console.error('セッションが見つかりません')
+        return
+      }
+
+      const response = await fetch(`/api/contractor/projects/${projectId}/attachments`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        setAttachments(result.attachments || [])
+      } else {
+        console.error('添付資料の取得に失敗:', result.message)
+        setAttachments([])
+      }
+    } catch (error) {
+      console.error('添付資料取得エラー:', error)
+      setAttachments([])
+    } finally {
+      setLoadingAttachments(false)
+    }
+  }
+
+  // ファイルサイズをフォーマットする関数
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes'
+    const k = 1024
+    const sizes = ['Bytes', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  }
+
+  // ファイルタイプのアイコンを取得する関数
+  const getFileIcon = (fileType: string) => {
+    if (fileType.includes('pdf')) return '📄'
+    if (fileType.includes('image')) return '🖼️'
+    if (fileType.includes('word')) return '📝'
+    if (fileType.includes('excel') || fileType.includes('spreadsheet')) return '📊'
+    return '📎'
+  }
+
   const openJobDetail = (jobId: string) => {
     setShowJobDetail(jobId)
+    loadAttachments(jobId)
   }
 
   const getStatusColor = (status: string) => {
@@ -526,9 +623,20 @@ function JobsPageContent() {
                       {/* 案件詳細 */}
                       <div className="space-y-2 text-sm">
                         {job.bidding_deadline && (
-                          <div className="flex items-center gap-2 text-orange-600 font-medium">
+                          <div className={`flex items-center gap-2 ${getDeadlineColor(job.bidding_deadline)}`}>
                             <Clock className="w-4 h-4" />
                             入札締切: {new Date(job.bidding_deadline).toLocaleDateString('ja-JP')}
+                            {(() => {
+                              const daysLeft = getDaysUntilDeadline(job.bidding_deadline)
+                              if (daysLeft !== null && daysLeft > 0) {
+                                return (
+                                  <span className="text-xs">
+                                    ({daysLeft}日後)
+                                  </span>
+                                )
+                              }
+                              return null
+                            })()}
                           </div>
                         )}
                         <div className="flex items-center gap-2 text-gray-600">
@@ -539,6 +647,21 @@ function JobsPageContent() {
                           <Calendar className="w-4 h-4" />
                           納期: {new Date(job.end_date).toLocaleDateString('ja-JP')}
                         </div>
+                        <div className="flex items-center gap-2 text-blue-600">
+                          <User className="w-4 h-4" />
+                          募集人数: {job.required_contractors}名
+                          {job.current_bid_count > 0 && (
+                            <span className="text-sm">
+                              (入札済み: {job.current_bid_count}名)
+                            </span>
+                          )}
+                        </div>
+                        {job.is_full && (
+                          <div className="flex items-center gap-2 text-red-600 font-medium">
+                            <AlertCircle className="w-4 h-4" />
+                            募集人数に達しました
+                          </div>
+                        )}
                         {job.location && (
                           <div className="flex items-center gap-2 text-gray-600">
                             <MapPin className="w-4 h-4" />
@@ -586,9 +709,12 @@ function JobsPageContent() {
                               variant="engineering"
                               size="sm"
                               onClick={() => openBidModal(job.id)}
+                              disabled={!job.can_bid}
+                              className={!job.can_bid ? 'opacity-50 cursor-not-allowed' : ''}
+                              title={job.is_full ? '募集人数に達しました' : '入札する'}
                             >
                               <Hand className="w-4 h-4 mr-1" />
-                              入札
+                              {job.is_full ? '募集終了' : '入札'}
                             </Button>
                           )}
                         </div>
@@ -656,20 +782,39 @@ function JobsPageContent() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <form onSubmit={handleBidSubmit} className="space-y-4">
-                    {/* 発注者側の予算表示 */}
-                    <div className="bg-blue-50 p-4 rounded-lg">
-                      <div className="flex items-center gap-2 mb-2">
-                        <DollarSign className="w-5 h-5 text-blue-600" />
-                        <span className="font-medium text-blue-900">発注者側の予算</span>
-                      </div>
-                      <div className="text-2xl font-bold text-blue-900">
-                        {(() => {
-                          const job = jobs.find(j => j.id === showBidModal)
-                          return job ? formatBudget(job.budget) + '円' : '読み込み中...'
-                        })()}
-                      </div>
-                    </div>
+        <form onSubmit={handleBidSubmit} className="space-y-4">
+          {/* 募集状況表示 */}
+          {(() => {
+            const job = jobs.find(j => j.id === showBidModal)
+            if (job && job.is_full) {
+              return (
+                <div className="bg-red-50 p-4 rounded-lg border border-red-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertCircle className="w-5 h-5 text-red-600" />
+                    <span className="font-medium text-red-900">募集終了</span>
+                  </div>
+                  <div className="text-sm text-red-700">
+                    この案件の募集人数（{job.required_contractors}名）に達しているため、入札できません。
+                  </div>
+                </div>
+              )
+            }
+            return null
+          })()}
+
+          {/* 発注者側の予算表示 */}
+          <div className="bg-blue-50 p-4 rounded-lg">
+            <div className="flex items-center gap-2 mb-2">
+              <DollarSign className="w-5 h-5 text-blue-600" />
+              <span className="font-medium text-blue-900">発注者側の予算</span>
+            </div>
+            <div className="text-2xl font-bold text-blue-900">
+              {(() => {
+                const job = jobs.find(j => j.id === showBidModal)
+                return job ? formatBudget(job.budget) + '円' : '読み込み中...'
+              })()}
+            </div>
+          </div>
 
                     {/* 予算承認チェック */}
                     <div className="flex items-center gap-3 p-4 border border-gray-200 rounded-lg">
@@ -750,9 +895,17 @@ function JobsPageContent() {
                       <Button 
                         type="submit" 
                         variant="engineering"
-                        disabled={isSubmittingBid}
+                        disabled={isSubmittingBid || (() => {
+                          const job = jobs.find(j => j.id === showBidModal)
+                          return job ? !job.can_bid : false
+                        })()}
                       >
-                        {isSubmittingBid ? '送信中...' : '入札を送信'}
+                        {(() => {
+                          const job = jobs.find(j => j.id === showBidModal)
+                          if (job && !job.can_bid) return '募集終了'
+                          if (isSubmittingBid) return '送信中...'
+                          return '入札を送信'
+                        })()}
                       </Button>
                     </div>
                   </form>
@@ -827,6 +980,25 @@ function JobsPageContent() {
                                 <span className="text-gray-600">納期:</span>
                                 <span className="font-medium">{new Date(job.end_date).toLocaleDateString('ja-JP')}</span>
                               </div>
+                              {job.bidding_deadline && (
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">入札締切:</span>
+                                  <span className={`font-medium ${getDeadlineColor(job.bidding_deadline)}`}>
+                                    {new Date(job.bidding_deadline).toLocaleDateString('ja-JP')}
+                                    {(() => {
+                                      const daysLeft = getDaysUntilDeadline(job.bidding_deadline)
+                                      if (daysLeft !== null && daysLeft > 0) {
+                                        return (
+                                          <span className="text-xs ml-1">
+                                            ({daysLeft}日後)
+                                          </span>
+                                        )
+                                      }
+                                      return null
+                                    })()}
+                                  </span>
+                                </div>
+                              )}
                               {job.location && (
                                 <div className="flex justify-between">
                                   <span className="text-gray-600">場所:</span>
@@ -875,6 +1047,50 @@ function JobsPageContent() {
                           </div>
                         )}
 
+                        {/* 添付資料 */}
+                        <div>
+                          <h3 className="font-semibold text-gray-900 mb-3">添付資料</h3>
+                          {loadingAttachments ? (
+                            <div className="bg-gray-50 p-4 rounded-lg text-center">
+                              <div className="text-sm text-gray-600">添付資料を読み込み中...</div>
+                            </div>
+                          ) : attachments.length > 0 ? (
+                            <div className="space-y-2">
+                              {attachments.map((attachment) => (
+                                <div key={attachment.id} className="bg-gray-50 p-3 rounded-lg border">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                      <span className="text-lg">{getFileIcon(attachment.file_type)}</span>
+                                      <div>
+                                        <div className="text-sm font-medium text-gray-900">
+                                          {attachment.file_name}
+                                        </div>
+                                        <div className="text-xs text-gray-500">
+                                          {formatFileSize(attachment.file_size)} • 
+                                          {new Date(attachment.created_at).toLocaleDateString('ja-JP')} • 
+                                          {attachment.uploaded_by_name}
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => window.open(attachment.download_url, '_blank')}
+                                    >
+                                      <FileText className="w-4 h-4 mr-1" />
+                                      ダウンロード
+                                    </Button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="bg-gray-50 p-4 rounded-lg text-center">
+                              <div className="text-sm text-gray-600">添付資料はありません</div>
+                            </div>
+                          )}
+                        </div>
+
                         {/* アクションボタン */}
                         <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
                           <Button
@@ -890,9 +1106,11 @@ function JobsPageContent() {
                                 setShowJobDetail(null)
                                 openBidModal(job.id)
                               }}
+                              disabled={!job.can_bid}
+                              className={!job.can_bid ? 'opacity-50 cursor-not-allowed' : ''}
                             >
                               <Hand className="w-4 h-4 mr-2" />
-                              入札する
+                              {job.is_full ? '募集人数に達しました' : '入札する'}
                             </Button>
                           )}
                         </div>

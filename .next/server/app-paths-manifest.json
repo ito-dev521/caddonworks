@@ -1,7 +1,10 @@
 {
-  "/projects/page": "app/projects/page.js",
-  "/billing/page": "app/billing/page.js",
-  "/dashboard/page": "app/dashboard/page.js",
+  "/api/notifications/route": "app/api/notifications/route.js",
   "/jobs/page": "app/jobs/page.js",
-  "/auth/login/page": "app/auth/login/page.js"
+  "/projects/page": "app/projects/page.js",
+  "/(dashboard)/chat/page": "app/(dashboard)/chat/page.js",
+  "/contracts/page": "app/contracts/page.js",
+  "/api/projects/route": "app/api/projects/route.js",
+  "/api/projects/[id]/attachments/route": "app/api/projects/[id]/attachments/route.js",
+  "/unauthorized/page": "app/unauthorized/page.js"
 }

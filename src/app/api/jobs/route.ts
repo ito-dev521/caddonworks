@@ -77,7 +77,8 @@ export async function GET(request: NextRequest) {
         bidding_deadline,
         requirements,
         location,
-        org_id
+        org_id,
+        required_contractors
       `)
       .eq('status', 'bidding') // 入札中の案件のみ
       .order('created_at', { ascending: false })
@@ -104,23 +105,46 @@ export async function GET(request: NextRequest) {
       return acc
     }, {}) || {}
 
-    const formattedJobs = jobsData?.map(job => ({
-      id: job.id,
-      title: job.title,
-      description: job.description,
-      status: job.status,
-      budget: job.budget,
-      start_date: job.start_date,
-      end_date: job.end_date,
-      category: job.category || '道路設計',
-      created_at: job.created_at,
-      org_name: orgMap[job.org_id] || '不明な組織',
-      org_id: job.org_id,
-      assignee_name: job.assignee_name,
-      bidding_deadline: job.bidding_deadline,
-      requirements: job.requirements,
-      location: job.location
-    })) || []
+    // 各案件の入札数を取得
+    const jobIds = jobsData?.map(job => job.id) || []
+    const { data: bidCountsData } = await supabaseAdmin
+      .from('bids')
+      .select('project_id')
+      .in('project_id', jobIds)
+      .eq('status', 'submitted')
+
+    // 入札数をカウント
+    const bidCountMap = bidCountsData?.reduce((acc: any, bid: any) => {
+      acc[bid.project_id] = (acc[bid.project_id] || 0) + 1
+      return acc
+    }, {}) || {}
+
+    const formattedJobs = jobsData?.map(job => {
+      const currentBidCount = bidCountMap[job.id] || 0
+      const isFull = currentBidCount >= (job.required_contractors || 1)
+      
+      return {
+        id: job.id,
+        title: job.title,
+        description: job.description,
+        status: job.status,
+        budget: job.budget,
+        start_date: job.start_date,
+        end_date: job.end_date,
+        category: job.category || '道路設計',
+        created_at: job.created_at,
+        org_name: orgMap[job.org_id] || '不明な組織',
+        org_id: job.org_id,
+        assignee_name: job.assignee_name,
+        bidding_deadline: job.bidding_deadline,
+        requirements: job.requirements,
+        location: job.location,
+        required_contractors: job.required_contractors || 1,
+        current_bid_count: currentBidCount,
+        is_full: isFull,
+        can_bid: !isFull && job.status === 'bidding'
+      }
+    }) || []
 
     console.log('jobs API: レスポンス準備完了')
 

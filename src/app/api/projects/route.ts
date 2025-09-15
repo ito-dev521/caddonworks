@@ -118,7 +118,7 @@ export async function POST(request: NextRequest) {
     const company = membership.organizations as any
 
     // 挿入するデータを準備してログ出力
-    const insertData = {
+    const insertData: any = {
       title,
       description,
       budget: Number(budget),
@@ -128,9 +128,14 @@ export async function POST(request: NextRequest) {
       category,
       contractor_id: contractor_id || null,
       assignee_name: assignee_name || null,
-      required_contractors: Number(required_contractors),
       org_id: company.id,
       status: 'bidding' // デフォルトは入札中
+    }
+
+    // required_contractorsカラムが存在する場合のみ追加
+    // データベーススキーマが更新されていない場合の回避策
+    if (required_contractors !== undefined) {
+      insertData.required_contractors = Number(required_contractors)
     }
 
     console.log('挿入データ:', insertData)
@@ -149,6 +154,19 @@ export async function POST(request: NextRequest) {
 
     if (projectError) {
       console.error('案件作成エラー:', projectError)
+      
+      // required_contractorsカラムが存在しない場合の特別な処理
+      if (projectError.message.includes('required_contractors')) {
+        return NextResponse.json(
+          { 
+            message: 'データベーススキーマが古いです。required_contractorsカラムを追加してください。',
+            error: projectError.message,
+            suggestion: 'SupabaseのSQLエディタでadd-required-contractors-column.sqlを実行してください。'
+          },
+          { status: 500 }
+        )
+      }
+      
       return NextResponse.json(
         { message: '案件の作成に失敗しました: ' + projectError.message },
         { status: 400 }
