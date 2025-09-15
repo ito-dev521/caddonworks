@@ -84,47 +84,31 @@ export function ChatMessageInterface({
     if (!roomId) return
 
     try {
-      const { data: messagesData, error } = await supabase
-        .from('chat_messages')
-        .select(`
-          *,
-          auth.users:sender_id (
-            id,
-            email,
-            user_metadata
-          ),
-          reply_message:reply_to (
-            id,
-            content,
-            auth.users:sender_id (
-              user_metadata
-            )
-          )
-        `)
-        .eq('room_id', roomId)
-        .eq('is_deleted', false)
-        .order('created_at', { ascending: true })
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        console.error('セッションが見つかりません')
+        setLoading(false)
+        return
+      }
 
-      if (error) throw error
+      const response = await fetch(`/api/chat/messages?room_id=${roomId}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`
+        }
+      })
 
-      const formattedMessages = (messagesData || []).map(msg => ({
-        ...msg,
-        sender: {
-          id: msg.users?.id,
-          email: msg.users?.email,
-          display_name: msg.users?.user_metadata?.display_name,
-          avatar_url: msg.users?.user_metadata?.avatar_url
-        },
-        reply_message: msg.reply_message ? {
-          id: msg.reply_message.id,
-          content: msg.reply_message.content,
-          sender_name: msg.reply_message.users?.user_metadata?.display_name || msg.reply_message.users?.email || '不明'
-        } : undefined
-      }))
+      const result = await response.json()
 
-      setMessages(formattedMessages)
+      if (response.ok) {
+        setMessages(result.messages)
+      } else {
+        console.error('メッセージ取得エラー:', result.message)
+        setMessages([])
+      }
     } catch (error) {
       console.error('Error fetching messages:', error)
+      setMessages([])
     } finally {
       setLoading(false)
     }
@@ -180,22 +164,36 @@ export function ChatMessageInterface({
 
     setSending(true)
     try {
-      const messageData = {
-        room_id: roomId,
-        sender_id: user.id,
-        content: newMessage.trim(),
-        message_type: 'text',
-        reply_to: replyingTo?.id || null
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        console.error('セッションが見つかりません')
+        return
       }
 
-      const { error } = await supabase
-        .from('chat_messages')
-        .insert([messageData])
+      const messageData = {
+        room_id: roomId,
+        content: newMessage.trim(),
+        message_type: 'text'
+      }
 
-      if (error) throw error
+      const response = await fetch('/api/chat/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify(messageData)
+      })
 
-      setNewMessage("")
-      setReplyingTo(null)
+      const result = await response.json()
+
+      if (response.ok) {
+        setNewMessage("")
+        setReplyingTo(null)
+        fetchMessages() // Refresh messages
+      } else {
+        console.error('メッセージ送信エラー:', result.message)
+      }
     } catch (error) {
       console.error('Error sending message:', error)
     } finally {
@@ -293,8 +291,8 @@ export function ChatMessageInterface({
       })
     } else {
       return date.toLocaleDateString('ja-JP', {
-        month: '1',
-        day: '1',
+        month: 'numeric',
+        day: 'numeric',
         hour: '2-digit',
         minute: '2-digit'
       })

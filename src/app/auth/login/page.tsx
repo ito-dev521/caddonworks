@@ -18,7 +18,6 @@ import {
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { PasswordField } from "@/components/ui/password-field"
 import { useAuth } from "@/contexts/auth-context"
 
 export default function LoginPage() {
@@ -28,7 +27,7 @@ export default function LoginPage() {
   const [success, setSuccess] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
-  const { signIn } = useAuth()
+  const { signIn, getRedirectPath } = useAuth()
   const router = useRouter()
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -38,14 +37,40 @@ export default function LoginPage() {
     setIsLoading(true)
 
     try {
-      await signIn(email, password)
+      console.log('Login form: ログイン開始', { email })
+      
+      // タイムアウト処理を追加
+      const loginPromise = signIn(email, password)
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('ログイン処理がタイムアウトしました（60秒）')), 60000)
+      })
+      
+      await Promise.race([loginPromise, timeoutPromise])
+      
+      console.log('Login form: ログイン成功')
       setSuccess("ログインに成功しました")
+      
+      // 少し待ってからリダイレクト（認証状態の更新を待つ）
       setTimeout(() => {
-        router.push("/dashboard")
-      }, 1500)
+        // ユーザーロールに基づいてリダイレクト先を決定
+        const redirectPath = getRedirectPath()
+        console.log('Login form: リダイレクト', { redirectPath })
+        
+        // セッションストレージに保存されたリダイレクト先を確認
+        const savedRedirect = sessionStorage.getItem('redirectAfterLogin')
+        if (savedRedirect && savedRedirect !== '/auth/login') {
+          console.log('Login form: 保存されたリダイレクト先を使用', { savedRedirect })
+          sessionStorage.removeItem('redirectAfterLogin')
+          router.push(savedRedirect)
+        } else {
+          router.push(redirectPath)
+        }
+      }, 2000)
     } catch (err: any) {
+      console.error('Login form: ログインエラー', err)
       setError(err.message || "ログインに失敗しました")
     } finally {
+      console.log('Login form: ログイン処理終了')
       setIsLoading(false)
     }
   }
@@ -188,15 +213,23 @@ export default function LoginPage() {
                 </div>
 
                 {/* Password Field */}
-                <PasswordField
-                  id="password"
-                  value={password}
-                  onChange={setPassword}
-                  label="パスワード"
-                  placeholder="••••••••"
-                  required
-                  showStrengthIndicator={false}
-                />
+                <div>
+                  <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+                    パスワード
+                  </label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                    <input
+                      id="password"
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent transition-colors"
+                      placeholder="••••••••"
+                      required
+                    />
+                  </div>
+                </div>
 
                 {/* Error/Success Messages */}
                 {error && (

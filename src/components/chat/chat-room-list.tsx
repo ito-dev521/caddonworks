@@ -63,75 +63,31 @@ export function ChatRoomList({
     if (!user) return
 
     try {
-      const { data: roomsData, error } = await supabase
-        .from('chat_rooms')
-        .select(`
-          *,
-          projects:project_id (
-            name,
-            title
-          ),
-          chat_participants!inner (
-            user_id,
-            last_read_at
-          )
-        `)
-        .eq('chat_participants.user_id', user.id)
-        .eq('is_active', true)
-        .order('updated_at', { ascending: false })
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        console.error('セッションが見つかりません')
+        setLoading(false)
+        return
+      }
 
-      if (error) throw error
+      const response = await fetch('/api/chat/rooms', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`
+        }
+      })
 
-      // Get unread counts for each room
-      const roomsWithUnread = await Promise.all(
-        (roomsData || []).map(async (room) => {
-          const { data: unreadCount } = await supabase
-            .rpc('get_unread_message_count', {
-              p_user_id: user.id,
-              p_room_id: room.id
-            })
+      const result = await response.json()
 
-          // Get participant count
-          const { count: participantCount } = await supabase
-            .from('chat_participants')
-            .select('*', { count: 'exact', head: true })
-            .eq('room_id', room.id)
-            .eq('is_active', true)
-
-          // Get last message
-          const { data: lastMessage } = await supabase
-            .from('chat_messages')
-            .select(`
-              content,
-              created_at,
-              auth.users:sender_id (
-                email,
-                user_metadata
-              )
-            `)
-            .eq('room_id', room.id)
-            .eq('is_deleted', false)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .single()
-
-          return {
-            ...room,
-            project_name: room.projects?.name || room.projects?.title,
-            participant_count: participantCount || 0,
-            unread_count: unreadCount || 0,
-            last_message: lastMessage ? {
-              content: lastMessage.content,
-              sender_name: lastMessage.users?.user_metadata?.display_name || lastMessage.users?.email || '不明',
-              created_at: lastMessage.created_at
-            } : undefined
-          }
-        })
-      )
-
-      setRooms(roomsWithUnread)
+      if (response.ok) {
+        setRooms(result.rooms)
+      } else {
+        console.error('チャットルーム取得エラー:', result.message)
+        setRooms([])
+      }
     } catch (error) {
-      console.error('Error fetching chat rooms:', error)
+      console.error('チャットルーム取得エラー:', error)
+      setRooms([])
     } finally {
       setLoading(false)
     }
@@ -170,7 +126,7 @@ export function ChatRoomList({
     } else if (diffInHours < 24) {
       return diffInHours + '時間前'
     } else {
-      return date.toLocaleDateString('ja-JP', { month: '1', day: '1' })
+      return date.toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })
     }
   }
 
@@ -241,9 +197,9 @@ export function ChatRoomList({
                       <h3 className="font-medium text-gray-900 truncate">
                         {room.name}
                       </h3>
-                      {room.unread_count > 0 && (
+                      {(room.unread_count || 0) > 0 && (
                         <Badge variant="destructive" className="text-xs px-2 py-0.5">
-                          {room.unread_count > 99 ? '99+' : room.unread_count}
+                          {(room.unread_count || 0) > 99 ? '99+' : room.unread_count}
                         </Badge>
                       )}
                     </div>

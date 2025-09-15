@@ -1,5 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@supabase/supabase-js'
+
+// Service roleキーでSupabaseクライアントを作成（RLSをバイパス）
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  }
+)
 
 export async function POST(request: NextRequest) {
   try {
@@ -24,7 +36,7 @@ export async function POST(request: NextRequest) {
     }
 
     const token = authHeader.replace('Bearer ', '')
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
     
     if (authError || !user) {
       return NextResponse.json(
@@ -33,36 +45,57 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 案件の存在確認と権限チェック
-    const { data: project, error: projectError } = await supabase
+    // ユーザープロフィールを取得
+    const { data: userProfile, error: userError } = await supabaseAdmin
+      .from('users')
+      .select('id, email, display_name')
+      .eq('auth_user_id', user.id)
+      .single()
+
+    if (userError || !userProfile) {
+      return NextResponse.json(
+        { message: 'ユーザープロフィールが見つかりません' },
+        { status: 403 }
+      )
+    }
+
+    // 案件の存在確認
+    const { data: project, error: projectError } = await supabaseAdmin
       .from('projects')
-      .select(`
-        id,
-        title,
-        org_id,
-        contractor_id,
-        memberships!inner (
-          user_id,
-          role
-        )
-      `)
+      .select('id, title, org_id, contractor_id')
       .eq('id', project_id)
-      .eq('memberships.user_id', user.id)
       .single()
 
     if (projectError || !project) {
       return NextResponse.json(
-        { message: '案件が見つからないか、アクセス権限がありません' },
+        { message: '案件が見つかりません' },
+        { status: 404 }
+      )
+    }
+
+    // ユーザーの組織メンバーシップを確認
+    const { data: membership } = await supabaseAdmin
+      .from('memberships')
+      .select('org_id, role')
+      .eq('user_id', userProfile.id)
+      .single()
+
+    // アクセス権限をチェック（組織のメンバーまたは受注者）
+    const hasAccess = membership?.org_id === project.org_id || project.contractor_id === userProfile.id
+
+    if (!hasAccess) {
+      return NextResponse.json(
+        { message: 'この案件へのアクセス権限がありません' },
         { status: 403 }
       )
     }
 
     // チャットメッセージを保存
-    const { data: messageData, error: messageError } = await supabase
+    const { data: messageData, error: messageError } = await supabaseAdmin
       .from('chat_messages')
       .insert({
         project_id,
-        sender_id: user.id,
+        sender_id: userProfile.id,
         sender_type, // 'client' or 'contractor'
         message,
         created_at: new Date().toISOString()
@@ -114,7 +147,7 @@ export async function GET(request: NextRequest) {
     }
 
     const token = authHeader.replace('Bearer ', '')
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
     
     if (authError || !user) {
       return NextResponse.json(
@@ -123,32 +156,53 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // 案件の存在確認と権限チェック
-    const { data: project, error: projectError } = await supabase
+    // ユーザープロフィールを取得
+    const { data: userProfile, error: userError } = await supabaseAdmin
+      .from('users')
+      .select('id, email, display_name')
+      .eq('auth_user_id', user.id)
+      .single()
+
+    if (userError || !userProfile) {
+      return NextResponse.json(
+        { message: 'ユーザープロフィールが見つかりません' },
+        { status: 403 }
+      )
+    }
+
+    // 案件の存在確認
+    const { data: project, error: projectError } = await supabaseAdmin
       .from('projects')
-      .select(`
-        id,
-        title,
-        org_id,
-        contractor_id,
-        memberships!inner (
-          user_id,
-          role
-        )
-      `)
+      .select('id, title, org_id, contractor_id')
       .eq('id', project_id)
-      .eq('memberships.user_id', user.id)
       .single()
 
     if (projectError || !project) {
       return NextResponse.json(
-        { message: '案件が見つからないか、アクセス権限がありません' },
+        { message: '案件が見つかりません' },
+        { status: 404 }
+      )
+    }
+
+    // ユーザーの組織メンバーシップを確認
+    const { data: membership } = await supabaseAdmin
+      .from('memberships')
+      .select('org_id, role')
+      .eq('user_id', userProfile.id)
+      .single()
+
+    // アクセス権限をチェック（組織のメンバーまたは受注者）
+    const hasAccess = membership?.org_id === project.org_id || project.contractor_id === userProfile.id
+
+    if (!hasAccess) {
+      return NextResponse.json(
+        { message: 'この案件へのアクセス権限がありません' },
         { status: 403 }
       )
     }
 
     // チャットメッセージを取得
-    const { data: messages, error: messagesError } = await supabase
+    const { data: messages, error: messagesError } = await supabaseAdmin
       .from('chat_messages')
       .select(`
         id,

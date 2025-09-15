@@ -89,7 +89,7 @@ export default function LandingPage() {
               </Link>
               <div className="flex items-center gap-2">
                 <Link href="/auth/register-organization">
-                  <Button variant="success" size="sm">
+                  <Button variant="engineering" size="sm">
                     <Building className="w-4 h-4 mr-2" />
                     発注者登録
                   </Button>
@@ -131,14 +131,14 @@ export default function LandingPage() {
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link href="/auth/register-organization">
-                <Button variant="success" size="xl" className="group">
+                <Button variant="engineering" size="lg" className="group">
                   <Building className="w-5 h-5 mr-2" />
                   発注者として登録
                   <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
                 </Button>
               </Link>
               <Link href="/auth/signup">
-                <Button variant="engineering" size="xl" className="group">
+                <Button variant="engineering" size="lg" className="group">
                   <Users className="w-5 h-5 mr-2" />
                   受注者として登録
                   <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
@@ -288,14 +288,14 @@ export default function LandingPage() {
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link href="/auth/register-organization">
-                <Button variant="success" size="xl" className="group">
+                <Button variant="engineering" size="lg" className="group">
                   <Building className="w-5 h-5 mr-2" />
                   発注者として開始
                   <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
                 </Button>
               </Link>
               <Link href="/auth/signup">
-                <Button variant="gradient" size="xl" className="group">
+                <Button variant="gradient" size="lg" className="group">
                   <Users className="w-5 h-5 mr-2" />
                   受注者として開始
                   <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
@@ -304,7 +304,7 @@ export default function LandingPage() {
             </div>
             <div className="mt-4 flex justify-center">
               <Link href="/contact">
-                <Button variant="outline" size="xl">
+                <Button variant="outline" size="lg">
                   資料請求・お問い合わせ
                 </Button>
               </Link>

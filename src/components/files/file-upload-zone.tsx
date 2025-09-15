@@ -337,7 +337,7 @@ export function FileUploadZone({ isOpen, onClose }: FileUploadZoneProps) {
                             <Progress
                               value={uploadFile.progress}
                               variant={
-                                uploadFile.status === 'error' ? 'destructive' :
+                                uploadFile.status === 'error' ? 'engineering' :
                                 uploadFile.status === 'success' ? 'default' :
                                 'engineering'
                               }

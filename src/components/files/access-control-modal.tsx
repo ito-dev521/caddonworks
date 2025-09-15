@@ -276,7 +276,7 @@ export function AccessControlModal({ fileId, onClose }: AccessControlModalProps)
                                 </td>
                                 <td className="py-3 px-4 text-center">
                                   <Switch
-                                    checked={fileData.permissions.share.users.includes(user.name)}
+                                    checked={(fileData.permissions.share.users as string[]).includes(user.name)}
                                     onCheckedChange={() => toggleUserPermission('share', user.id)}
                                   />
                                 </td>

@@ -6,7 +6,7 @@ import { Users, Settings, Info, X } from "lucide-react"
 import { Button } from "../ui/button"
 import { ChatRoomList } from "./chat-room-list"
 import { ChatMessageInterface } from "./chat-message-interface"
-import { ChatParticipants } from "./chat-participants"
+import { ChatParticipantsPanel } from "./chat-participants-panel"
 import { cn } from "@/lib/utils"
 
 interface ChatLayoutProps {
@@ -101,21 +101,15 @@ export function ChatLayout({ className = "" }: ChatLayoutProps) {
                 />
               </div>
 
-              {/* Participants Sidebar */}
-              <motion.div
-                initial={false}
-                animate={{
-                  width: showParticipants ? 280 : 0,
-                  opacity: showParticipants ? 1 : 0
-                }}
-                className="border-l border-gray-200 bg-white overflow-hidden"
-              >
-                <ChatParticipants
+              {/* Participants Panel */}
+              {showParticipants && (
+                <ChatParticipantsPanel
                   roomId={selectedRoomId}
+                  projectId={selectedRoomId.replace('project_', '')}
+                  isVisible={showParticipants}
                   onClose={() => setShowParticipants(false)}
-                  className="h-full"
                 />
-              </motion.div>
+              )}
             </div>
           </>
         ) : (

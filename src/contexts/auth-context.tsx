@@ -8,11 +8,13 @@ interface AuthContextType {
   user: SupabaseUser | null
   userProfile: User | null
   userRole: UserRole | null
+  userOrganization: { id: string; name: string } | null
   loading: boolean
   signIn: (email: string, password: string) => Promise<void>
   signUp: (email: string, password: string, userData: Partial<User>) => Promise<void>
   signOut: () => Promise<void>
   updateProfile: (updates: Partial<User>) => Promise<void>
+  getRedirectPath: () => string
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -29,6 +31,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<SupabaseUser | null>(null)
   const [userProfile, setUserProfile] = useState<User | null>(null)
   const [userRole, setUserRole] = useState<UserRole | null>(null)
+  const [userOrganization, setUserOrganization] = useState<{ id: string; name: string } | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -48,13 +51,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        console.log('Auth state change:', event, session?.user?.id)
         setUser(session?.user ?? null)
 
-        if (session?.user) {
+        if (session?.user && event === 'SIGNED_IN') {
+          // ログイン時のみプロフィールを取得（重複を避ける）
+          console.log('Auth state change: SIGNED_IN, fetching profile')
           await fetchUserProfile(session.user.id)
-        } else {
+        } else if (event === 'SIGNED_OUT') {
           setUserProfile(null)
           setUserRole(null)
+          setUserOrganization(null)
         }
         setLoading(false)
       }
@@ -64,13 +71,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const fetchUserProfile = async (authUserId: string) => {
+    console.log('fetchUserProfile: 開始', { authUserId })
     try {
       // Fetch user profile
+      console.log('fetchUserProfile: ユーザープロフィール取得開始')
       const { data: profile, error: profileError } = await supabase
         .from('users')
         .select('*')
         .eq('auth_user_id', authUserId)
         .single()
+
+      console.log('fetchUserProfile: ユーザープロフィール結果', { profile: profile?.id, error: profileError?.message })
 
       if (profileError && profileError.code !== 'PGRST116') {
         console.error('Error fetching user profile:', profileError)
@@ -79,13 +90,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       setUserProfile(profile)
 
-      // Fetch user role from memberships
+      // Fetch user role and organization from memberships
       if (profile) {
+        console.log('fetchUserProfile: メンバーシップ取得開始', { profileId: profile.id })
         const { data: membership, error: roleError } = await supabase
           .from('memberships')
-          .select('role')
+          .select('role, org_id')
           .eq('user_id', profile.id)
           .single()
+
+        console.log('fetchUserProfile: メンバーシップ結果', { 
+          role: membership?.role, 
+          org_id: membership?.org_id,
+          error: roleError?.message 
+        })
 
         if (roleError && roleError.code !== 'PGRST116') {
           console.error('Error fetching user role:', roleError)
@@ -93,6 +111,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         setUserRole(membership?.role || null)
+        
+        // 組織情報を取得
+        if (membership?.org_id) {
+          const { data: orgData, error: orgError } = await supabase
+            .from('organizations')
+            .select('id, name')
+            .eq('id', membership.org_id)
+            .single()
+          
+          if (orgError) {
+            console.error('Error fetching organization:', orgError)
+            setUserOrganization(null)
+          } else {
+            setUserOrganization({
+              id: orgData.id,
+              name: orgData.name
+            })
+          }
+        } else {
+          setUserOrganization(null)
+        }
+        
+        console.log('fetchUserProfile: 完了', { 
+          role: membership?.role,
+          organization: membership?.org_id 
+        })
       }
     } catch (error) {
       console.error('Error in fetchUserProfile:', error)
@@ -100,15 +144,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const signIn = async (email: string, password: string) => {
+    console.log('signIn: 開始', { email })
     setLoading(true)
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      console.log('signIn: Supabase認証開始')
+      
+      // タイムアウト処理を追加
+      const authPromise = supabase.auth.signInWithPassword({
         email,
         password,
       })
+      
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('認証タイムアウト（30秒）')), 30000)
+      })
+      
+      const { data, error } = await Promise.race([authPromise, timeoutPromise]) as any
+      
+      console.log('signIn: Supabase認証結果', { data: data?.user?.id, error: error?.message })
       if (error) throw error
-      // User state will be updated by the auth state change listener
+      console.log('signIn: 認証成功')
+      
+      // 認証成功後、ユーザープロフィールを手動で取得
+      if (data?.user) {
+        console.log('signIn: ユーザープロフィール取得開始')
+        await fetchUserProfile(data.user.id)
+        console.log('signIn: ユーザープロフィール取得完了')
+      }
+      
+    } catch (error) {
+      console.error('signIn: 認証エラー', error)
+      throw error
     } finally {
+      console.log('signIn: 終了')
       setLoading(false)
     }
   }
@@ -182,15 +250,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  const getRedirectPath = () => {
+    if (!userRole) return '/dashboard'
+    
+    switch (userRole) {
+      case 'Contractor':
+        return '/jobs'
+      case 'OrgAdmin':
+        return '/projects'
+      case 'Reviewer':
+        return '/reviews'
+      default:
+        return '/dashboard'
+    }
+  }
+
   const value: AuthContextType = {
     user,
     userProfile,
     userRole,
+    userOrganization,
     loading,
     signIn,
     signUp,
     signOut,
     updateProfile,
+    getRedirectPath,
   }
 
   return (

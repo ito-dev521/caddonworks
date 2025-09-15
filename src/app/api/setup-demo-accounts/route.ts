@@ -56,8 +56,7 @@ export async function POST(request: NextRequest) {
             data: {
               display_name: account.displayName,
               role: account.role
-            },
-            emailRedirectTo: undefined // メール確認を無効にする
+            }
           }
         })
 
@@ -149,6 +148,40 @@ export async function POST(request: NextRequest) {
         // org_idは組織が必要な場合のみ設定
         if (orgId) {
           membershipData.org_id = orgId
+        } else if (account.role === 'Contractor') {
+          // 受注者の場合は、デフォルト組織を作成または取得
+          const { data: defaultOrg } = await supabase
+            .from('organizations')
+            .select('id')
+            .eq('name', 'デフォルト組織')
+            .single()
+
+          if (defaultOrg) {
+            membershipData.org_id = defaultOrg.id
+          } else {
+            const { data: newDefaultOrg, error: defaultOrgError } = await supabase
+              .from('organizations')
+              .insert({
+                name: 'デフォルト組織',
+                description: '受注者用のデフォルト組織',
+                billing_email: 'default@example.com',
+                system_fee: 0,
+                active: true
+              })
+              .select()
+              .single()
+
+            if (defaultOrgError) {
+              results.push({
+                email: account.email,
+                status: 'org_error',
+                message: defaultOrgError.message
+              })
+              continue
+            }
+
+            membershipData.org_id = newDefaultOrg.id
+          }
         }
         
         const { error: membershipError } = await supabase

@@ -1,5 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase, createSupabaseAdmin } from '@/lib/supabase'
+import { createClient } from '@supabase/supabase-js'
+
+// Service roleキーでSupabaseクライアントを作成（RLSをバイパス）
+console.log('環境変数チェック:')
+console.log('NEXT_PUBLIC_SUPABASE_URL:', process.env.NEXT_PUBLIC_SUPABASE_URL)
+console.log('SUPABASE_SERVICE_ROLE_KEY:', process.env.SUPABASE_SERVICE_ROLE_KEY ? '設定済み' : '未設定')
+
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  }
+)
 
 export async function POST(request: NextRequest) {
   try {
@@ -11,7 +27,8 @@ export async function POST(request: NextRequest) {
       start_date,
       end_date,
       category,
-      contractor_id
+      contractor_id,
+      assignee_name
     } = body
 
     // バリデーション
@@ -32,7 +49,7 @@ export async function POST(request: NextRequest) {
     }
 
     const token = authHeader.replace('Bearer ', '')
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
     
     if (authError || !user) {
       console.error('認証エラー:', authError)
@@ -47,7 +64,7 @@ export async function POST(request: NextRequest) {
     console.log('ユーザーEmail:', user.email)
     
     // まず、usersテーブルでユーザーが存在するか確認
-    const { data: userProfile, error: userError } = await supabase
+    const { data: userProfile, error: userError } = await supabaseAdmin
       .from('users')
       .select('id, email, display_name')
       .eq('auth_user_id', user.id)
@@ -64,7 +81,7 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    const { data: memberships, error: membershipError } = await supabase
+    const { data: memberships, error: membershipError } = await supabaseAdmin
       .from('memberships')
       .select(`
         org_id,
@@ -98,21 +115,31 @@ export async function POST(request: NextRequest) {
 
     const company = membership.organizations as any
 
-    // 新規案件を作成（Service Role Keyを使用してRLSをバイパス）
-    const supabaseAdmin = createSupabaseAdmin()
+    // 挿入するデータを準備してログ出力
+    const insertData = {
+      title,
+      description,
+      budget: Number(budget),
+      start_date,
+      end_date,
+      category,
+      contractor_id: contractor_id || null,
+      assignee_name: assignee_name || null,
+      org_id: company.id,
+      status: 'bidding' // デフォルトは入札中
+    }
+
+    console.log('挿入データ:', insertData)
+    console.log('company.id:', company.id)
+    console.log('company:', company)
+
+    // Service roleクライアントのテスト
+    console.log('supabaseAdminクライアント作成完了')
+
+    // 認証済みユーザーとして新規案件を作成（RLSをバイパス）
     const { data: projectData, error: projectError } = await supabaseAdmin
       .from('projects')
-      .insert({
-        title,
-        description,
-        budget: Number(budget),
-        start_date,
-        end_date,
-        category,
-        contractor_id: contractor_id || null,
-        org_id: company.id,
-        status: 'bidding' // デフォルトは入札中
-      })
+      .insert(insertData)
       .select()
       .single()
 
@@ -140,9 +167,14 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
+    console.log('projects API: リクエスト開始')
+    
     // Authorizationヘッダーからユーザー情報を取得
     const authHeader = request.headers.get('authorization')
+    console.log('projects API: 認証ヘッダー', authHeader ? 'あり' : 'なし')
+    
     if (!authHeader) {
+      console.log('projects API: 認証ヘッダーなし')
       return NextResponse.json(
         { message: '認証が必要です' },
         { status: 401 }
@@ -150,18 +182,22 @@ export async function GET(request: NextRequest) {
     }
 
     const token = authHeader.replace('Bearer ', '')
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+    console.log('projects API: トークン取得完了', token.substring(0, 20) + '...')
+    
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
     
     if (authError || !user) {
-      console.error('認証エラー:', authError)
+      console.error('projects API: 認証エラー:', authError)
       return NextResponse.json(
-        { message: '認証に失敗しました' },
+        { message: '認証に失敗しました: ' + (authError?.message || 'ユーザーが見つかりません') },
         { status: 401 }
       )
     }
 
+    console.log('projects API: 認証成功, ユーザーID:', user.id, 'Email:', user.email)
+
     // まず、usersテーブルでユーザーが存在するか確認
-    const { data: userProfile, error: userError } = await supabase
+    const { data: userProfile, error: userError } = await supabaseAdmin
       .from('users')
       .select('id, email, display_name')
       .eq('auth_user_id', user.id)
@@ -175,7 +211,7 @@ export async function GET(request: NextRequest) {
     }
 
     // ユーザーの組織情報を取得
-    const { data: memberships, error: membershipError } = await supabase
+    const { data: memberships, error: membershipError } = await supabaseAdmin
       .from('memberships')
       .select(`
         org_id,
@@ -205,8 +241,7 @@ export async function GET(request: NextRequest) {
 
     const company = membership.organizations as any
 
-    // 組織の案件データを取得（会社間分離、Service Role Keyを使用）
-    const supabaseAdmin = createSupabaseAdmin()
+    // 組織の案件データを取得（会社間分離）
     const { data: projectsData, error: projectsError } = await supabaseAdmin
       .from('projects')
       .select(`
@@ -218,12 +253,9 @@ export async function GET(request: NextRequest) {
         start_date,
         end_date,
         contractor_id,
+        assignee_name,
         category,
-        created_at,
-        contractor:users!projects_contractor_id_fkey (
-          display_name,
-          email
-        )
+        created_at
       `)
       .eq('org_id', company.id) // 組織IDでフィルタリング
       .order('created_at', { ascending: false })
@@ -236,6 +268,22 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // 受注者情報を取得
+    const contractorIds = [...new Set(projectsData?.map(p => p.contractor_id).filter(Boolean) || [])]
+    let contractorMap: any = {}
+    
+    if (contractorIds.length > 0) {
+      const { data: contractors } = await supabaseAdmin
+        .from('users')
+        .select('id, display_name, email')
+        .in('id', contractorIds)
+      
+      contractorMap = contractors?.reduce((acc: any, contractor: any) => {
+        acc[contractor.id] = contractor
+        return acc
+      }, {}) || {}
+    }
+
     const formattedProjects = projectsData?.map(project => ({
       id: project.id,
       title: project.title,
@@ -245,10 +293,11 @@ export async function GET(request: NextRequest) {
       start_date: project.start_date,
       end_date: project.end_date,
       contractor_id: project.contractor_id,
-      contractor_name: (project.contractor as any)?.display_name || '未割当',
-      contractor_email: (project.contractor as any)?.email || '',
+      contractor_name: contractorMap[project.contractor_id]?.display_name || '未割当',
+      contractor_email: contractorMap[project.contractor_id]?.email || '',
       progress: Math.floor(Math.random() * 100), // 実際の進捗計算ロジックに置き換え
       category: project.category || '道路設計',
+      assignee_name: project.assignee_name,
       created_at: project.created_at
     })) || []
 

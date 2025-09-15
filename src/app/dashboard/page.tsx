@@ -125,7 +125,7 @@ export default function DashboardPage() {
           return
         }
 
-        const company = membership.organizations as CompanyData
+        const company = membership.organizations as any
         setCompanyData(company)
 
         // 組織のプロジェクトデータを取得（会社間分離）

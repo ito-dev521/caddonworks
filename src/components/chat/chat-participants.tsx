@@ -83,8 +83,7 @@ export function ChatParticipants({
 
       if (error) throw error
 
-      const formattedParticipants = (data || []).map(p => ({
-        ...p,
+      const formattedParticipants = (data || []).map((p: any) => ({
         user: {
           id: p.users?.id,
           email: p.users?.email,
@@ -94,12 +93,12 @@ export function ChatParticipants({
         }
       }))
 
-      setParticipants(formattedParticipants)
+      setParticipants(formattedParticipants as any)
 
       // Get current user's role in this room
-      const currentUser = formattedParticipants.find(p => p.user_id === user?.id)
+      const currentUser = formattedParticipants.find((p: any) => p.user?.id === user?.id)
       if (currentUser) {
-        setCurrentUserRole(currentUser.role)
+        setCurrentUserRole((currentUser as any).role || 'member')
       }
     } catch (error) {
       console.error('Error fetching participants:', error)
@@ -136,7 +135,7 @@ export function ChatParticipants({
       // Filter out users who are already participants
       const existingUserIds = participants.map(p => p.user_id)
       const filteredResults = (data || []).filter(
-        u => !existingUserIds.includes(u.users.id)
+        (u: any) => !existingUserIds.includes(u.users?.id)
       )
 
       setSearchResults(filteredResults)
@@ -241,7 +240,7 @@ export function ChatParticipants({
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-gray-200">
         <div className="flex items-center gap-2">
-          <Users className="w-5 h-5 text-engineering-blue" />
+          <User className="w-5 h-5 text-engineering-blue" />
           <h3 className="font-semibold text-gray-900">参加者</h3>
           <Badge variant="secondary" className="text-xs">
             {participants.length}

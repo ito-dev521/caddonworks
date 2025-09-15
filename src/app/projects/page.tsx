@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useState } from "react"
+import React, { useEffect, useState, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import {
   Building,
@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button"
 import { formatCurrency } from "@/lib/utils"
 import { useAuth } from "@/contexts/auth-context"
 import { supabase } from "@/lib/supabase"
+import { AuthGuard } from "@/components/auth/auth-guard"
 
 interface ProjectData {
   id: string
@@ -42,9 +43,10 @@ interface ProjectData {
   progress: number
   category: string
   created_at: string
+  assignee_name?: string
 }
 
-export default function ProjectsPage() {
+function ProjectsPageContent() {
   const { userProfile, userRole, loading } = useAuth()
   const [projects, setProjects] = useState<ProjectData[]>([])
   const [filteredProjects, setFilteredProjects] = useState<ProjectData[]>([])
@@ -60,7 +62,8 @@ export default function ProjectsPage() {
     start_date: '',
     end_date: '',
     category: '',
-    contractor_id: ''
+    contractor_id: '',
+    assignee_name: ''
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [chatMessages, setChatMessages] = useState<any[]>([])
@@ -74,6 +77,49 @@ export default function ProjectsPage() {
   const [isLoadingAttachments, setIsLoadingAttachments] = useState(false)
   const [isUploadingFile, setIsUploadingFile] = useState(false)
 
+  // 案件データを取得する関数
+  const fetchProjects = useCallback(async () => {
+    try {
+      setDataLoading(true)
+      // APIを経由して案件データを取得
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        console.error('セッションが見つかりません')
+        setDataLoading(false)
+        return
+      }
+
+      console.log('fetchProjects: APIリクエスト開始')
+      const response = await fetch('/api/projects', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`
+        }
+      })
+
+      console.log('fetchProjects: APIレスポンス', response.status, response.statusText)
+      const result = await response.json()
+      console.log('fetchProjects: API結果', result)
+
+      if (response.ok) {
+        console.log('fetchProjects: 成功, 案件数:', result.projects?.length || 0)
+        setProjects(result.projects || [])
+        setFilteredProjects(result.projects || [])
+      } else {
+        console.error('fetchProjects: 案件データの取得に失敗:', result.message)
+        setProjects([])
+        setFilteredProjects([])
+      }
+
+    } catch (error) {
+      console.error('データ取得エラー:', error)
+      setProjects([])
+      setFilteredProjects([])
+    } finally {
+      setDataLoading(false)
+    }
+  }, [])
+
   // 会社間の情報分離を確実にするため、組織IDでデータをフィルタリング
   useEffect(() => {
     if (!userProfile || userRole !== 'OrgAdmin') {
@@ -81,83 +127,8 @@ export default function ProjectsPage() {
       return
     }
 
-    const fetchProjects = async () => {
-      try {
-        // ユーザーの組織情報を取得
-        const { data: membership, error: membershipError } = await supabase
-          .from('memberships')
-          .select(`
-            org_id,
-            organizations (
-              id,
-              name
-            )
-          `)
-          .eq('user_id', userProfile.id)
-          .eq('role', 'OrgAdmin')
-          .single()
-
-        if (membershipError || !membership) {
-          console.error('組織情報の取得に失敗:', membershipError)
-          setDataLoading(false)
-          return
-        }
-
-        const company = membership.organizations as any
-
-        // 組織の案件データを取得（会社間分離）
-        const { data: projectsData, error: projectsError } = await supabase
-          .from('projects')
-          .select(`
-            id,
-            title,
-            description,
-            status,
-            budget,
-            start_date,
-            end_date,
-            contractor_id,
-            category,
-            created_at,
-            users!projects_contractor_id_fkey (
-              display_name,
-              email
-            )
-          `)
-          .eq('org_id', company.id) // 組織IDでフィルタリング
-          .order('created_at', { ascending: false })
-
-        if (projectsError) {
-          console.error('案件データの取得に失敗:', projectsError)
-        } else {
-          const formattedProjects = projectsData?.map(project => ({
-            id: project.id,
-            title: project.title,
-            description: project.description,
-            status: project.status,
-            budget: project.budget,
-            start_date: project.start_date,
-            end_date: project.end_date,
-            contractor_id: project.contractor_id,
-            contractor_name: (project.users as any)?.display_name || '未割当',
-            contractor_email: (project.users as any)?.email || '',
-            progress: Math.floor(Math.random() * 100), // 実際の進捗計算ロジックに置き換え
-            category: project.category || '道路設計',
-            created_at: project.created_at
-          })) || []
-          setProjects(formattedProjects)
-          setFilteredProjects(formattedProjects)
-        }
-
-      } catch (error) {
-        console.error('データ取得エラー:', error)
-      } finally {
-        setDataLoading(false)
-      }
-    }
-
     fetchProjects()
-  }, [userProfile, userRole])
+  }, [userProfile, userRole, fetchProjects])
 
   // フィルタリング
   useEffect(() => {
@@ -214,10 +185,11 @@ export default function ProjectsPage() {
           start_date: '',
           end_date: '',
           category: '',
-          contractor_id: ''
+          contractor_id: '',
+          assignee_name: ''
         })
         // 案件一覧を再読み込み
-        window.location.reload()
+        fetchProjects()
       } else {
         alert('案件の作成に失敗しました: ' + result.message)
       }
@@ -321,6 +293,53 @@ export default function ProjectsPage() {
     }
   }
 
+  const handleEditProject = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingProject) return
+
+    setIsSubmitting(true)
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        alert('ログインが必要です')
+        return
+      }
+
+      const response = await fetch(`/api/projects/${editingProject.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          title: editingProject.title,
+          description: editingProject.description,
+          budget: editingProject.budget,
+          start_date: editingProject.start_date,
+          end_date: editingProject.end_date,
+          category: editingProject.category,
+          assignee_name: editingProject.assignee_name
+        })
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        alert('案件が正常に更新されました')
+        setEditingProject(null)
+        fetchProjects()
+      } else {
+        alert('案件の更新に失敗しました: ' + result.message)
+      }
+    } catch (error) {
+      console.error('案件更新エラー:', error)
+      alert('ネットワークエラーが発生しました')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   const deleteProject = async (projectId: string) => {
     if (!confirm('この案件を削除してもよろしいですか？')) return
 
@@ -342,7 +361,7 @@ export default function ProjectsPage() {
 
       if (response.ok) {
         alert('案件が削除されました')
-        window.location.reload()
+        fetchProjects()
       } else {
         alert('案件の削除に失敗しました: ' + result.message)
       }
@@ -654,13 +673,25 @@ export default function ProjectsPage() {
                         </div>
                       </div>
 
-                      {/* 受注者情報 */}
-                      <div className="pt-3 border-t border-gray-100">
+                      {/* 担当者・受注者情報 */}
+                      <div className="pt-3 border-t border-gray-100 space-y-3">
+                        {project.assignee_name && (
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                              <User className="w-4 h-4 text-green-600" />
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-xs text-gray-500">担当者</p>
+                              <p className="text-sm font-medium text-gray-900">{project.assignee_name}</p>
+                            </div>
+                          </div>
+                        )}
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 bg-engineering-blue/10 rounded-full flex items-center justify-center">
                             <User className="w-4 h-4 text-engineering-blue" />
                           </div>
                           <div className="flex-1">
+                            <p className="text-xs text-gray-500">受注者</p>
                             <p className="text-sm font-medium text-gray-900">{project.contractor_name}</p>
                             <p className="text-xs text-gray-600">{project.contractor_email}</p>
                           </div>
@@ -855,6 +886,20 @@ export default function ProjectsPage() {
                           required
                         />
                       </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        担当者名
+                      </label>
+                      <input
+                        type="text"
+                        value={newProject.assignee_name}
+                        onChange={(e) => setNewProject({ ...newProject, assignee_name: e.target.value })}
+                        placeholder="例: 田中太郎"
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
+                      />
+                      <p className="text-sm text-gray-600 mt-1">案件の社内担当者を指定できます（任意）</p>
                     </div>
 
 
@@ -1115,6 +1160,165 @@ export default function ProjectsPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* 編集モーダル */}
+      <AnimatePresence>
+        {editingProject && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+            >
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Edit className="w-5 h-5 text-engineering-blue" />
+                    案件編集
+                  </CardTitle>
+                  <CardDescription>
+                    案件の詳細を編集してください
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <form onSubmit={handleEditProject} className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          案件名 *
+                        </label>
+                        <input
+                          type="text"
+                          value={editingProject.title}
+                          onChange={(e) => setEditingProject({ ...editingProject, title: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          カテゴリ *
+                        </label>
+                        <select
+                          value={editingProject.category}
+                          onChange={(e) => setEditingProject({ ...editingProject, category: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
+                          required
+                        >
+                          <option value="">選択してください</option>
+                          <option value="道路設計">道路設計</option>
+                          <option value="橋梁設計">橋梁設計</option>
+                          <option value="河川工事">河川工事</option>
+                          <option value="構造物点検">構造物点検</option>
+                          <option value="地下構造">地下構造</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        案件説明 *
+                      </label>
+                      <textarea
+                        value={editingProject.description}
+                        onChange={(e) => setEditingProject({ ...editingProject, description: e.target.value })}
+                        rows={3}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
+                        required
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          予算 *
+                        </label>
+                        <input
+                          type="number"
+                          value={editingProject.budget}
+                          onChange={(e) => setEditingProject({ ...editingProject, budget: Number(e.target.value) })}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          開始日 *
+                        </label>
+                        <input
+                          type="date"
+                          value={editingProject.start_date}
+                          onChange={(e) => setEditingProject({ ...editingProject, start_date: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          納期 *
+                        </label>
+                        <input
+                          type="date"
+                          value={editingProject.end_date}
+                          onChange={(e) => setEditingProject({ ...editingProject, end_date: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        担当者名
+                      </label>
+                      <input
+                        type="text"
+                        value={editingProject.assignee_name || ''}
+                        onChange={(e) => setEditingProject({ ...editingProject, assignee_name: e.target.value })}
+                        placeholder="例: 田中太郎"
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
+                      />
+                      <p className="text-sm text-gray-600 mt-1">案件の社内担当者を指定できます（任意）</p>
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-4">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setEditingProject(null)}
+                        disabled={isSubmitting}
+                      >
+                        キャンセル
+                      </Button>
+                      <Button
+                        type="submit"
+                        variant="engineering"
+                        disabled={isSubmitting}
+                      >
+                        {isSubmitting ? '更新中...' : '更新'}
+                      </Button>
+                    </div>
+                  </form>
+                </CardContent>
+              </Card>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
+  )
+}
+
+export default function ProjectsPage() {
+  return (
+    <AuthGuard requiredRole="OrgAdmin">
+      <ProjectsPageContent />
+    </AuthGuard>
   )
 }

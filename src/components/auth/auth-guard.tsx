@@ -10,12 +10,14 @@ import { UserRole } from "@/lib/supabase"
 interface AuthGuardProps {
   children: React.ReactNode
   requiredRole?: UserRole
+  allowedRoles?: UserRole[]
   redirectTo?: string
 }
 
 export function AuthGuard({
   children,
   requiredRole,
+  allowedRoles,
   redirectTo = "/auth/login"
 }: AuthGuardProps) {
   const { user, userRole, loading } = useAuth()
@@ -31,13 +33,20 @@ export function AuthGuard({
         return
       }
 
+      // Check role permissions
       if (requiredRole && userRole !== requiredRole) {
         // User doesn't have the required role
         router.push("/unauthorized")
         return
       }
+
+      if (allowedRoles && allowedRoles.length > 0 && (!userRole || !allowedRoles.includes(userRole))) {
+        // User doesn't have any of the allowed roles
+        router.push("/unauthorized")
+        return
+      }
     }
-  }, [user, userRole, loading, requiredRole, router, redirectTo, pathname])
+  }, [user, userRole, loading, requiredRole, allowedRoles, router, redirectTo, pathname])
 
   if (loading) {
     return (
@@ -62,6 +71,10 @@ export function AuthGuard({
   }
 
   if (requiredRole && userRole !== requiredRole) {
+    return null // Will redirect to unauthorized page
+  }
+
+  if (allowedRoles && allowedRoles.length > 0 && (!userRole || !allowedRoles.includes(userRole))) {
     return null // Will redirect to unauthorized page
   }
 

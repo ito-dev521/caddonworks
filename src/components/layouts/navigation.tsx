@@ -25,6 +25,7 @@ import { Badge } from "../ui/badge"
 import { useAuth } from "@/contexts/auth-context"
 import { useRoleAccess } from "../auth/auth-guard"
 import { cn } from "@/lib/utils"
+import { NotificationBell } from "../notifications/notification-bell"
 
 interface NavigationProps {
   userRole?: "OrgAdmin" | "Staff" | "Contractor" | "Reviewer" | "Auditor"
@@ -41,7 +42,7 @@ const navigationItems = {
   ],
   Contractor: [
     { icon: Home, label: "ダッシュボード", href: "/dashboard", badge: null },
-    { icon: FolderOpen, label: "案件一覧", href: "/projects", badge: "5" },
+    { icon: FolderOpen, label: "案件一覧", href: "/jobs", badge: "5" },
     { icon: MessageCircle, label: "チャット", href: "/chat", badge: "3" },
     { icon: FileText, label: "提出物", href: "/deliverables", badge: "1" },
     { icon: BarChart3, label: "報酬・支払", href: "/payouts", badge: null },
@@ -61,12 +62,12 @@ const navigationItems = {
 }
 
 export function Navigation({ userRole: propUserRole }: NavigationProps) {
-  const { user, userProfile, userRole, signOut } = useAuth()
+  const { user, userProfile, userRole, userOrganization, signOut } = useAuth()
   const router = useRouter()
   const [isExpanded, setIsExpanded] = useState(true)
   const [isMobileOpen, setIsMobileOpen] = useState(false)
 
-  const navItems = navigationItems[userRole] || navigationItems.OrgAdmin
+  const navItems = navigationItems[userRole as keyof typeof navigationItems] || navigationItems.OrgAdmin
 
   return (
     <>
@@ -99,14 +100,17 @@ export function Navigation({ userRole: propUserRole }: NavigationProps) {
                 </div>
               )}
             </motion.div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setIsExpanded(!isExpanded)}
-              className="shrink-0"
-            >
-              <Menu className="w-4 h-4" />
-            </Button>
+            <div className="flex items-center gap-2">
+              {isExpanded && <NotificationBell />}
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsExpanded(!isExpanded)}
+                className="shrink-0"
+              >
+                <Menu className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
 
           {/* Navigation Items */}
@@ -175,6 +179,11 @@ export function Navigation({ userRole: propUserRole }: NavigationProps) {
                         {userProfile?.display_name || 'ユーザー'}
                       </p>
                       <p className="text-xs text-gray-500">{userRole}</p>
+                      {userOrganization && (
+                        <p className="text-xs text-gray-400 truncate">
+                          {userOrganization.name}
+                        </p>
+                      )}
                     </div>
                   )}
                 </motion.div>
@@ -215,7 +224,13 @@ export function Navigation({ userRole: propUserRole }: NavigationProps) {
               {/* Tooltip for collapsed state */}
               {!isExpanded && (
                 <div className="absolute left-full ml-2 px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">
-                  {userProfile?.display_name || 'ユーザー'}
+                  <div>
+                    <div>{userProfile?.display_name || 'ユーザー'}</div>
+                    <div className="text-gray-300">{userRole}</div>
+                    {userOrganization && (
+                      <div className="text-gray-400">{userOrganization.name}</div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

@@ -18,14 +18,17 @@ import {
 import { Button } from "../ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card"
 import { Badge } from "../ui/badge"
+import { supabase } from "@/lib/supabase"
 
 interface CreateProjectModalProps {
   isOpen: boolean
   onClose: () => void
+  onSuccess?: () => void
 }
 
-export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps) {
+export function CreateProjectModal({ isOpen, onClose, onSuccess }: CreateProjectModalProps) {
   const [currentStep, setCurrentStep] = useState(1)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -58,10 +61,74 @@ export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps)
     "土木学会指針", "NEXCO設計要領", "下水道施設設計指針", "港湾構造物設計基準"
   ]
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    console.log("Creating project:", formData)
-    onClose()
+    setIsSubmitting(true)
+
+    try {
+      // Supabaseからセッションを取得
+      const { data: { session } } = await supabase.auth.getSession()
+      console.log('セッション情報:', session)
+
+      if (!session?.access_token) {
+        alert('認証が必要です。再度ログインしてください。')
+        return
+      }
+
+      // リクエストデータをログ出力
+      const requestData = {
+        title: formData.title,
+        description: formData.description,
+        budget: formData.budget,
+        start_date: formData.startDate,
+        end_date: formData.dueDate,
+        category: formData.category
+      }
+      console.log('リクエストデータ:', requestData)
+
+      // APIエンドポイントを呼び出し
+      const response = await fetch('/api/projects', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify(requestData)
+      })
+
+      console.log('レスポンスステータス:', response.status)
+      const result = await response.json()
+      console.log('レスポンス結果:', result)
+
+      if (response.ok) {
+        alert('案件が正常に作成されました！')
+        onSuccess?.()
+        onClose()
+        // フォームをリセット
+        setFormData({
+          title: "",
+          description: "",
+          client: "",
+          location: "",
+          budget: "",
+          startDate: "",
+          dueDate: "",
+          category: "",
+          priority: "medium",
+          tags: [],
+          requirements: "",
+          standards: []
+        })
+        setCurrentStep(1)
+      } else {
+        alert(`エラー: ${result.message}`)
+      }
+    } catch (error) {
+      console.error('案件作成エラー:', error)
+      alert('案件の作成中にエラーが発生しました。')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const nextStep = () => setCurrentStep(Math.min(currentStep + 1, steps.length))
@@ -495,8 +562,13 @@ export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps)
                   次へ
                 </Button>
               ) : (
-                <Button type="button" variant="engineering" onClick={handleSubmit}>
-                  プロジェクト作成
+                <Button
+                  type="button"
+                  variant="engineering"
+                  onClick={handleSubmit}
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? '作成中...' : 'プロジェクト作成'}
                 </Button>
               )}
             </div>

@@ -454,7 +454,16 @@ export default function BillingPage() {
 
                 <div className="space-y-4">
                   {invoices.map((invoice, index) => (
-                    <InvoiceCard key={invoice.id} invoice={invoice} index={index} />
+                    <div key={invoice.id} className="p-4 border rounded-lg">
+                      <h3 className="font-medium">{invoice.period}</h3>
+                      <p className="text-sm text-gray-600">クライアント: {invoice.clientOrg}</p>
+                      <p className="text-lg font-bold">¥{invoice.totalAmount.toLocaleString()}</p>
+                      <span className={`text-sm px-2 py-1 rounded ${
+                        invoice.status === 'paid' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                      }`}>
+                        {invoice.status === 'paid' ? '支払済み' : '未払い'}
+                      </span>
+                    </div>
                   ))}
                 </div>
               </motion.div>
@@ -485,7 +494,16 @@ export default function BillingPage() {
 
                 <div className="space-y-4">
                   {payouts.map((payout, index) => (
-                    <PayoutCard key={payout.id} payout={payout} index={index} />
+                    <div key={payout.id} className="p-4 border rounded-lg">
+                      <h3 className="font-medium">{payout.contractorOrg}</h3>
+                      <p className="text-sm text-gray-600">担当者: {payout.contractorUser}</p>
+                      <p className="text-lg font-bold">¥{payout.amount.toLocaleString()}</p>
+                      <span className={`text-sm px-2 py-1 rounded ${
+                        payout.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                      }`}>
+                        {payout.status === 'completed' ? '完了' : '処理待ち'}
+                      </span>
+                    </div>
                   ))}
                 </div>
               </motion.div>
@@ -528,7 +546,7 @@ export default function BillingPage() {
                             <span className="text-sm font-medium">システム利用料</span>
                             <span className="font-semibold">{formatCurrency(25000000)}</span>
                           </div>
-                          <Progress value={9} variant="glass" />
+                          <Progress value={9} variant="default" />
                         </div>
                       </div>
                     </CardContent>

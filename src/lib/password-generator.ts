@@ -53,10 +53,10 @@ export function generatePassword(options: PasswordOptions = {}): string {
   }
   
   let password = ''
-  const array = new Uint8Array(opts.length)
+  const array = new Uint8Array(opts.length || 12)
   crypto.getRandomValues(array)
   
-  for (let i = 0; i < opts.length; i++) {
+  for (let i = 0; i < (opts.length || 12); i++) {
     password += charset[array[i] % charset.length]
   }
   
