@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useEffect, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import {
   DollarSign,
@@ -31,10 +31,156 @@ import { BillingChart } from "@/components/billing/billing-chart"
 import { InvoiceCard } from "@/components/billing/invoice-card"
 import { PayoutCard } from "@/components/billing/payout-card"
 import { formatCurrency } from "@/lib/utils"
+import { useAuth } from "@/contexts/auth-context"
+import { supabase } from "@/lib/supabase"
 
 export default function BillingPage() {
   const [selectedTab, setSelectedTab] = useState<'overview' | 'invoices' | 'payouts' | 'analytics'>('overview')
   const [selectedPeriod, setSelectedPeriod] = useState('current')
+  const { userProfile, userRole, userOrganization } = useAuth()
+
+  type Statement = {
+    id: string
+    org_id: string
+    period_start: string
+    period_end: string
+    total_amount: number
+    contractors_total: number
+    operator_fee: number
+    status: string
+    pdf_url?: string | null
+    issue_date?: string | null
+    due_date?: string | null
+  }
+
+  type Payout = {
+    id: string
+    contractor_id: string
+    period_start: string
+    period_end: string
+    scheduled_pay_date: string | null
+    net_amount: number
+    status: string
+    statement_pdf_url?: string | null
+  }
+
+  const [statements, setStatements] = useState<Statement[]>([])
+  const [payoutsRows, setPayoutsRows] = useState<Payout[]>([])
+  const [loadingData, setLoadingData] = useState(false)
+
+  const fetchData = async () => {
+    try {
+      setLoadingData(true)
+      // OrgAdmin: 自社向け請求（monthly_statements）
+      if (userRole === 'OrgAdmin' && userOrganization?.id) {
+        const { data } = await supabase
+          .from('monthly_statements')
+          .select('id, org_id, period_start, period_end, total_amount, contractors_total, operator_fee, status, pdf_url, issue_date, due_date')
+          .eq('org_id', userOrganization.id)
+          .order('period_end', { ascending: false })
+        setStatements(data || [])
+      }
+
+      // Contractor: 自分への支払（payouts）
+      if (userRole === 'Contractor' && userProfile?.id) {
+        const { data } = await supabase
+          .from('payouts')
+          .select('id, contractor_id, period_start, period_end, scheduled_pay_date, net_amount, status, statement_pdf_url')
+          .eq('contractor_id', userProfile.id)
+          .order('period_end', { ascending: false })
+        setPayoutsRows(data || [])
+      }
+    } finally {
+      setLoadingData(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userRole, userOrganization?.id, userProfile?.id])
+
+  const handleDownload = async (url?: string | null, filename?: string) => {
+    if (!url) return
+    try {
+      // data URL はそのまま開く
+      if (url.startsWith('data:')) {
+        const a = document.createElement('a')
+        a.href = url
+        a.download = filename || 'document.json'
+        a.click()
+        return
+      }
+      const res = await fetch(url)
+      const blob = await res.blob()
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = filename || 'document.pdf'
+      a.click()
+    } catch (e) {
+      alert('ダウンロードに失敗しました')
+    }
+  }
+
+  const getYearMonth = () => {
+    const now = new Date()
+    return { year: now.getFullYear(), month: now.getMonth() + 1 }
+  }
+
+  const handleGenerateOrgInvoice = async () => {
+    if (!userOrganization?.id) return alert('組織が見つかりません')
+    const { year, month } = getYearMonth()
+    try {
+      const res = await fetch(`/api/billing/invoice-orgs?year=${year}&month=${month}&org_id=${userOrganization.id}`)
+      if (!res.ok) throw new Error('生成に失敗しました')
+      await fetchData()
+      alert('請求書を生成しました')
+    } catch (e) {
+      alert('生成に失敗しました')
+    }
+  }
+
+  const handleCloseContractors = async () => {
+    const { year, month } = getYearMonth()
+    try {
+      const res = await fetch(`/api/billing/close-contractors?year=${year}&month=${month}`)
+      if (!res.ok) throw new Error('集計に失敗しました')
+      await fetchData()
+      alert('受注者向け支払集計を作成しました')
+    } catch (e) {
+      alert('集計に失敗しました')
+    }
+  }
+
+  const handleSaveStatementPdf = async (statementId: string) => {
+    try {
+      const res = await fetch('/api/billing/generate-doc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: 'invoice', id: statementId })
+      })
+      if (!res.ok) throw new Error('failed')
+      await fetchData()
+      alert('請求書PDFを保存しました')
+    } catch {
+      alert('請求書PDFの保存に失敗しました')
+    }
+  }
+
+  const handleSavePayoutPdf = async (payoutId: string) => {
+    try {
+      const res = await fetch('/api/billing/generate-doc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: 'ack', id: payoutId })
+      })
+      if (!res.ok) throw new Error('failed')
+      await fetchData()
+      alert('請書PDFを保存しました')
+    } catch {
+      alert('請書PDFの保存に失敗しました')
+    }
+  }
 
   // Mock billing data
   const billingMetrics = {
@@ -423,7 +569,7 @@ export default function BillingPage() {
               </motion.div>
             )}
 
-            {/* Invoices */}
+            {/* Invoices (OrgAdmin: monthly_statements) */}
             {selectedTab === 'invoices' && (
               <motion.div
                 key="invoices"
@@ -445,7 +591,11 @@ export default function BillingPage() {
                       <option value="quarter">今四半期</option>
                       <option value="year">今年</option>
                     </select>
-                    <Button variant="engineering">
+                    <Button variant="outline" onClick={handleGenerateOrgInvoice}>
+                      <FileText className="w-4 h-4 mr-2" />
+                      今月の請求書生成
+                    </Button>
+                    <Button variant="engineering" onClick={fetchData}>
                       <Send className="w-4 h-4 mr-2" />
                       一括送信
                     </Button>
@@ -453,23 +603,31 @@ export default function BillingPage() {
                 </div>
 
                 <div className="space-y-4">
-                  {invoices.map((invoice, index) => (
-                    <div key={invoice.id} className="p-4 border rounded-lg">
-                      <h3 className="font-medium">{invoice.period}</h3>
-                      <p className="text-sm text-gray-600">クライアント: {invoice.clientOrg}</p>
-                      <p className="text-lg font-bold">¥{invoice.totalAmount.toLocaleString()}</p>
-                      <span className={`text-sm px-2 py-1 rounded ${
-                        invoice.status === 'paid' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
-                      }`}>
-                        {invoice.status === 'paid' ? '支払済み' : '未払い'}
-                      </span>
+                  {(statements.length > 0 ? statements : []).map((st) => (
+                    <div key={st.id} className="p-4 border rounded-lg flex items-center justify-between">
+                      <div>
+                        <h3 className="font-medium">期間: {new Date(st.period_start).toLocaleDateString('ja-JP')} 〜 {new Date(st.period_end).toLocaleDateString('ja-JP')}</h3>
+                        <p className="text-sm text-gray-600">合計: {formatCurrency(st.total_amount)}（内 手数料 {formatCurrency(st.operator_fee)}）</p>
+                        <Badge className={getStatusColor(st.status)}>{st.status}</Badge>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button variant="outline" onClick={() => window.open(`/api/billing/pdf?type=invoice&title=請求書&total=${st.total_amount}`, '_blank') }>
+                          <Download className="w-4 h-4 mr-2" />PDFダウンロード
+                        </Button>
+                        <Button variant="engineering" onClick={() => handleSaveStatementPdf(st.id)}>
+                          保存
+                        </Button>
+                      </div>
                     </div>
                   ))}
+                  {statements.length === 0 && (
+                    <div className="p-4 text-sm text-gray-600">表示できる請求書がありません</div>
+                  )}
                 </div>
               </motion.div>
             )}
 
-            {/* Payouts */}
+            {/* Payouts (Contractor: payouts) */}
             {selectedTab === 'payouts' && (
               <motion.div
                 key="payouts"
@@ -485,7 +643,7 @@ export default function BillingPage() {
                       <Calendar className="w-4 h-4 mr-2" />
                       支払スケジュール
                     </Button>
-                    <Button variant="engineering">
+                    <Button variant="engineering" onClick={fetchData}>
                       <CreditCard className="w-4 h-4 mr-2" />
                       一括支払処理
                     </Button>
@@ -493,18 +651,27 @@ export default function BillingPage() {
                 </div>
 
                 <div className="space-y-4">
-                  {payouts.map((payout, index) => (
-                    <div key={payout.id} className="p-4 border rounded-lg">
-                      <h3 className="font-medium">{payout.contractorOrg}</h3>
-                      <p className="text-sm text-gray-600">担当者: {payout.contractorUser}</p>
-                      <p className="text-lg font-bold">¥{payout.amount.toLocaleString()}</p>
-                      <span className={`text-sm px-2 py-1 rounded ${
-                        payout.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
-                      }`}>
-                        {payout.status === 'completed' ? '完了' : '処理待ち'}
-                      </span>
+                  {(payoutsRows.length > 0 ? payoutsRows : []).map((po) => (
+                    <div key={po.id} className="p-4 border rounded-lg flex items-center justify-between">
+                      <div>
+                        <h3 className="font-medium">期間: {new Date(po.period_start).toLocaleDateString('ja-JP')} 〜 {new Date(po.period_end).toLocaleDateString('ja-JP')}</h3>
+                        <p className="text-sm text-gray-600">支払予定日: {po.scheduled_pay_date ? new Date(po.scheduled_pay_date).toLocaleDateString('ja-JP') : '-'}</p>
+                        <p className="text-lg font-bold">{formatCurrency(po.net_amount)}</p>
+                        <Badge className={getStatusColor(po.status)}>{po.status}</Badge>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button variant="outline" onClick={() => window.open(`/api/billing/pdf?type=ack&title=請書&total=${po.net_amount}`, '_blank') }>
+                          <Download className="w-4 h-4 mr-2" />PDFダウンロード
+                        </Button>
+                        <Button variant="engineering" onClick={() => handleSavePayoutPdf(po.id)}>
+                          保存
+                        </Button>
+                      </div>
                     </div>
                   ))}
+                  {payoutsRows.length === 0 && (
+                    <div className="p-4 text-sm text-gray-600">表示できる支払情報がありません</div>
+                  )}
                 </div>
               </motion.div>
             )}
