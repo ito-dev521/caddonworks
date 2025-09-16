@@ -49,25 +49,30 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // ユーザーがアクセス可能なプロジェクトのチャットルームを取得
-    const { data: projects, error: projectsError } = await supabaseAdmin
-      .from('projects')
+    // 署名済み契約のプロジェクトのみを取得
+    const { data: contracts, error: contractsError } = await supabaseAdmin
+      .from('contracts')
       .select(`
-        id,
-        title,
-        description,
+        project_id,
         status,
-        org_id,
-        contractor_id,
-        organizations (
-          name
+        projects (
+          id,
+          title,
+          description,
+          status,
+          org_id,
+          contractor_id,
+          organizations (
+            name
+          )
         )
       `)
+      .eq('status', 'signed')
 
-    if (projectsError) {
-      console.error('プロジェクト取得エラー:', projectsError)
+    if (contractsError) {
+      console.error('契約取得エラー:', contractsError)
       return NextResponse.json(
-        { message: 'プロジェクトの取得に失敗しました' },
+        { message: '契約の取得に失敗しました' },
         { status: 400 }
       )
     }
@@ -79,10 +84,23 @@ export async function GET(request: NextRequest) {
       .eq('user_id', userProfile.id)
       .single()
 
-    // アクセス可能なプロジェクトをフィルタリング
-    const accessibleProjects = projects?.filter(project =>
-      membership?.org_id === project.org_id || project.contractor_id === userProfile.id
-    ) || []
+    // ユーザーがアクセス可能な署名済み契約のプロジェクトをフィルタリング
+    const accessibleProjects = contracts?.filter(contract => {
+      const project = contract.projects as any
+      console.log('chat-rooms API: プロジェクトフィルタリング', {
+        project_id: project?.id,
+        project_title: project?.title,
+        org_id: project?.org_id,
+        contractor_id: project?.contractor_id,
+        user_id: userProfile.id,
+        membership_org_id: membership?.org_id,
+        membership_role: membership?.role
+      })
+      return project && (
+        membership?.org_id === project.org_id || 
+        project.contractor_id === userProfile.id
+      )
+    }).map(contract => contract.projects as any) || []
 
     // 各プロジェクトのチャットルーム情報を構築
     const chatRooms = await Promise.all(
@@ -114,7 +132,7 @@ export async function GET(request: NextRequest) {
           project_name: project.title,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-          is_active: project.status === 'in_progress' || project.status === 'bidding',
+          is_active: project.status === 'in_progress',
           participant_count: 2, // TODO: 実際の参加者数を計算
           unread_count: unreadCount,
           last_message: lastMessage ? {

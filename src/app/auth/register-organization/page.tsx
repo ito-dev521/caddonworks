@@ -31,22 +31,22 @@ export default function OrganizationRegisterPage() {
   const [currentStep, setCurrentStep] = useState(1)
   const [formData, setFormData] = useState({
     // Organization Info
-    organizationName: "",
+    organizationName: "デモ建設株式会社",
     organizationType: "private_corp",
-    taxId: "",
-    address: "",
-    phone: "",
-    billingEmail: "",
-    website: "",
-    description: "",
+    taxId: "1234567890123",
+    address: "〒100-0001 東京都千代田区千代田1-1-1",
+    phone: "03-1234-5678",
+    billingEmail: "billing@demo-construction.co.jp",
+    website: "https://www.demo-construction.co.jp",
+    description: "土木工事を中心とした総合建設会社",
 
     // Admin User Info
-    adminName: "",
-    adminEmail: "",
-    adminPassword: "",
-    confirmPassword: "",
-    adminPhone: "",
-    adminDepartment: "",
+    adminName: "管理者デモ",
+    adminEmail: "orgadmin@demo.com",
+    adminPassword: "demo123",
+    confirmPassword: "demo123",
+    adminPhone: "03-1234-5678",
+    adminDepartment: "システム管理部",
 
     // Billing Info
     systemFee: 50000,
@@ -602,7 +602,7 @@ export default function OrganizationRegisterPage() {
                     className="space-y-6"
                   >
                     {/* Pricing Information */}
-                    <Card variant="engineering">
+                    <Card className="bg-gradient-to-r from-engineering-blue to-blue-600">
                       <CardContent className="p-6 text-white">
                         <h3 className="text-xl font-bold mb-4">料金体系</h3>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

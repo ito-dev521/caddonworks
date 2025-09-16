@@ -231,13 +231,13 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         filePath,
         fileName: file.name,
         fileSize: file.size,
-        errorCode: uploadError.statusCode,
+        errorCode: (uploadError as any).statusCode || 'UNKNOWN',
         errorMessage: uploadError.message
       })
       return NextResponse.json({ 
         message: 'ファイルのアップロードに失敗しました',
         error: uploadError.message,
-        details: `エラーコード: ${uploadError.statusCode || 'Unknown'}, バケット: project-attachments`
+        details: `エラーコード: ${(uploadError as any).statusCode || 'Unknown'}, バケット: project-attachments`
       }, { status: 400 })
     }
 

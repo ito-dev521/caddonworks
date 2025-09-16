@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useState, useCallback } from "react"
+import React, { useEffect, useState, useCallback, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import {
   Building,
@@ -26,6 +26,7 @@ import { formatCurrency, formatBudget } from "@/lib/utils"
 import { useAuth } from "@/contexts/auth-context"
 import { supabase } from "@/lib/supabase"
 import { AuthGuard } from "@/components/auth/auth-guard"
+import { MEMBER_LEVELS, type MemberLevel } from "@/lib/member-level"
 
 interface JobData {
   id: string
@@ -47,6 +48,8 @@ interface JobData {
   current_bid_count: number
   is_full: boolean
   can_bid: boolean
+  contractor_id?: string
+  required_level?: MemberLevel
 }
 
 interface BidData {
@@ -60,7 +63,7 @@ function JobsPageContent() {
   const { userProfile, userRole, loading } = useAuth()
   const [jobs, setJobs] = useState<JobData[]>([])
   const [filteredJobs, setFilteredJobs] = useState<JobData[]>([])
-  const [selectedTab, setSelectedTab] = useState<'available' | 'bidding' | 'all'>('available')
+  const [selectedTab, setSelectedTab] = useState<'available' | 'awarded' | 'all'>('available')
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('')
   const [showBidModal, setShowBidModal] = useState<string | null>(null)
@@ -75,6 +78,7 @@ function JobsPageContent() {
   const [showJobDetail, setShowJobDetail] = useState<string | null>(null)
   const [attachments, setAttachments] = useState<any[]>([])
   const [loadingAttachments, setLoadingAttachments] = useState(false)
+  const lastFetchKeyRef = useRef<string | null>(null)
 
   // 予算のフォーマット処理
   const formatBudget = (value: string | number | undefined | null) => {
@@ -126,7 +130,7 @@ function JobsPageContent() {
   }
 
   // 案件データを取得する関数
-  const fetchJobs = useCallback(async () => {
+  const fetchJobs = async () => {
     try {
       console.log('fetchJobs: 開始')
       setDataLoading(true)
@@ -199,7 +203,7 @@ function JobsPageContent() {
       console.log('fetchJobs: 終了')
       setDataLoading(false)
     }
-  }, [])
+  }
 
   useEffect(() => {
     console.log('useEffect: 認証状態確認', {
@@ -227,9 +231,14 @@ function JobsPageContent() {
       return
     }
 
+    // 同一ユーザー・ロールの組み合わせでは1回のみフェッチ（開発時のStrictMode重複実行対策）
+    const fetchKey = `${userProfile.id}:${userRole}`
+    if (lastFetchKeyRef.current === fetchKey) return
+    lastFetchKeyRef.current = fetchKey
+
     console.log('useEffect: 認証OK、データ取得開始', { userRole, userProfileId: userProfile.id })
     fetchJobs()
-  }, [userProfile, userRole, fetchJobs])
+  }, [userProfile, userRole])
 
   // フィルタリング
   useEffect(() => {
@@ -237,20 +246,25 @@ function JobsPageContent() {
 
     // ステータスフィルタ
     if (selectedTab === 'available') {
+      // 入札可能な案件（入札中の案件のみ）
       filtered = filtered.filter(j => j.status === 'bidding')
-    } else if (selectedTab === 'bidding') {
-      // 入札済み案件（実装は後で追加）
-      filtered = []
-    }
-
-    // 入札締切日フィルタ（締切切れの案件を除外）
-    const now = new Date()
-    filtered = filtered.filter(job => {
-      if (!job.bidding_deadline) return true // 締切日が設定されていない場合は表示
       
-      const deadline = new Date(job.bidding_deadline)
-      return deadline > now // 締切日が現在時刻より後のみ表示
-    })
+      // 入札締切日フィルタ（締切切れの案件を除外）
+      const now = new Date()
+      filtered = filtered.filter(job => {
+        if (!job.bidding_deadline) return true // 締切日が設定されていない場合は表示
+        
+        const deadline = new Date(job.bidding_deadline)
+        return deadline > now // 締切日が現在時刻より後のみ表示
+      })
+    } else if (selectedTab === 'awarded') {
+      // 落札した案件（署名済み契約の案件）
+      // APIから取得したデータで、入札中でない案件は全て落札した案件
+      filtered = filtered.filter(j => j.status !== 'bidding')
+    } else if (selectedTab === 'all') {
+      // 全ての案件（フィルタリングなし）
+      filtered = filtered
+    }
 
     // カテゴリフィルタ
     if (selectedCategory) {
@@ -448,7 +462,7 @@ function JobsPageContent() {
   }
 
   const getCategoryOptions = () => {
-    const categories = [...new Set(jobs.map(job => job.category))]
+    const categories = Array.from(new Set(jobs.map(job => job.category)))
     return categories
   }
 
@@ -536,6 +550,10 @@ function JobsPageContent() {
                   <p className="text-sm text-gray-600">入札可能案件</p>
                   <p className="text-sm font-medium">{jobs.filter(j => j.status === 'bidding').length}件</p>
                 </div>
+                <div className="text-right">
+                  <p className="text-sm text-gray-600">落札案件</p>
+                  <p className="text-sm font-medium">{jobs.filter(j => j.status !== 'bidding').length}件</p>
+                </div>
               </div>
             </div>
           </div>
@@ -548,8 +566,16 @@ function JobsPageContent() {
               {/* タブナビゲーション */}
               <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg">
                 {[
-                  { id: 'available', label: '入札可能', count: jobs.filter(j => j.status === 'bidding').length },
-                  { id: 'bidding', label: '入札済み', count: 0 }, // 実装は後で追加
+                  { 
+                    id: 'available', 
+                    label: '入札可能', 
+                    count: jobs.filter(j => j.status === 'bidding').length 
+                  },
+                  { 
+                    id: 'awarded', 
+                    label: '落札案件', 
+                    count: jobs.filter(j => j.status !== 'bidding').length 
+                  },
                   { id: 'all', label: 'すべて', count: jobs.length }
                 ].map((tab) => (
                   <button
@@ -664,6 +690,13 @@ function JobsPageContent() {
                             </span>
                           )}
                         </div>
+                        {job.required_level && (
+                          <div className="flex items-center gap-2">
+                            <Badge className={MEMBER_LEVELS[job.required_level].color}>
+                              必要レベル: {MEMBER_LEVELS[job.required_level].label}
+                            </Badge>
+                          </div>
+                        )}
                         {job.is_full && (
                           <div className="flex items-center gap-2 text-red-600 font-medium">
                             <AlertCircle className="w-4 h-4" />
@@ -724,6 +757,11 @@ function JobsPageContent() {
                               <Hand className="w-4 h-4 mr-1" />
                               {job.is_full ? '募集終了' : '入札'}
                             </Button>
+                          )}
+                          {job.status !== 'bidding' && (
+                            <Badge variant="secondary" className="bg-green-100 text-green-800">
+                              落札済み
+                            </Badge>
                           )}
                         </div>
                       </div>
@@ -1120,6 +1158,11 @@ function JobsPageContent() {
                               <Hand className="w-4 h-4 mr-2" />
                               {job.is_full ? '募集人数に達しました' : '入札する'}
                             </Button>
+                          )}
+                          {job.status !== 'bidding' && (
+                            <Badge variant="secondary" className="bg-green-100 text-green-800">
+                              落札済み
+                            </Badge>
                           )}
                         </div>
                       </div>

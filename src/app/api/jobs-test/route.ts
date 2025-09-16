@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     console.log('案件データ取得成功:', { count: projects?.length })
 
     // 組織情報を個別に取得
-    const orgIds = [...new Set(projects?.map(p => p.org_id) || [])]
+    const orgIds = Array.from(new Set(projects?.map(p => p.org_id) || []))
     let orgMap: any = {}
     
     if (orgIds.length > 0) {

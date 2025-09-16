@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useState, useCallback } from "react"
+import React, { useEffect, useState, useCallback, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import {
   Building,
@@ -17,7 +17,11 @@ import {
   Paperclip,
   Upload,
   File,
-  X
+  X,
+  Clock,
+  CheckCircle,
+  PlayCircle,
+  StopCircle
 } from "lucide-react"
 import { Navigation } from "@/components/layouts/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -28,6 +32,7 @@ import { formatCurrency } from "@/lib/utils"
 import { useAuth } from "@/contexts/auth-context"
 import { supabase } from "@/lib/supabase"
 import { AuthGuard } from "@/components/auth/auth-guard"
+import { MEMBER_LEVELS, type MemberLevel } from "@/lib/member-level"
 
 interface ProjectData {
   id: string
@@ -44,6 +49,9 @@ interface ProjectData {
   category: string
   created_at: string
   assignee_name?: string
+  bidding_deadline?: string
+  required_contractors?: number
+  required_level?: MemberLevel
 }
 
 function ProjectsPageContent() {
@@ -65,7 +73,8 @@ function ProjectsPageContent() {
     category: '',
     contractor_id: '',
     assignee_name: '',
-    required_contractors: 1
+    required_contractors: 1,
+    required_level: 'beginner' as MemberLevel
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [chatMessages, setChatMessages] = useState<any[]>([])
@@ -78,6 +87,7 @@ function ProjectsPageContent() {
   const [attachments, setAttachments] = useState<any[]>([])
   const [isLoadingAttachments, setIsLoadingAttachments] = useState(false)
   const [isUploadingFile, setIsUploadingFile] = useState(false)
+  const lastFetchKeyRef = useRef<string | null>(null)
 
   // 予算のフォーマット処理
   const formatBudget = (value: string) => {
@@ -133,7 +143,7 @@ function ProjectsPageContent() {
     } finally {
       setDataLoading(false)
     }
-  }, [])
+  }, [])  // 空の依存配列でメモ化
 
   // 会社間の情報分離を確実にするため、組織IDでデータをフィルタリング
   useEffect(() => {
@@ -141,6 +151,11 @@ function ProjectsPageContent() {
       setDataLoading(false)
       return
     }
+
+    // 同一ユーザー・ロールの組み合わせでは1回のみフェッチ（開発時のStrictMode重複実行対策）
+    const fetchKey = `${userProfile.id}:${userRole}`
+    if (lastFetchKeyRef.current === fetchKey) return
+    lastFetchKeyRef.current = fetchKey
 
     fetchProjects()
   }, [userProfile, userRole, fetchProjects])
@@ -206,10 +221,11 @@ function ProjectsPageContent() {
           category: '',
           contractor_id: '',
           assignee_name: '',
-          required_contractors: 1
+          required_contractors: 1,
+          required_level: 'beginner'
         })
         // 案件一覧を再読み込み
-        fetchProjects()
+        await fetchProjects()
       } else {
         alert('案件の作成に失敗しました: ' + result.message)
       }
@@ -339,6 +355,8 @@ function ProjectsPageContent() {
           start_date: editingProject.start_date,
           end_date: editingProject.end_date,
           category: editingProject.category,
+          required_contractors: editingProject.required_contractors,
+          required_level: editingProject.required_level,
           assignee_name: editingProject.assignee_name
         })
       })
@@ -348,7 +366,7 @@ function ProjectsPageContent() {
       if (response.ok) {
         alert('案件が正常に更新されました')
         setEditingProject(null)
-        fetchProjects()
+        await fetchProjects()
       } else {
         alert('案件の更新に失敗しました: ' + result.message)
       }
@@ -381,13 +399,101 @@ function ProjectsPageContent() {
 
       if (response.ok) {
         alert('案件が削除されました')
-        fetchProjects()
+        await fetchProjects()
       } else {
         alert('案件の削除に失敗しました: ' + result.message)
       }
     } catch (error) {
       console.error('案件削除エラー:', error)
       alert('ネットワークエラーが発生しました')
+    }
+  }
+
+  // ステータス変更機能
+  const updateProjectStatus = async (projectId: string, newStatus: string) => {
+    const statusLabels: { [key: string]: string } = {
+      'bidding': '入札受付中',
+      'in_progress': '進行中',
+      'completed': '完了',
+      'cancelled': 'キャンセル'
+    }
+
+    if (!confirm(`この案件のステータスを「${statusLabels[newStatus]}」に変更してもよろしいですか？`)) return
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        alert('ログインが必要です')
+        return
+      }
+
+      const project = projects.find(p => p.id === projectId)
+      if (!project) {
+        alert('案件が見つかりません')
+        return
+      }
+
+      const response = await fetch(`/api/projects/${projectId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          title: project.title,
+          description: project.description,
+          budget: project.budget,
+          start_date: project.start_date,
+          end_date: project.end_date,
+          category: project.category,
+          required_contractors: project.required_contractors,
+          status: newStatus
+        })
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        alert(`案件のステータスが「${statusLabels[newStatus]}」に変更されました`)
+        await fetchProjects()
+
+        // ステータスが完了になった場合、請求書関連の処理を呼び出し
+        if (newStatus === 'completed') {
+          await createInvoiceForCompletedProject(projectId)
+        }
+      } else {
+        alert('ステータスの変更に失敗しました: ' + result.message)
+      }
+    } catch (error) {
+      console.error('ステータス変更エラー:', error)
+      alert('ネットワークエラーが発生しました')
+    }
+  }
+
+  // 完了案件の請求書作成
+  const createInvoiceForCompletedProject = async (projectId: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
+      // 請求書作成APIを呼び出し（後で実装）
+      const response = await fetch('/api/invoices', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          project_id: projectId,
+          type: 'completion'
+        })
+      })
+
+      if (response.ok) {
+        console.log('請求書が作成されました')
+      }
+    } catch (error) {
+      console.error('請求書作成エラー:', error)
     }
   }
 
@@ -768,6 +874,13 @@ function ProjectsPageContent() {
                             募集人数: {project.required_contractors}名
                           </div>
                         )}
+                        {project.required_level && (
+                          <div className="flex items-center gap-2">
+                            <Badge className={MEMBER_LEVELS[project.required_level].color}>
+                              必要レベル: {MEMBER_LEVELS[project.required_level].label}
+                            </Badge>
+                          </div>
+                        )}
                       </div>
 
                       {/* 担当者・受注者情報 */}
@@ -823,13 +936,44 @@ function ProjectsPageContent() {
                           >
                             <Trash2 className="w-4 h-4" />
                           </Button>
-                          <Button 
-                            variant="outline" 
+                          <Button
+                            variant="outline"
                             size="sm"
                             onClick={() => openAttachmentsModal(project.id)}
                           >
                             <Paperclip className="w-4 h-4" />
                           </Button>
+                          {/* ステータス変更ボタン */}
+                          {project.status === 'bidding' && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => updateProjectStatus(project.id, 'in_progress')}
+                              className="text-blue-600 hover:text-blue-700"
+                            >
+                              <PlayCircle className="w-4 h-4" />
+                            </Button>
+                          )}
+                          {project.status === 'in_progress' && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => updateProjectStatus(project.id, 'completed')}
+                              className="text-green-600 hover:text-green-700"
+                            >
+                              <CheckCircle className="w-4 h-4" />
+                            </Button>
+                          )}
+                          {(project.status === 'bidding' || project.status === 'in_progress') && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => updateProjectStatus(project.id, 'cancelled')}
+                              className="text-red-600 hover:text-red-700"
+                            >
+                              <StopCircle className="w-4 h-4" />
+                            </Button>
+                          )}
                           {(project.status === 'in_progress' || project.status === 'bidding') && (
                             <Button
                               variant="engineering"
@@ -978,6 +1122,24 @@ function ProjectsPageContent() {
                           ))}
                         </select>
                       </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        必要な会員レベル *
+                      </label>
+                      <select
+                        value={newProject.required_level}
+                        onChange={(e) => setNewProject({ ...newProject, required_level: e.target.value as MemberLevel })}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
+                        required
+                      >
+                        {Object.values(MEMBER_LEVELS).map(level => (
+                          <option key={level.level} value={level.level}>
+                            {level.label} - {level.description}
+                          </option>
+                        ))}
+                      </select>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1404,18 +1566,53 @@ function ProjectsPageContent() {
                       </div>
                     </div>
 
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          募集人数 *
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="10"
+                          value={editingProject.required_contractors || 1}
+                          onChange={(e) => setEditingProject({ ...editingProject, required_contractors: Number(e.target.value) })}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
+                          required
+                        />
+                        <p className="text-sm text-gray-600 mt-1">この案件に必要な受注者の人数</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          担当者名
+                        </label>
+                        <input
+                          type="text"
+                          value={editingProject.assignee_name || ''}
+                          onChange={(e) => setEditingProject({ ...editingProject, assignee_name: e.target.value })}
+                          placeholder="例: 田中太郎"
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
+                        />
+                        <p className="text-sm text-gray-600 mt-1">案件の社内担当者を指定できます（任意）</p>
+                      </div>
+                    </div>
+
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        担当者名
+                        必要な会員レベル *
                       </label>
-                      <input
-                        type="text"
-                        value={editingProject.assignee_name || ''}
-                        onChange={(e) => setEditingProject({ ...editingProject, assignee_name: e.target.value })}
-                        placeholder="例: 田中太郎"
+                      <select
+                        value={editingProject.required_level || 'beginner'}
+                        onChange={(e) => setEditingProject({ ...editingProject, required_level: e.target.value as MemberLevel })}
                         className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
-                      />
-                      <p className="text-sm text-gray-600 mt-1">案件の社内担当者を指定できます（任意）</p>
+                        required
+                      >
+                        {Object.values(MEMBER_LEVELS).map(level => (
+                          <option key={level.level} value={level.level}>
+                            {level.label} - {level.description}
+                          </option>
+                        ))}
+                      </select>
                     </div>
 
                     <div className="flex justify-end gap-3 pt-4">

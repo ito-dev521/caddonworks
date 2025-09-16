@@ -99,12 +99,17 @@ export async function GET(request: NextRequest) {
         id,
         message,
         sender_type,
+        message_type,
+        file_url,
+        file_name,
+        file_size,
         created_at,
         updated_at,
         users:sender_id (
           id,
           display_name,
-          email
+          email,
+          avatar_url
         )
       `)
       .eq('project_id', projectId)
@@ -125,10 +130,14 @@ export async function GET(request: NextRequest) {
       sender_id: (msg.users as any)?.id,
       sender_name: (msg.users as any)?.display_name || 'Unknown',
       sender_email: (msg.users as any)?.email,
+      sender_avatar_url: (msg.users as any)?.avatar_url,
       sender_type: msg.sender_type,
       created_at: msg.created_at,
       is_deleted: false,
-      message_type: 'text'
+      message_type: msg.message_type || 'text',
+      file_url: msg.file_url,
+      file_name: msg.file_name,
+      file_size: msg.file_size
     })) || []
 
     return NextResponse.json({
@@ -245,7 +254,8 @@ export async function POST(request: NextRequest) {
         users:sender_id (
           id,
           display_name,
-          email
+          email,
+          avatar_url
         )
       `)
       .single()
@@ -265,6 +275,7 @@ export async function POST(request: NextRequest) {
       sender_id: (messageData.users as any)?.id,
       sender_name: (messageData.users as any)?.display_name || 'Unknown',
       sender_email: (messageData.users as any)?.email,
+      sender_avatar_url: (messageData.users as any)?.avatar_url,
       sender_type: messageData.sender_type,
       created_at: messageData.created_at,
       is_deleted: false,

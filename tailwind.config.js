@@ -97,6 +97,7 @@ module.exports = {
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
         'gradient-mesh': 'linear-gradient(135deg, rgba(0, 102, 204, 0.1) 0%, rgba(16, 185, 129, 0.1) 100%)',
+        'gradient-engineering': 'linear-gradient(135deg, #0066CC 0%, #10B981 100%)',
       }
     },
   },

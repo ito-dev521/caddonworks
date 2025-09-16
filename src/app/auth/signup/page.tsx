@@ -33,7 +33,7 @@ export default function SignUpPage() {
     organization: "",
     specialties: [] as string[],
     qualifications: [] as string[],
-    portfolioUrl: ""
+    experienceYears: ""
   })
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -45,14 +45,14 @@ export default function SignUpPage() {
   const router = useRouter()
 
   const specialtyOptions = [
-    "道路設計", "橋梁設計", "河川工事", "トンネル設計", "地下構造",
-    "構造物点検", "測量業務", "地質調査", "環境評価", "施工管理", "維持管理"
+    "未経験", "道路設計", "橋梁設計", "河川工事", "上下水道設計", "トンネル設計", "地下構造",
+    "構造物点検", "測量業務", "地質調査", "環境評価", "施工管理"
   ]
 
   const qualificationOptions = [
-    "技術士（建設部門）", "技術士（上下水道部門）", "一級建築士", "測量士",
-    "土木施工管理技士", "建築施工管理技士", "管工事施工管理技士",
-    "造園施工管理技士", "建設機械施工技士", "土地家屋調査士"
+    "技術士（建設部門）", "技術士（上下水道部門）", "技術士（その他）", "技術士補", "一級建築士", "測量士",
+    "土木施工管理技士", "管工事施工管理技士",
+    "造園施工管理技士", "土地家屋調査士"
   ]
 
   const handleInputChange = (field: string, value: string) => {
@@ -127,7 +127,7 @@ export default function SignUpPage() {
         display_name: formData.displayName,
         specialties: formData.specialties,
         qualifications: formData.qualifications,
-        portfolio_url: formData.portfolioUrl || undefined
+        experience_years: formData.experienceYears || undefined
       })
 
       setSuccess("アカウントを作成しました。確認メールをご確認ください。")
@@ -280,7 +280,7 @@ export default function SignUpPage() {
                     {/* Organization */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        所属組織
+                        屋号及び所属組織
                       </label>
                       <div className="relative">
                         <Building className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
@@ -373,18 +373,26 @@ export default function SignUpPage() {
                       )}
                     </div>
 
-                    {/* Portfolio URL */}
+                    {/* Experience Years */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        ポートフォリオURL（任意）
+                        経験年数 {formData.specialties.some(s => s !== '未経験') && '*'}
                       </label>
                       <input
-                        type="url"
-                        value={formData.portfolioUrl}
-                        onChange={(e) => handleInputChange('portfolioUrl', e.target.value)}
+                        type="number"
+                        min="0"
+                        max="50"
+                        value={formData.experienceYears}
+                        onChange={(e) => handleInputChange('experienceYears', e.target.value)}
                         className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
-                        placeholder="https://portfolio.example.com"
+                        placeholder="5"
+                        required={formData.specialties.some(s => s !== '未経験')}
                       />
+                      {formData.specialties.some(s => s !== '未経験') && (
+                        <p className="text-sm text-gray-500 mt-1">
+                          未経験以外の専門分野を選択した場合は必須です
+                        </p>
+                      )}
                     </div>
                   </motion.div>
                 )}

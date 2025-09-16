@@ -1,8 +1,8 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useEffect, useRef } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, usePathname } from "next/navigation"
 import { motion } from "framer-motion"
 import {
   Home,
@@ -23,15 +23,22 @@ import {
 import { Button } from "../ui/button"
 import { Badge } from "../ui/badge"
 import { useAuth } from "@/contexts/auth-context"
+import { supabase } from "@/lib/supabase"
 import { useRoleAccess } from "../auth/auth-guard"
 import { cn } from "@/lib/utils"
 import { NotificationBell } from "../notifications/notification-bell"
 
 interface NavigationProps {
-  userRole?: "OrgAdmin" | "Staff" | "Contractor" | "Reviewer" | "Auditor"
+  userRole?: "Admin" | "OrgAdmin" | "Staff" | "Contractor" | "Reviewer" | "Auditor"
 }
 
 const navigationItems = {
+  Admin: [
+    { icon: Home, label: "ダッシュボード", href: "/dashboard", badge: null },
+    { icon: Users, label: "会員管理", href: "/admin/users", badge: null },
+    { icon: BarChart3, label: "統計・レポート", href: "/admin/reports", badge: null },
+    { icon: Settings, label: "システム設定", href: "/admin/settings", badge: null },
+  ],
   OrgAdmin: [
     { icon: Home, label: "ダッシュボード", href: "/dashboard", badge: null },
     { icon: FolderOpen, label: "案件管理", href: "/projects", badge: "3" },
@@ -64,10 +71,99 @@ const navigationItems = {
 export function Navigation({ userRole: propUserRole }: NavigationProps) {
   const { user, userProfile, userRole, userOrganization, signOut } = useAuth()
   const router = useRouter()
+  const pathname = usePathname()
   const [isExpanded, setIsExpanded] = useState(true)
   const [isMobileOpen, setIsMobileOpen] = useState(false)
+  const [organizationContactPerson, setOrganizationContactPerson] = useState<string | null>(null)
+  const hasFetchedOrganization = useRef(false)
 
-  const navItems = navigationItems[userRole as keyof typeof navigationItems] || navigationItems.OrgAdmin
+  // 共有Supabaseクライアントを使用（重複インスタンス防止）
+
+  // ページ遷移を記録
+  useEffect(() => {
+    const currentPath = pathname
+    const previousPath = sessionStorage.getItem('currentPage')
+    
+    // 現在のページを記録
+    sessionStorage.setItem('currentPage', currentPath)
+    
+    // 前のページが存在し、現在のページと異なる場合は記録
+    if (previousPath && previousPath !== currentPath) {
+      sessionStorage.setItem('previousPage', previousPath)
+    }
+  }, [pathname])
+
+  // 組織の担当者名を取得（OrgAdminの場合のみ）- 無限ループ防止版
+  useEffect(() => {
+    const fetchOrganizationContactPerson = async () => {
+      // より厳密な条件チェック
+      if (userRole !== 'OrgAdmin' || !userOrganization?.id || organizationContactPerson !== null) {
+        return
+      }
+
+      // 既に実行中の場合はスキップ
+      if (hasFetchedOrganization.current) {
+        return
+      }
+
+      hasFetchedOrganization.current = true
+      console.log('組織情報を取得中...', { orgId: userOrganization.id })
+
+      try {
+        // Supabaseから認証トークンを取得
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session?.access_token) {
+          console.error('認証トークンが取得できません')
+          hasFetchedOrganization.current = false
+          return
+        }
+
+        // 非同期でバックグラウンド取得（ページ遷移をブロックしない）
+        const response = await fetch('/api/organization/profile', {
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`
+          }
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          if (data.organization) {
+            console.log('組織情報取得成功:', data.organization)
+            setOrganizationContactPerson(data.organization?.contact_person || null)
+          }
+        } else {
+          console.error('組織情報API失敗:', response.status)
+          hasFetchedOrganization.current = false
+        }
+      } catch (error) {
+        console.error('組織情報の取得に失敗しました:', error)
+        hasFetchedOrganization.current = false
+      }
+    }
+
+    // OrgAdminかつ組織IDが存在し、まだ担当者情報を取得していない場合のみ実行
+    if (userRole === 'OrgAdmin' && userOrganization?.id && organizationContactPerson === null && !hasFetchedOrganization.current) {
+      fetchOrganizationContactPerson()
+    }
+  }, [userRole, userOrganization?.id, organizationContactPerson]) // organizationContactPersonも依存配列に追加
+
+  const navItems = navigationItems[userRole as keyof typeof navigationItems] || navigationItems.Admin
+
+  // 表示名を決定（OrgAdminの場合は担当者名を優先）
+  const getDisplayName = () => {
+    if (userRole === 'OrgAdmin') {
+      const displayName = organizationContactPerson || userProfile?.display_name || 'ユーザー'
+      console.log('OrgAdmin表示名決定:', {
+        userRole,
+        organizationContactPerson,
+        userProfileDisplayName: userProfile?.display_name,
+        finalDisplayName: displayName,
+        organizationContactPersonType: typeof organizationContactPerson
+      })
+      return displayName
+    }
+    return userProfile?.display_name || 'ユーザー'
+  }
 
   return (
     <>
@@ -163,10 +259,18 @@ export function Navigation({ userRole: propUserRole }: NavigationProps) {
                 className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 cursor-pointer"
                 animate={{ justifyContent: isExpanded ? "flex-start" : "center" }}
               >
-                <div className="w-8 h-8 bg-engineering-blue rounded-full flex items-center justify-center">
-                  <span className="text-white text-sm font-medium">
-                    {userProfile?.display_name?.charAt(0) || user?.email?.charAt(0) || 'U'}
-                  </span>
+                <div className="w-8 h-8 bg-engineering-blue rounded-full flex items-center justify-center overflow-hidden">
+                  {userProfile?.avatar_url ? (
+                    <img
+                      src={userProfile.avatar_url}
+                      alt={getDisplayName()}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-white text-sm font-medium">
+                      {getDisplayName().charAt(0) || user?.email?.charAt(0) || 'U'}
+                    </span>
+                  )}
                 </div>
                 <motion.div
                   animate={{ opacity: isExpanded ? 1 : 0 }}
@@ -176,7 +280,7 @@ export function Navigation({ userRole: propUserRole }: NavigationProps) {
                   {isExpanded && (
                     <div>
                       <p className="font-medium text-sm">
-                        {userProfile?.display_name || 'ユーザー'}
+                        {getDisplayName()}
                       </p>
                       <p className="text-xs text-gray-500">{userRole}</p>
                       {userOrganization && (
@@ -225,7 +329,7 @@ export function Navigation({ userRole: propUserRole }: NavigationProps) {
               {!isExpanded && (
                 <div className="absolute left-full ml-2 px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">
                   <div>
-                    <div>{userProfile?.display_name || 'ユーザー'}</div>
+                    <div>{getDisplayName()}</div>
                     <div className="text-gray-300">{userRole}</div>
                     {userOrganization && (
                       <div className="text-gray-400">{userOrganization.name}</div>

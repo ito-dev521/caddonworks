@@ -81,6 +81,10 @@
   background: linear-gradient(135deg, rgba(0, 102, 204, 0.1) 0%, rgba(16, 185, 129, 0.1) 100%);
 }
 
+.bg-gradient-mesh {
+  background: linear-gradient(135deg, rgba(0, 102, 204, 0.1) 0%, rgba(16, 185, 129, 0.1) 100%);
+}
+
 /* Innovative Hover Effects */
 .hover-lift {
   transition: transform 0.3s ease, box-shadow 0.3s ease;

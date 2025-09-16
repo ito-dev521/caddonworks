@@ -6,7 +6,7 @@ import {
   MessageCircle,
   Users,
   Search,
-  Plus,
+  ArrowLeft,
   Clock,
   Pin,
   MoreHorizontal
@@ -16,6 +16,7 @@ import { Badge } from "../ui/badge"
 import { useAuth } from "@/contexts/auth-context"
 import { supabase } from "@/lib/supabase"
 import { cn } from "@/lib/utils"
+import { useRouter } from "next/navigation"
 
 interface ChatRoom {
   id: string
@@ -47,10 +48,11 @@ export function ChatRoomList({
   className = ""
 }: ChatRoomListProps) {
   const { user } = useAuth()
+  const router = useRouter()
   const [rooms, setRooms] = useState<ChatRoom[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
-  const [showNewRoomModal, setShowNewRoomModal] = useState(false)
+  const [previousPage, setPreviousPage] = useState<string | null>(null)
 
   useEffect(() => {
     if (user) {
@@ -58,6 +60,12 @@ export function ChatRoomList({
       setupRealtimeSubscription()
     }
   }, [user])
+
+  useEffect(() => {
+    // 直前のページを取得（sessionStorageから）
+    const prevPage = sessionStorage.getItem('previousPage')
+    setPreviousPage(prevPage)
+  }, [])
 
   const fetchChatRooms = async () => {
     if (!user) return
@@ -130,6 +138,16 @@ export function ChatRoomList({
     }
   }
 
+  const handleBackClick = () => {
+    if (previousPage && previousPage !== '/chat') {
+      // 直前のページがある場合はそこに戻る
+      router.push(previousPage)
+    } else {
+      // 直前のページがない場合は案件管理に戻る
+      router.push('/projects')
+    }
+  }
+
   if (loading) {
     return (
       <div className={cn("flex items-center justify-center h-64", className)}>
@@ -143,16 +161,18 @@ export function ChatRoomList({
       {/* Header */}
       <div className="p-4 border-b border-gray-200">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">チャット</h2>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowNewRoomModal(true)}
-            className="flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            新規作成
-          </Button>
+          <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleBackClick}
+              className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              戻る
+            </Button>
+            <h2 className="text-lg font-semibold text-gray-900">チャット</h2>
+          </div>
         </div>
 
         {/* Search */}

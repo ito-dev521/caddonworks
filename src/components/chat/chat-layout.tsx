@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
 import { motion } from "framer-motion"
 import { Users, Settings, Info, X } from "lucide-react"
 import { Button } from "../ui/button"
@@ -26,6 +26,20 @@ export function ChatLayout({ className = "" }: ChatLayoutProps) {
     checkMobile()
     window.addEventListener('resize', checkMobile)
     return () => window.removeEventListener('resize', checkMobile)
+  }, [])
+
+  // チャットページにアクセスした際のページ遷移記録
+  useEffect(() => {
+    const currentPath = '/chat'
+    const previousPath = sessionStorage.getItem('currentPage')
+    
+    // 現在のページを記録
+    sessionStorage.setItem('currentPage', currentPath)
+    
+    // 前のページが存在し、現在のページと異なる場合は記録
+    if (previousPath && previousPath !== currentPath) {
+      sessionStorage.setItem('previousPage', previousPath)
+    }
   }, [])
 
   const handleRoomSelect = (roomId: string) => {

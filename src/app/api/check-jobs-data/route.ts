@@ -66,8 +66,8 @@ export async function GET(request: NextRequest) {
       message: 'データ確認完了',
       data: {
         totalProjects: projects?.length || 0,
-        biddingProjects: biddingProjects?.length || 0,
-        organizations: organizations?.length || 0,
+        biddingProjectsCount: biddingProjects?.length || 0,
+        organizationsCount: organizations?.length || 0,
         statusSummary,
         projects: projects?.slice(0, 3) || [], // 最初の3件のみ表示
         biddingProjects: biddingProjects || [],

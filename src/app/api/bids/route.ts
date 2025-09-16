@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
     // 案件が存在し、入札可能な状態かチェック
     const { data: project, error: projectError } = await supabaseAdmin
       .from('projects')
-      .select('id, status, bidding_deadline')
+      .select('id, status, bidding_deadline, required_contractors')
       .eq('id', project_id)
       .single()
 
@@ -202,35 +202,45 @@ export async function POST(request: NextRequest) {
     // 案件情報を取得（通知用）
     const { data: projectInfo, error: projectInfoError } = await supabaseAdmin
       .from('projects')
-      .select(`
-        title,
-        org_id,
-        organizations!projects_org_id_fkey (
-          name
-        )
-      `)
+      .select('title, org_id')
       .eq('id', project_id)
       .single()
 
     if (projectInfoError) {
       console.error('案件情報取得エラー:', projectInfoError)
     } else {
+      // 組織情報を別途取得
+      const { data: organization, error: orgError } = await supabaseAdmin
+        .from('organizations')
+        .select('name')
+        .eq('id', projectInfo.org_id)
+        .single()
+
+      if (orgError) {
+        console.error('組織情報取得エラー:', orgError)
+      }
+
+      const projectInfoWithOrg = {
+        ...projectInfo,
+        organizations: organization
+      }
+
       // 発注者に通知を送信
       console.log('発注者取得開始:', {
-        org_id: projectInfo.org_id,
-        project_title: projectInfo.title
+        org_id: projectInfoWithOrg.org_id,
+        project_title: projectInfoWithOrg.title
       })
 
       const { data: orgAdmins, error: orgAdminsError } = await supabaseAdmin
         .from('memberships')
         .select('user_id')
-        .eq('org_id', projectInfo.org_id)
+        .eq('org_id', projectInfoWithOrg.org_id)
         .eq('role', 'OrgAdmin')
 
       if (orgAdminsError) {
         console.error('発注者取得エラー:', {
           error: orgAdminsError,
-          org_id: projectInfo.org_id
+          org_id: projectInfoWithOrg.org_id
         })
       } else {
         console.log('発注者取得成功:', {
@@ -242,15 +252,15 @@ export async function POST(request: NextRequest) {
           user_id: admin.user_id,
           type: 'bid_received',
           title: '新しい入札が届きました',
-          message: `案件「${projectInfo.title}」に新しい入札が届きました。入札金額: ¥${Number(bid_amount).toLocaleString()}`,
+          message: `案件「${projectInfoWithOrg.title}」に新しい入札が届きました。入札金額: ¥${Number(bid_amount).toLocaleString()}`,
           data: {
             project_id,
             bid_id: bidData.id,
             contractor_id: userProfile.id,
             contractor_name: userProfile.display_name,
             bid_amount: Number(bid_amount),
-            project_title: projectInfo.title,
-            org_name: (projectInfo.organizations as any)?.name
+            project_title: projectInfoWithOrg.title,
+            org_name: (projectInfoWithOrg.organizations as any)?.name
           }
         }))
 
@@ -272,8 +282,9 @@ export async function POST(request: NextRequest) {
           console.error('通知作成エラー:', {
             error: notificationError,
             notifications: notifications,
-            projectInfo: projectInfo
+            projectInfo: projectInfoWithOrg
           })
+          // 通知作成に失敗しても入札は成功とする
         } else {
           console.log('入札通知を送信しました:', {
             count: insertedNotifications?.length || 0,

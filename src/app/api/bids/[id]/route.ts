@@ -49,31 +49,45 @@ export async function GET(
     // 入札情報を取得
     const { data: bid, error: bidError } = await supabaseAdmin
       .from('bids')
-      .select(`
-        *,
-        projects (
-          id,
-          title,
-          description,
-          budget,
-          start_date,
-          end_date,
-          category,
-          org_id,
-          organizations!projects_org_id_fkey (
-            name
-          )
-        ),
-        contractors:users!bids_contractor_id_fkey (
-          display_name,
-          email
-        )
-      `)
+      .select('*')
       .eq('id', bidId)
       .single()
 
     if (bidError || !bid) {
       return NextResponse.json({ message: '入札が見つかりません' }, { status: 404 })
+    }
+
+    // 案件情報を別途取得
+    const { data: project, error: projectError } = await supabaseAdmin
+      .from('projects')
+      .select('*')
+      .eq('id', bid.project_id)
+      .single()
+
+    if (projectError) {
+      console.error('案件情報取得エラー:', projectError)
+    }
+
+    // 組織情報を別途取得
+    const { data: organization, error: orgError } = await supabaseAdmin
+      .from('organizations')
+      .select('name')
+      .eq('id', project?.org_id)
+      .single()
+
+    if (orgError) {
+      console.error('組織情報取得エラー:', orgError)
+    }
+
+    // 受注者情報を別途取得
+    const { data: contractor, error: contractorError } = await supabaseAdmin
+      .from('users')
+      .select('display_name, email')
+      .eq('id', bid.contractor_id)
+      .single()
+
+    if (contractorError) {
+      console.error('受注者情報取得エラー:', contractorError)
     }
 
     // ユーザーのロールを確認
@@ -88,7 +102,7 @@ export async function GET(
     }
 
     // 権限チェック
-    const isOrgAdmin = membership.role === 'OrgAdmin' && bid.projects?.org_id === membership.org_id
+    const isOrgAdmin = membership.role === 'OrgAdmin' && project?.org_id === membership.org_id
     const isContractor = membership.role === 'Contractor' && bid.contractor_id === userProfile.id
 
     if (!isOrgAdmin && !isContractor) {
@@ -103,16 +117,16 @@ export async function GET(
       bid_amount: bid.bid_amount,
       message: bid.message,
       created_at: bid.created_at,
-      contractor_name: bid.contractors?.display_name,
-      contractor_email: bid.contractors?.email,
-      project_title: bid.projects?.title,
-      project_description: bid.projects?.description,
-      project_budget: bid.projects?.budget,
-      project_start_date: bid.projects?.start_date,
-      project_end_date: bid.projects?.end_date,
-      project_category: bid.projects?.category,
-      project_org_id: bid.projects?.org_id,
-      project_org_name: (bid.projects as any)?.organizations?.name
+      contractor_name: contractor?.display_name,
+      contractor_email: contractor?.email,
+      project_title: project?.title,
+      project_description: project?.description,
+      project_budget: project?.budget,
+      project_start_date: project?.start_date,
+      project_end_date: project?.end_date,
+      project_category: project?.category,
+      project_org_id: project?.org_id,
+      project_org_name: organization?.name
     }
 
     return NextResponse.json({ bid: formattedBid }, { status: 200 })

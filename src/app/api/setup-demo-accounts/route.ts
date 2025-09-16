@@ -7,7 +7,14 @@ export async function POST(request: NextRequest) {
       {
         email: 'admin@demo.com',
         password: 'demo123',
-        displayName: '管理者デモ',
+        displayName: '運営者デモ',
+        role: 'Admin' as const,
+        organizationName: 'システム運営'
+      },
+      {
+        email: 'orgadmin@demo.com',
+        password: 'demo123',
+        displayName: '発注者デモ',
         role: 'OrgAdmin' as const,
         organizationName: 'デモ建設株式会社'
       },

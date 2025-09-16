@@ -119,11 +119,12 @@ export async function POST(request: NextRequest) {
         project_id,
         org_id: orgMembership.org_id,
         contractor_id,
-        bid_id,
-        contract_amount: Number(contract_amount),
+        contract_title: project.title,
+        contract_content: `案件「${project.title}」の契約書\n\n契約金額: ¥${Number(contract_amount).toLocaleString()}\n契約期間: ${start_date} - ${end_date}\n\n受注者: ${contractor.display_name}\n発注者: ${orgMembership.org_id}`,
+        bid_amount: Number(contract_amount),
         start_date,
         end_date,
-        status: 'pending'
+        status: 'pending_contractor'
       })
       .select()
       .single()
@@ -262,8 +263,8 @@ export async function GET(request: NextRequest) {
         console.log('contracts API: 基本契約データ取得成功', { contractsCount: contractsBasic?.length })
         
         // 関連データを個別に取得
-        const projectIds = [...new Set(contractsBasic?.map(c => c.project_id) || [])]
-        const contractorIds = [...new Set(contractsBasic?.map(c => c.contractor_id) || [])]
+        const projectIds = Array.from(new Set(contractsBasic?.map(c => c.project_id) || []))
+        const contractorIds = Array.from(new Set(contractsBasic?.map(c => c.contractor_id) || []))
         
         // 案件情報を取得
         let projectMap: any = {}
@@ -332,8 +333,8 @@ export async function GET(request: NextRequest) {
         console.log('contracts API: 基本契約データ取得成功', { contractsCount: contractsBasic?.length })
         
         // 関連データを個別に取得
-        const projectIds = [...new Set(contractsBasic?.map(c => c.project_id) || [])]
-        const orgIds = [...new Set(contractsBasic?.map(c => c.org_id) || [])]
+        const projectIds = Array.from(new Set(contractsBasic?.map(c => c.project_id) || []))
+        const orgIds = Array.from(new Set(contractsBasic?.map(c => c.org_id) || []))
         
         // 案件情報を取得
         let projectMap: any = {}
@@ -394,7 +395,7 @@ export async function GET(request: NextRequest) {
 
     const formattedContracts = contractsData?.map(contract => ({
       ...contract,
-      project_title: contract.projects?.title,
+      project_title: contract.projects?.title || contract.contract_title,
       org_name: contract.organizations?.name,
       contractor_name: contract.contractors?.display_name,
       contractor_email: contract.contractors?.email,

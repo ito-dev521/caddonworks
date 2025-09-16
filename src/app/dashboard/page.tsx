@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useState } from "react"
+import React, { useEffect, useState, useRef } from "react"
 import { motion } from "framer-motion"
 import {
   Building,
@@ -91,6 +91,7 @@ export default function DashboardPage() {
   const [billing, setBilling] = useState<BillingData[]>([])
   const [favoriteContractors, setFavoriteContractors] = useState<FavoriteContractor[]>([])
   const [dataLoading, setDataLoading] = useState(true)
+  const lastFetchKeyRef = useRef<string | null>(null)
 
   // 会社間の情報分離を確実にするため、組織IDでデータをフィルタリング
   useEffect(() => {
@@ -98,6 +99,11 @@ export default function DashboardPage() {
       setDataLoading(false)
       return
     }
+
+    // 同一ユーザー・ロールの組み合わせでは1回のみフェッチ（開発時のStrictMode重複実行対策）
+    const fetchKey = `${userProfile.id}:${userRole}`
+    if (lastFetchKeyRef.current === fetchKey) return
+    lastFetchKeyRef.current = fetchKey
 
     const fetchCompanyData = async () => {
       try {
@@ -147,7 +153,7 @@ export default function DashboardPage() {
           console.error('プロジェクトデータの取得に失敗:', projectsError)
         } else {
           // 受注者情報を取得
-          const contractorIds = [...new Set(projectsData?.map(p => p.contractor_id).filter(Boolean) || [])]
+          const contractorIds = Array.from(new Set(projectsData?.map(p => p.contractor_id).filter(Boolean) || []))
           let contractorMap: any = {}
           
           if (contractorIds.length > 0) {
@@ -195,7 +201,7 @@ export default function DashboardPage() {
           console.error('契約データの取得に失敗:', contractsError)
         } else {
           // 案件情報を取得
-          const projectIds = [...new Set(contractsData?.map(c => c.project_id) || [])]
+          const projectIds = Array.from(new Set(contractsData?.map(c => c.project_id) || []))
           let projectMap: any = {}
           
           if (projectIds.length > 0) {
@@ -211,7 +217,7 @@ export default function DashboardPage() {
           }
 
           // 受注者情報を取得
-          const contractorIds = [...new Set(contractsData?.map(c => c.contractor_id) || [])]
+          const contractorIds = Array.from(new Set(contractsData?.map(c => c.contractor_id) || []))
           let contractorMap: any = {}
           
           if (contractorIds.length > 0) {

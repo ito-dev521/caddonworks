@@ -1,6 +1,6 @@
 "use client"
 
-import React, { createContext, useContext, useEffect, useState } from 'react'
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react'
 import { User as SupabaseUser } from '@supabase/supabase-js'
 import { supabase, User, UserRole, getCurrentUser } from '@/lib/supabase'
 
@@ -33,6 +33,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [userRole, setUserRole] = useState<UserRole | null>(null)
   const [userOrganization, setUserOrganization] = useState<{ id: string; name: string } | null>(null)
   const [loading, setLoading] = useState(true)
+  const fetchingRef = useRef<string | null>(null)
 
   useEffect(() => {
     // Get initial session
@@ -57,8 +58,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(session?.user ?? null)
 
         if (session?.user && session?.access_token) {
-          console.log('AuthProvider: ユーザープロフィール取得開始')
-          await fetchUserProfile(session.user.id)
+          console.log('🚀 AuthProvider: 初期セッション - ユーザープロフィール取得開始')
+          // setTimeoutで次のイベントループで実行（React Strict Mode対策）
+          setTimeout(() => {
+            console.log('⏱️ setTimeout実行: fetchUserProfile呼び出し (初期セッション)')
+            fetchUserProfile(session.user.id)
+          }, 0)
         } else {
           console.log('AuthProvider: セッションまたはトークンなし、ローディング終了')
         }
@@ -79,13 +84,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('Auth state change:', event, session?.user?.id)
+        const timestamp = new Date().toISOString()
+        console.log(`🔄 [${timestamp}] Auth state change:`, {
+          event,
+          userId: session?.user?.id,
+          hasToken: !!session?.access_token
+        })
         setUser(session?.user ?? null)
 
         if (session?.user && event === 'SIGNED_IN') {
           // ログイン時のみプロフィールを取得（重複を避ける）
-          console.log('Auth state change: SIGNED_IN, fetching profile')
-          await fetchUserProfile(session.user.id)
+          console.log(`🔑 [${timestamp}] Auth state change: SIGNED_IN, fetching profile`)
+          // setTimeoutで次のイベントループで実行（React Strict Mode対策）
+          setTimeout(() => {
+            console.log(`⏱️ [${timestamp}] setTimeout実行: fetchUserProfile呼び出し (SIGNED_IN)`)
+            fetchUserProfile(session.user.id)
+          }, 0)
         } else if (event === 'SIGNED_OUT') {
           console.log('Auth state change: SIGNED_OUT, clearing profile')
           setUserProfile(null)
@@ -101,10 +115,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     )
 
     return () => subscription.unsubscribe()
-  }, [])
+  }, []) // fetchUserProfileを依存配列から削除
 
   const fetchUserProfile = async (authUserId: string) => {
-    console.log('fetchUserProfile: 開始', { authUserId })
+    const timestamp = new Date().toISOString()
+    const callStack = new Error().stack?.split('\n').slice(1, 4).join(' -> ')
+    console.log(`🔍 [${timestamp}] fetchUserProfile: 開始`, {
+      authUserId,
+      fetchingRef: fetchingRef.current,
+      callStack
+    })
+
+    // 重複実行を防ぐ
+    if (fetchingRef.current === authUserId) {
+      console.log(`⚠️ [${timestamp}] fetchUserProfile: 既に実行中のためスキップ`, { authUserId })
+      return
+    }
+
+    fetchingRef.current = authUserId
+    console.log(`🏃 [${timestamp}] fetchUserProfile: 実行開始`, { authUserId })
+
     try {
       // Fetch user profile
       console.log('fetchUserProfile: ユーザープロフィール取得開始')
@@ -166,13 +196,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUserOrganization(null)
         }
         
-        console.log('fetchUserProfile: 完了', { 
+        console.log('fetchUserProfile: 完了', {
           role: membership?.role,
-          organization: membership?.org_id 
+          organization: membership?.org_id
         })
       }
     } catch (error) {
       console.error('Error in fetchUserProfile:', error)
+    } finally {
+      // 実行完了後にfetchingRefをクリア
+      fetchingRef.current = null
+      console.log(`✅ [${timestamp}] fetchUserProfile: 実行完了`, { authUserId })
     }
   }
 
@@ -201,7 +235,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // 認証成功後、ユーザープロフィールを手動で取得
       if (data?.user) {
         console.log('signIn: ユーザープロフィール取得開始')
-        await fetchUserProfile(data.user.id)
+        // fetchUserProfileを直接呼び出さず、setTimeoutで遅延実行
+        setTimeout(() => {
+          fetchUserProfile(data.user.id)
+        }, 50)
         console.log('signIn: ユーザープロフィール取得完了')
       }
       
@@ -240,7 +277,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             display_name: userData.display_name || '',
             specialties: userData.specialties || [],
             qualifications: userData.qualifications || [],
-            portfolio_url: userData.portfolio_url
+            experience_years: userData.experience_years
           })
 
         if (profileError) {
@@ -266,16 +303,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const updateProfile = async (updates: Partial<User>) => {
-    if (!userProfile) return
+    if (!userProfile) {
+      console.error('updateProfile: userProfile is null')
+      throw new Error('ユーザープロフィールが見つかりません')
+    }
 
     try {
-      const { error } = await supabase
+      console.log('updateProfile: 更新開始', { userId: userProfile.id, updates })
+      
+      const { data, error } = await supabase
         .from('users')
         .update(updates)
         .eq('id', userProfile.id)
+        .select()
+        .single()
 
-      if (error) throw error
+      if (error) {
+        console.error('updateProfile: Supabaseエラー', error)
+        throw error
+      }
 
+      console.log('updateProfile: 更新成功', data)
       setUserProfile({ ...userProfile, ...updates })
     } catch (error) {
       console.error('Error updating profile:', error)

@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect } from "react"
+import React, { useEffect, useRef } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import { motion } from "framer-motion"
 import { Loader2, Shield } from "lucide-react"
@@ -23,30 +23,42 @@ export function AuthGuard({
   const { user, userRole, loading } = useAuth()
   const router = useRouter()
   const pathname = usePathname()
+  const isRedirectingRef = useRef(false)
 
   useEffect(() => {
     if (!loading) {
+      if (isRedirectingRef.current) return
+
       if (!user) {
         // Store the attempted URL for redirect after login
         sessionStorage.setItem('redirectAfterLogin', pathname)
-        router.push(redirectTo)
+        if (pathname !== redirectTo) {
+          isRedirectingRef.current = true
+          router.push(redirectTo)
+        }
         return
       }
 
       // Check role permissions
       if (requiredRole && userRole !== requiredRole) {
         // User doesn't have the required role
-        router.push("/unauthorized")
+        if (pathname !== "/unauthorized") {
+          isRedirectingRef.current = true
+          router.push("/unauthorized")
+        }
         return
       }
 
       if (allowedRoles && allowedRoles.length > 0 && (!userRole || !allowedRoles.includes(userRole))) {
         // User doesn't have any of the allowed roles
-        router.push("/unauthorized")
+        if (pathname !== "/unauthorized") {
+          isRedirectingRef.current = true
+          router.push("/unauthorized")
+        }
         return
       }
     }
-  }, [user, userRole, loading, requiredRole, allowedRoles, router, redirectTo, pathname])
+  }, [user, userRole, loading, requiredRole, allowedRoles]) // router, redirectTo, pathnameを依存配列から削除
 
   if (loading) {
     return (

@@ -65,6 +65,9 @@ export function ChatMessageInterface({
   const [sending, setSending] = useState(false)
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null)
   const [editingMessage, setEditingMessage] = useState<string | null>(null)
+  const [fileComment, setFileComment] = useState("")
+  const [showFileCommentModal, setShowFileCommentModal] = useState(false)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -101,7 +104,27 @@ export function ChatMessageInterface({
       const result = await response.json()
 
       if (response.ok) {
-        setMessages(result.messages)
+        // メッセージデータを正しい形式に変換
+        const formattedMessages = result.messages?.map((msg: any) => ({
+          id: msg.id,
+          room_id: roomId,
+          content: msg.content,
+          sender_id: msg.sender_id,
+          sender: {
+            id: msg.sender_id,
+            display_name: msg.sender_name || 'Unknown',
+            email: msg.sender_email,
+            avatar_url: msg.sender_avatar_url
+          },
+          sender_type: msg.sender_type,
+          created_at: msg.created_at,
+          is_deleted: false,
+          message_type: msg.message_type || 'text',
+          file_url: msg.file_url,
+          file_name: msg.file_name,
+          file_size: msg.file_size
+        })) || []
+        setMessages(formattedMessages)
       } else {
         console.error('メッセージ取得エラー:', result.message)
         setMessages([])
@@ -201,47 +224,65 @@ export function ChatMessageInterface({
     }
   }
 
-  const handleFileUpload = async (file: File) => {
+  const handleFileSelect = (file: File) => {
+    setSelectedFile(file)
+    setFileComment("")
+    setShowFileCommentModal(true)
+  }
+
+  const handleFileUpload = async (file: File, comment: string = "") => {
     if (!user || !file) return
 
     try {
       setSending(true)
 
-      // Upload file to Supabase Storage
-      const fileExt = file.name.split('.').pop()
-      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`
-      const filePath = `chat-attachments/${roomId}/${fileName}`
-
-      const { error: uploadError } = await supabase.storage
-        .from('attachments')
-        .upload(filePath, file)
-
-      if (uploadError) throw uploadError
-
-      // Get public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from('attachments')
-        .getPublicUrl(filePath)
-
-      // Save message with file info
-      const messageData = {
-        room_id: roomId,
-        sender_id: user.id,
-        content: file.name,
-        message_type: file.type.startsWith('image/') ? 'image' : 'file',
-        file_url: publicUrl,
-        file_name: file.name,
-        file_size: file.size
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        console.error('セッションが見つかりません')
+        return
       }
 
-      const { error: messageError } = await supabase
-        .from('chat_messages')
-        .insert([messageData])
+      // FormDataを作成
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('roomId', roomId)
+      formData.append('comment', comment)
 
-      if (messageError) throw messageError
+      console.log('ファイルアップロード開始:', {
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type,
+        roomId,
+        comment
+      })
+
+      // APIエンドポイント経由でファイルをアップロード
+      const response = await fetch('/api/chat/upload', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: formData
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        console.log('ファイルアップロード成功:', result)
+        // メッセージ一覧を再取得
+        fetchMessages()
+        // モーダルを閉じる
+        setShowFileCommentModal(false)
+        setSelectedFile(null)
+        setFileComment("")
+      } else {
+        console.error('ファイルアップロードエラー:', result.message)
+        alert('ファイルのアップロードに失敗しました: ' + result.message)
+      }
 
     } catch (error) {
       console.error('Error uploading file:', error)
+      alert('ファイルのアップロードに失敗しました: ' + (error instanceof Error ? error.message : '不明なエラー'))
     } finally {
       setSending(false)
     }
@@ -337,8 +378,18 @@ export function ChatMessageInterface({
               >
                 {/* Avatar */}
                 {showAvatar && (
-                  <div className="w-8 h-8 rounded-full bg-engineering-blue flex items-center justify-center text-white text-sm font-medium flex-shrink-0">
-                    {message.sender?.display_name?.charAt(0) || message.sender?.email?.charAt(0) || 'U'}
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-medium flex-shrink-0 overflow-hidden">
+                    {message.sender?.avatar_url ? (
+                      <img
+                        src={message.sender.avatar_url}
+                        alt={message.sender?.display_name || 'User'}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-engineering-blue flex items-center justify-center">
+                        {message.sender?.display_name?.charAt(0) || message.sender?.email?.charAt(0) || 'U'}
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -410,7 +461,12 @@ export function ChatMessageInterface({
 
                         {/* File/Image Message */}
                         {(message.message_type === 'file' || message.message_type === 'image') && (
-                          <div className="flex items-center gap-2">
+                          <div className="space-y-2">
+                            {/* コメントがある場合は表示 */}
+                            {message.content !== message.file_name && (
+                              <p className="text-sm">{message.content}</p>
+                            )}
+                            
                             {message.message_type === 'image' ? (
                               <div>
                                 <img
@@ -418,13 +474,23 @@ export function ChatMessageInterface({
                                   alt={message.file_name}
                                   className="max-w-xs rounded-lg"
                                 />
-                                <p className="text-sm mt-1">{message.file_name}</p>
+                                <div className="flex items-center justify-between mt-1">
+                                  <p className="text-xs opacity-75">{message.file_name}</p>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="text-current hover:bg-white/20 h-6 px-2"
+                                    onClick={() => window.open(message.file_url, '_blank')}
+                                  >
+                                    <Download className="w-3 h-3" />
+                                  </Button>
+                                </div>
                               </div>
                             ) : (
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 p-2 bg-white/10 rounded-lg">
                                 <File className="w-4 h-4" />
-                                <div>
-                                  <p>{message.file_name}</p>
+                                <div className="flex-1">
+                                  <p className="text-sm font-medium">{message.file_name}</p>
                                   {message.file_size && (
                                     <p className="text-xs opacity-75">
                                       {formatFileSize(message.file_size)}
@@ -525,9 +591,10 @@ export function ChatMessageInterface({
               className="w-full px-3 py-2 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
               rows={1}
               onKeyDown={(e) => {
+                // Enterキーでの送信を無効化（Shift+Enterで改行のみ可能）
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault()
-                  sendMessage(e)
+                  // 送信はしない
                 }
               }}
             />
@@ -539,7 +606,7 @@ export function ChatMessageInterface({
               onChange={(e) => {
                 const file = e.target.files?.[0]
                 if (file) {
-                  handleFileUpload(file)
+                  handleFileSelect(file)
                 }
               }}
               className="hidden"
@@ -567,6 +634,75 @@ export function ChatMessageInterface({
           </div>
         </form>
       </div>
+
+      {/* File Comment Modal */}
+      {showFileCommentModal && selectedFile && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+              ファイルをアップロード
+            </h3>
+            
+            <div className="mb-4">
+              <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                <div className="w-10 h-10 bg-engineering-blue rounded-lg flex items-center justify-center">
+                  <File className="w-5 h-5 text-white" />
+                </div>
+                <div className="flex-1">
+                  <p className="font-medium text-gray-900">{selectedFile.name}</p>
+                  <p className="text-sm text-gray-500">
+                    {formatFileSize(selectedFile.size)}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                コメント（任意）
+              </label>
+              <textarea
+                value={fileComment}
+                onChange={(e) => setFileComment(e.target.value)}
+                placeholder="ファイルについてのコメントを入力してください..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent resize-none"
+                rows={3}
+              />
+            </div>
+
+            <div className="flex gap-3 justify-end">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowFileCommentModal(false)
+                  setSelectedFile(null)
+                  setFileComment("")
+                }}
+                disabled={sending}
+              >
+                キャンセル
+              </Button>
+              <Button
+                variant="engineering"
+                onClick={() => handleFileUpload(selectedFile, fileComment)}
+                disabled={sending}
+              >
+                {sending ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    アップロード中...
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4 mr-2" />
+                    アップロード
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

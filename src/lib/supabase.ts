@@ -27,8 +27,17 @@ export interface User {
   email: string
   specialties: string[]
   qualifications: string[]
-  portfolio_url?: string
+  experience_years?: string
+  member_level?: 'beginner' | 'intermediate' | 'advanced'
+  avatar_url?: string
   rating?: number
+  formal_name?: string
+  postal_code?: string
+  address?: string
+  address_detail?: string
+  phone_number?: string
+  company_number?: string
+  registration_number?: string
   created_at: string
   updated_at: string
 }
@@ -48,11 +57,11 @@ export interface Membership {
   id: string
   org_id: string
   user_id: string
-  role: 'OrgAdmin' | 'Staff' | 'Contractor' | 'Reviewer' | 'Auditor'
+  role: 'Admin' | 'OrgAdmin' | 'Staff' | 'Contractor' | 'Reviewer' | 'Auditor'
   created_at: string
 }
 
-export type UserRole = 'OrgAdmin' | 'Staff' | 'Contractor' | 'Reviewer' | 'Auditor'
+export type UserRole = 'Admin' | 'OrgAdmin' | 'Staff' | 'Contractor' | 'Reviewer' | 'Auditor'
 
 // Auth helpers
 export const getCurrentUser = async () => {

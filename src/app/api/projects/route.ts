@@ -30,7 +30,8 @@ export async function POST(request: NextRequest) {
       category,
       contractor_id,
       assignee_name,
-      required_contractors = 1
+      required_contractors = 1,
+      required_level = 'beginner'
     } = body
 
     // バリデーション
@@ -136,6 +137,11 @@ export async function POST(request: NextRequest) {
     // データベーススキーマが更新されていない場合の回避策
     if (required_contractors !== undefined) {
       insertData.required_contractors = Number(required_contractors)
+    }
+    
+    // required_levelカラムが存在する場合のみ追加
+    if (required_level !== undefined) {
+      insertData.required_level = required_level
     }
 
     console.log('挿入データ:', insertData)
@@ -263,8 +269,12 @@ export async function GET(request: NextRequest) {
 
     const company = membership.organizations as any
 
+    // クエリパラメータを取得
+    const { searchParams } = new URL(request.url)
+    const statusFilter = searchParams.get('status')
+
     // 組織の案件データを取得（会社間分離）
-    const { data: projectsData, error: projectsError } = await supabaseAdmin
+    let query = supabaseAdmin
       .from('projects')
       .select(`
         id,
@@ -280,7 +290,13 @@ export async function GET(request: NextRequest) {
         created_at
       `)
       .eq('org_id', company.id) // 組織IDでフィルタリング
-      .order('created_at', { ascending: false })
+
+    // ステータスフィルタを適用
+    if (statusFilter) {
+      query = query.eq('status', statusFilter)
+    }
+
+    const { data: projectsData, error: projectsError } = await query.order('created_at', { ascending: false })
 
     if (projectsError) {
       console.error('案件データの取得に失敗:', projectsError)
@@ -291,7 +307,7 @@ export async function GET(request: NextRequest) {
     }
 
     // 受注者情報を取得
-    const contractorIds = [...new Set(projectsData?.map(p => p.contractor_id).filter(Boolean) || [])]
+    const contractorIds = Array.from(new Set(projectsData?.map(p => p.contractor_id).filter(Boolean) || []))
     let contractorMap: any = {}
     
     if (contractorIds.length > 0) {

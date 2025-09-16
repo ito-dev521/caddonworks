@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/contexts/auth-context"
 import { AuthGuard } from "@/components/auth/auth-guard"
 import { useRouter, useSearchParams } from "next/navigation"
+import { supabase } from "@/lib/supabase"
 
 interface Bid {
   id: string
@@ -49,7 +50,10 @@ function CreateContractPageContent() {
 
   // 案件と入札情報を取得
   const fetchProjectAndBid = async () => {
+    console.log('契約作成ページ: データ取得開始', { projectId, bidId })
+    
     if (!projectId || !bidId) {
+      console.error('契約作成ページ: パラメータ不足', { projectId, bidId })
       setError('案件IDまたは入札IDが指定されていません')
       setLoading(false)
       return
@@ -57,7 +61,6 @@ function CreateContractPageContent() {
 
     try {
       setLoading(true)
-      const { supabase } = await import("@/lib/supabase")
       const { data: { session }, error: sessionError } = await supabase.auth.getSession()
       
       if (sessionError || !session) {
@@ -65,6 +68,8 @@ function CreateContractPageContent() {
         setError('認証が必要です')
         return
       }
+
+      console.log('契約作成ページ: 認証成功', { userId: session.user.id })
 
       // 案件情報を取得
       const projectResponse = await fetch(`/api/projects/${projectId}`, {
@@ -76,7 +81,13 @@ function CreateContractPageContent() {
 
       if (projectResponse.ok) {
         const projectResult = await projectResponse.json()
+        console.log('契約作成ページ: 案件取得成功', projectResult)
         setProject(projectResult.project)
+      } else {
+        const projectError = await projectResponse.json()
+        console.error('契約作成ページ: 案件取得エラー', { status: projectResponse.status, error: projectError })
+        setError(`案件の取得に失敗しました: ${projectError.message || '不明なエラー'}`)
+        return
       }
 
       // 入札情報を取得
@@ -89,7 +100,13 @@ function CreateContractPageContent() {
 
       if (bidResponse.ok) {
         const bidResult = await bidResponse.json()
+        console.log('契約作成ページ: 入札取得成功', bidResult)
         setBid(bidResult.bid)
+      } else {
+        const bidError = await bidResponse.json()
+        console.error('契約作成ページ: 入札取得エラー', { status: bidResponse.status, error: bidError })
+        setError(`入札情報の取得に失敗しました: ${bidError.message || '不明なエラー'}`)
+        return
       }
 
     } catch (err: any) {
@@ -115,7 +132,6 @@ function CreateContractPageContent() {
 
     try {
       setIsCreating(true)
-      const { supabase } = await import("@/lib/supabase")
       const { data: { session }, error: sessionError } = await supabase.auth.getSession()
       
       if (sessionError || !session) {

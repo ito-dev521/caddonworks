@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { calculateMemberLevel, canAccessProject, type MemberLevel } from '@/lib/member-level'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -46,7 +47,7 @@ export async function GET(request: NextRequest) {
     // ユーザープロフィールを取得
     const { data: userProfile, error: userError } = await supabaseAdmin
       .from('users')
-      .select('id, email, display_name')
+      .select('id, email, display_name, specialties, experience_years, member_level')
       .eq('auth_user_id', user.id)
       .single()
 
@@ -60,8 +61,12 @@ export async function GET(request: NextRequest) {
 
     console.log('jobs API: ユーザープロフィール取得成功')
 
-    // 受注者向けの案件一覧を取得（入札可能な案件のみ）
-    const { data: jobsData, error: jobsError } = await supabaseAdmin
+    // ユーザーの会員レベルを計算
+    const userLevel = userProfile.member_level || calculateMemberLevel(userProfile.experience_years, userProfile.specialties || [])
+    console.log('jobs API: ユーザー会員レベル:', userLevel)
+
+    // 1. 入札可能な案件を取得
+    const { data: biddingJobs, error: biddingError } = await supabaseAdmin
       .from('projects')
       .select(`
         id,
@@ -78,23 +83,77 @@ export async function GET(request: NextRequest) {
         requirements,
         location,
         org_id,
-        required_contractors
+        required_contractors,
+        contractor_id,
+        required_level
       `)
       .eq('status', 'bidding') // 入札中の案件のみ
       .order('created_at', { ascending: false })
 
-    if (jobsError) {
-      console.error('jobs API: 案件データ取得エラー:', jobsError)
+    // 2. 署名済み契約の案件を取得（落札した案件）
+    const { data: contracts, error: contractsError } = await supabaseAdmin
+      .from('contracts')
+      .select(`
+        project_id,
+        status,
+        projects (
+          id,
+          title,
+          description,
+          status,
+          budget,
+          start_date,
+          end_date,
+          category,
+          created_at,
+          assignee_name,
+          bidding_deadline,
+          requirements,
+          location,
+          org_id,
+          required_contractors,
+          contractor_id,
+          required_level
+        )
+      `)
+      .eq('status', 'signed')
+      .eq('contractor_id', userProfile.id) // 自分が受注者として署名した契約
+
+    if (biddingError || contractsError) {
+      console.error('jobs API: 案件データ取得エラー:', { biddingError, contractsError })
       return NextResponse.json(
-        { message: '案件データの取得に失敗しました: ' + jobsError.message },
+        { message: '案件データの取得に失敗しました' },
         { status: 400 }
       )
     }
 
+    // 署名済み契約の案件を抽出
+    const awardedJobs = contracts?.map(contract => contract.projects).filter(Boolean) || []
+    
+    console.log('jobs API: データ取得結果', {
+      biddingJobsCount: biddingJobs?.length || 0,
+      contractsCount: contracts?.length || 0,
+      awardedJobsCount: awardedJobs?.length || 0
+    })
+    
+    // 入札可能な案件を会員レベルでフィルタリング
+    const filteredBiddingJobs = biddingJobs?.filter(job => {
+      const requiredLevel = (job.required_level as MemberLevel) || 'beginner'
+      return canAccessProject(userLevel as MemberLevel, requiredLevel)
+    }) || []
+    
+    console.log('jobs API: レベルフィルタリング結果', {
+      originalBiddingJobs: biddingJobs?.length || 0,
+      filteredBiddingJobs: filteredBiddingJobs.length
+    })
+    
+    // フィルタリングされた入札可能な案件と落札した案件を結合
+    const jobsData = [...filteredBiddingJobs, ...awardedJobs]
+
     console.log('jobs API: 案件データ取得成功, 件数:', jobsData?.length || 0)
 
     // 組織名を取得
-    const orgIds = [...new Set(jobsData?.map(job => job.org_id) || [])]
+    const orgIds = Array.from(new Set(jobsData?.map((job: any) => job.org_id) || []))
     const { data: orgsData } = await supabaseAdmin
       .from('organizations')
       .select('id, name')
@@ -106,7 +165,7 @@ export async function GET(request: NextRequest) {
     }, {}) || {}
 
     // 各案件の入札数を取得
-    const jobIds = jobsData?.map(job => job.id) || []
+    const jobIds = jobsData?.map((job: any) => job.id) || []
     const { data: bidCountsData } = await supabaseAdmin
       .from('bids')
       .select('project_id')
@@ -119,7 +178,7 @@ export async function GET(request: NextRequest) {
       return acc
     }, {}) || {}
 
-    const formattedJobs = jobsData?.map(job => {
+    const formattedJobs = jobsData?.map((job: any) => {
       const currentBidCount = bidCountMap[job.id] || 0
       const isFull = currentBidCount >= (job.required_contractors || 1)
       
@@ -140,6 +199,7 @@ export async function GET(request: NextRequest) {
         requirements: job.requirements,
         location: job.location,
         required_contractors: job.required_contractors || 1,
+        required_level: job.required_level || 'beginner',
         current_bid_count: currentBidCount,
         is_full: isFull,
         can_bid: !isFull && job.status === 'bidding'

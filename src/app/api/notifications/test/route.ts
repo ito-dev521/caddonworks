@@ -90,10 +90,10 @@ export async function GET(request: NextRequest) {
         recentNotifications: recentNotifications || [],
         orgAdmins: orgAdmins || [],
         errors: {
-          tableError: tableError?.message,
-          countError: countError?.message,
-          recentError: recentError?.message,
-          orgAdminsError: orgAdminsError?.message
+          tableError: (tableError as any)?.message || null,
+          countError: (countError as any)?.message || null,
+          recentError: (recentError as any)?.message || null,
+          orgAdminsError: (orgAdminsError as any)?.message || null
         }
       }
     })

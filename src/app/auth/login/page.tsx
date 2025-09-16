@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
 import { motion } from "framer-motion"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
@@ -27,8 +27,29 @@ export default function LoginPage() {
   const [success, setSuccess] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
-  const { signIn, getRedirectPath } = useAuth()
+  const { signIn, getRedirectPath, userRole, loading } = useAuth()
   const router = useRouter()
+
+  // 認証状態の変更を監視してリダイレクト
+  useEffect(() => {
+    if (!loading && userRole && success) {
+      console.log('Login page: 認証状態変更を検知', { userRole })
+      
+      // ユーザーロールに基づいてリダイレクト先を決定
+      const redirectPath = getRedirectPath()
+      console.log('Login page: リダイレクト実行', { redirectPath })
+      
+      // セッションストレージに保存されたリダイレクト先を確認
+      const savedRedirect = sessionStorage.getItem('redirectAfterLogin')
+      if (savedRedirect && savedRedirect !== '/auth/login') {
+        console.log('Login page: 保存されたリダイレクト先を使用', { savedRedirect })
+        sessionStorage.removeItem('redirectAfterLogin')
+        router.push(savedRedirect)
+      } else {
+        router.push(redirectPath)
+      }
+    }
+  }, [userRole, loading, success])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -49,23 +70,7 @@ export default function LoginPage() {
       
       console.log('Login form: ログイン成功')
       setSuccess("ログインに成功しました")
-      
-      // 少し待ってからリダイレクト（認証状態の更新を待つ）
-      setTimeout(() => {
-        // ユーザーロールに基づいてリダイレクト先を決定
-        const redirectPath = getRedirectPath()
-        console.log('Login form: リダイレクト', { redirectPath })
-        
-        // セッションストレージに保存されたリダイレクト先を確認
-        const savedRedirect = sessionStorage.getItem('redirectAfterLogin')
-        if (savedRedirect && savedRedirect !== '/auth/login') {
-          console.log('Login form: 保存されたリダイレクト先を使用', { savedRedirect })
-          sessionStorage.removeItem('redirectAfterLogin')
-          router.push(savedRedirect)
-        } else {
-          router.push(redirectPath)
-        }
-      }, 2000)
+      // リダイレクトはuseEffectで処理される
     } catch (err: any) {
       console.error('Login form: ログインエラー', err)
       setError(err.message || "ログインに失敗しました")
@@ -75,9 +80,10 @@ export default function LoginPage() {
     }
   }
 
-  const demoLogin = (role: 'admin' | 'contractor' | 'reviewer') => {
+  const demoLogin = (role: 'admin' | 'orgadmin' | 'contractor' | 'reviewer') => {
     const demoCredentials = {
       admin: { email: "admin@demo.com", password: "demo123" },
+      orgadmin: { email: "orgadmin@demo.com", password: "demo123" },
       contractor: { email: "contractor@demo.com", password: "demo123" },
       reviewer: { email: "reviewer@demo.com", password: "demo123" }
     }
@@ -147,9 +153,17 @@ export default function LoginPage() {
                   variant="outline"
                   size="sm"
                   onClick={() => demoLogin('admin')}
+                  className="hover:border-red-500"
+                >
+                  運営者デモ
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => demoLogin('orgadmin')}
                   className="hover:border-engineering-blue"
                 >
-                  管理者デモ
+                  発注者デモ
                 </Button>
                 <Button
                   variant="outline"
@@ -303,7 +317,14 @@ export default function LoginPage() {
                 size="sm"
                 onClick={() => demoLogin('admin')}
               >
-                管理者
+                運営者
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => demoLogin('orgadmin')}
+              >
+                発注者
               </Button>
               <Button
                 variant="outline"
