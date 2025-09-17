@@ -84,3 +84,4 @@ CREATE TRIGGER trigger_update_chat_messages_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION update_chat_messages_updated_at();
 
+

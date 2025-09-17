@@ -1,9 +1,3 @@
 {
-  "/api/notifications/route": "app/api/notifications/route.js",
-  "/projects/page": "app/projects/page.js",
-  "/contracts/page": "app/contracts/page.js",
-  "/billing/page": "app/billing/page.js",
-  "/(dashboard)/chat/page": "app/(dashboard)/chat/page.js",
-  "/contracts/[id]/page": "app/contracts/[id]/page.js",
-  "/api/billing/pdf/route": "app/api/billing/pdf/route.js"
+  "/page": "app/page.js"
 }

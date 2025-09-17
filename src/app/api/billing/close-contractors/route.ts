@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
     }
 
     const results: any[] = []
-    for (const [contractorId, total] of totals.entries()) {
+    for (const [contractorId, total] of Array.from(totals.entries())) {
       const calc = calculateContractorPayout({
         businessType: isCorp.get(contractorId) ? 'corporation' : 'individual',
         totalBilled: total,
