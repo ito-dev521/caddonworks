@@ -50,7 +50,6 @@ function CreateContractPageContent() {
 
   // 案件と入札情報を取得
   const fetchProjectAndBid = async () => {
-    console.log('契約作成ページ: データ取得開始', { projectId, bidId })
     
     if (!projectId || !bidId) {
       console.error('契約作成ページ: パラメータ不足', { projectId, bidId })
@@ -69,7 +68,6 @@ function CreateContractPageContent() {
         return
       }
 
-      console.log('契約作成ページ: 認証成功', { userId: session.user.id })
 
       // 案件情報を取得
       const projectResponse = await fetch(`/api/projects/${projectId}`, {
@@ -81,7 +79,6 @@ function CreateContractPageContent() {
 
       if (projectResponse.ok) {
         const projectResult = await projectResponse.json()
-        console.log('契約作成ページ: 案件取得成功', projectResult)
         setProject(projectResult.project)
       } else {
         const projectError = await projectResponse.json()
@@ -100,7 +97,6 @@ function CreateContractPageContent() {
 
       if (bidResponse.ok) {
         const bidResult = await bidResponse.json()
-        console.log('契約作成ページ: 入札取得成功', bidResult)
         setBid(bidResult.bid)
       } else {
         const bidError = await bidResponse.json()

@@ -14,7 +14,6 @@ const supabaseAdmin = createClient(
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('fix-admin-role API: 開始')
 
     // admin@demo.comのユーザーを取得
     const { data: adminUser, error: userError } = await supabaseAdmin
@@ -31,7 +30,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log('admin@demo.comユーザーを発見:', adminUser)
 
     // ユーザーのロールをAdminに更新
     const { data: updatedUser, error: updateError } = await supabaseAdmin
@@ -53,7 +51,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log('ユーザーロール更新成功:', updatedUser)
 
     // 既存のmembershipを削除（OrgAdminとしての所属を削除）
     const { error: deleteMembershipError } = await supabaseAdmin
@@ -65,7 +62,6 @@ export async function POST(request: NextRequest) {
       console.error('membership削除エラー:', deleteMembershipError)
       // エラーでも続行
     } else {
-      console.log('membership削除成功')
     }
 
     return NextResponse.json({
@@ -81,6 +77,7 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+
 
 
 

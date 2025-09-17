@@ -1,0 +1,16 @@
+"use strict";(()=>{var e={};e.id=5693,e.ids=[5693],e.modules={30517:e=>{e.exports=require("next/dist/compiled/next-server/app-route.runtime.prod.js")},13685:e=>{e.exports=require("http")},95687:e=>{e.exports=require("https")},85477:e=>{e.exports=require("punycode")},12781:e=>{e.exports=require("stream")},57310:e=>{e.exports=require("url")},59796:e=>{e.exports=require("zlib")},14340:(e,r,s)=>{s.r(r),s.d(r,{headerHooks:()=>g,originalPathname:()=>h,patchFetch:()=>b,requestAsyncStorage:()=>p,routeModule:()=>c,serverHooks:()=>l,staticGenerationAsyncStorage:()=>I,staticGenerationBailout:()=>m});var t={};s.r(t),s.d(t,{GET:()=>d});var a=s(95419),i=s(69108),o=s(99678),u=s(78070);let n=(0,s(6517).ST)();async function d(e,{params:r}){try{let{userId:s}=r,t=e.headers.get("authorization");if(!t)return u.Z.json({message:"認証が必要です"},{status:401});let a=t.replace("Bearer ",""),{data:{user:i},error:o}=await n.auth.getUser(a);if(o||!i)return u.Z.json({message:"認証に失敗しました"},{status:401});let{data:d,error:c}=await n.from("users").select("id").eq("auth_user_id",i.id).single();if(c||!d)return u.Z.json({message:"ユーザー情報の取得に失敗しました"},{status:400});if(d.id!==s)return u.Z.json({message:"他のユーザーのバッジは閲覧できません"},{status:403});let{data:p,error:I}=await n.from("user_badges").select(`
+        id,
+        badge_id,
+        earned_at,
+        project_id,
+        metadata,
+        badges (
+          id,
+          code,
+          name,
+          description,
+          category,
+          tier,
+          icon_name
+        )
+      `).eq("user_id",s).order("earned_at",{ascending:!1});if(I)return console.error("バッジ取得エラー:",I),u.Z.json({message:"バッジの取得に失敗しました"},{status:500});return u.Z.json({badges:p||[]})}catch(e){return console.error("バッジ取得エラー:",e),u.Z.json({message:"サーバーエラーが発生しました"},{status:500})}}let c=new a.AppRouteRouteModule({definition:{kind:i.x.APP_ROUTE,page:"/api/badges/user/[userId]/route",pathname:"/api/badges/user/[userId]",filename:"route",bundlePath:"app/api/badges/user/[userId]/route"},resolvedPagePath:"/Users/sayuri/caddonworks/src/app/api/badges/user/[userId]/route.ts",nextConfigOutput:"",userland:t}),{requestAsyncStorage:p,staticGenerationAsyncStorage:I,serverHooks:l,headerHooks:g,staticGenerationBailout:m}=c,h="/api/badges/user/[userId]/route";function b(){return(0,o.patchFetch)({serverHooks:l,staticGenerationAsyncStorage:I})}},6517:(e,r,s)=>{s.d(r,{OQ:()=>a,ST:()=>i});var t=s(32409);let a=(0,t.eI)("https://rxnozwuamddqlcwysxag.supabase.co","eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ4bm96d3VhbWRkcWxjd3lzeGFnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc3NjY4MDMsImV4cCI6MjA3MzM0MjgwM30.0sbl6zWJ1XalGTFbsgeMpth6yH-oQA_P1eTCc8lKoAU"),i=()=>{let e=process.env.SUPABASE_SERVICE_ROLE_KEY||"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ4bm96d3VhbWRkcWxjd3lzeGFnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1Nzc2NjgwMywiZXhwIjoyMDczMzQyODAzfQ.w7KcFrtcTRhqoHwTSlgTc6NDNHIJH985rAgT9bD0ipE";return(0,t.eI)("https://rxnozwuamddqlcwysxag.supabase.co",e,{auth:{autoRefreshToken:!1,persistSession:!1}})}}};var r=require("../../../../../webpack-runtime.js");r.C(e);var s=e=>r(r.s=e),t=r.X(0,[1638,6206,2409],()=>s(14340));module.exports=t})();

@@ -68,7 +68,6 @@ export function CreateProjectModal({ isOpen, onClose, onSuccess }: CreateProject
     try {
       // Supabaseからセッションを取得
       const { data: { session } } = await supabase.auth.getSession()
-      console.log('セッション情報:', session)
 
       if (!session?.access_token) {
         alert('認証が必要です。再度ログインしてください。')
@@ -84,7 +83,6 @@ export function CreateProjectModal({ isOpen, onClose, onSuccess }: CreateProject
         end_date: formData.dueDate,
         category: formData.category
       }
-      console.log('リクエストデータ:', requestData)
 
       // APIエンドポイントを呼び出し
       const response = await fetch('/api/projects', {
@@ -96,9 +94,7 @@ export function CreateProjectModal({ isOpen, onClose, onSuccess }: CreateProject
         body: JSON.stringify(requestData)
       })
 
-      console.log('レスポンスステータス:', response.status)
       const result = await response.json()
-      console.log('レスポンス結果:', result)
 
       if (response.ok) {
         alert('案件が正常に作成されました！')

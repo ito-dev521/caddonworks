@@ -14,7 +14,6 @@ const supabaseAdmin = createClient(
 
 export async function GET(request: NextRequest) {
   try {
-    console.log('organization profile API: 開始')
     
     // Authorizationヘッダーからユーザー情報を取得
     const authHeader = request.headers.get('authorization')
@@ -37,7 +36,6 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    console.log('認証成功, ユーザーID:', user.id, 'Email:', user.email)
 
     // ユーザープロフィールを取得
     const { data: userProfile, error: userError } = await supabaseAdmin
@@ -54,7 +52,6 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    console.log('ユーザープロフィール取得成功:', userProfile)
 
     // ユーザーの組織情報を取得
     const { data: memberships, error: membershipError } = await supabaseAdmin
@@ -75,7 +72,6 @@ export async function GET(request: NextRequest) {
     }
 
     const membership = memberships[0]
-    console.log('membership取得成功:', membership)
 
     return NextResponse.json({
       user: userProfile,

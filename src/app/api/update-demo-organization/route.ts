@@ -14,7 +14,6 @@ const supabaseAdmin = createClient(
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('update-demo-organization API: 開始')
 
     // デモ建設株式会社の組織情報を更新
     const { data: updatedOrg, error: updateError } = await supabaseAdmin
@@ -44,7 +43,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log('組織情報更新成功:', updatedOrg)
 
     return NextResponse.json({
       message: 'デモ建設株式会社の組織情報を更新しました',

@@ -14,18 +14,12 @@ const supabaseAdmin = createClient(
 
 export async function GET(request: NextRequest) {
   try {
-    console.log('check-admin-org API: 開始')
 
     // 発注者アカウント（admin@demo.com）の情報を確認
     const { data: users, error: usersError } = await supabaseAdmin
       .from('users')
       .select('*')
       .eq('email', 'admin@demo.com')
-
-    console.log('check-admin-org API: 発注者ユーザー情報', { 
-      count: users?.length || 0, 
-      error: usersError?.message 
-    })
 
     if (usersError || !users || users.length === 0) {
       return NextResponse.json({
@@ -35,7 +29,6 @@ export async function GET(request: NextRequest) {
     }
 
     const adminUser = users[0]
-    console.log('check-admin-org API: 発注者ユーザー詳細', adminUser)
 
     // 発注者のメンバーシップ情報を確認
     const { data: memberships, error: membershipError } = await supabaseAdmin
@@ -51,12 +44,7 @@ export async function GET(request: NextRequest) {
           description
         )
       `)
-      .eq('user_id', adminUser.id)
-
-    console.log('check-admin-org API: メンバーシップ情報', { 
-      count: memberships?.length || 0, 
-      error: membershipError?.message 
-    })
+          .eq('user_id', adminUser.id)
 
     // 発注者の組織の案件を確認
     let adminProjects = []
@@ -65,12 +53,7 @@ export async function GET(request: NextRequest) {
       const { data: projects, error: projectsError } = await supabaseAdmin
         .from('projects')
         .select('*')
-        .in('org_id', orgIds)
-
-      console.log('check-admin-org API: 発注者の案件', { 
-        count: projects?.length || 0, 
-        error: projectsError?.message 
-      })
+            .in('org_id', orgIds)
 
       adminProjects = projects || []
     }
@@ -78,12 +61,7 @@ export async function GET(request: NextRequest) {
     // 全案件の確認（デバッグ用）
     const { data: allProjects, error: allProjectsError } = await supabaseAdmin
       .from('projects')
-      .select('*')
-
-    console.log('check-admin-org API: 全案件', { 
-      count: allProjects?.length || 0, 
-      error: allProjectsError?.message 
-    })
+          .select('*')
 
     return NextResponse.json({
       message: '発注者組織情報確認完了',

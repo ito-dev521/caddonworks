@@ -181,12 +181,9 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    console.log('contracts API: リクエスト開始')
-    
     // Authorizationヘッダーからユーザー情報を取得
     const authHeader = request.headers.get('authorization')
     if (!authHeader) {
-      console.log('contracts API: 認証ヘッダーなし')
       return NextResponse.json(
         { message: '認証が必要です' },
         { status: 401 }
@@ -194,7 +191,6 @@ export async function GET(request: NextRequest) {
     }
 
     const token = authHeader.replace('Bearer ', '')
-    console.log('contracts API: トークン取得', { tokenLength: token.length })
     
     const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
     
@@ -206,10 +202,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    console.log('contracts API: 認証成功', { userId: user.id })
-
     // ユーザープロフィールを取得
-    console.log('contracts API: ユーザープロフィール取得開始')
     const { data: userProfile, error: userError } = await supabaseAdmin
       .from('users')
       .select('id')
@@ -224,10 +217,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    console.log('contracts API: ユーザープロフィール取得成功', { profileId: userProfile.id })
-
     // ユーザーのロールと組織IDを取得
-    console.log('contracts API: メンバーシップ取得開始')
     const { data: memberships, error: membershipError } = await supabaseAdmin
       .from('memberships')
       .select('org_id, role')
@@ -238,15 +228,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ message: '組織情報が見つかりません' }, { status: 403 })
     }
 
-    console.log('contracts API: メンバーシップ取得成功', { membershipsCount: memberships.length })
-
     let contractsData: any[] | null = []
     let contractsError: any = null
 
     // OrgAdminの場合、自分の組織の契約を取得
     const orgAdminMembership = memberships.find(m => m.role === 'OrgAdmin')
     if (orgAdminMembership) {
-      console.log('contracts API: OrgAdminとして契約取得開始', { orgId: orgAdminMembership.org_id })
       
       // まず基本的な契約データを取得
       const { data: contractsBasic, error: contractsBasicError } = await supabaseAdmin
@@ -260,7 +247,6 @@ export async function GET(request: NextRequest) {
         contractsData = []
         contractsError = contractsBasicError
       } else {
-        console.log('contracts API: 基本契約データ取得成功', { contractsCount: contractsBasic?.length })
         
         // 関連データを個別に取得
         const projectIds = Array.from(new Set(contractsBasic?.map(c => c.project_id) || []))
@@ -312,11 +298,9 @@ export async function GET(request: NextRequest) {
         contractsError = null
       }
       
-      console.log('contracts API: OrgAdmin契約取得結果', { contractsCount: contractsData?.length, error: contractsError?.message })
     } 
     // Contractorの場合、自分が関わる契約を取得
     else if (memberships.some(m => m.role === 'Contractor')) {
-      console.log('contracts API: Contractorとして契約取得開始', { contractorId: userProfile.id })
       
       // まず基本的な契約データを取得
       const { data: contractsBasic, error: contractsBasicError } = await supabaseAdmin
@@ -330,7 +314,6 @@ export async function GET(request: NextRequest) {
         contractsData = []
         contractsError = contractsBasicError
       } else {
-        console.log('contracts API: 基本契約データ取得成功', { contractsCount: contractsBasic?.length })
         
         // 関連データを個別に取得
         const projectIds = Array.from(new Set(contractsBasic?.map(c => c.project_id) || []))
@@ -382,9 +365,7 @@ export async function GET(request: NextRequest) {
         contractsError = null
       }
       
-      console.log('contracts API: Contractor契約取得結果', { contractsCount: contractsData?.length, error: contractsError?.message })
     } else {
-      console.log('contracts API: 権限なし')
       return NextResponse.json({ message: 'この操作を実行する権限がありません' }, { status: 403 })
     }
 
@@ -401,7 +382,6 @@ export async function GET(request: NextRequest) {
       contractor_email: contract.contractors?.email,
     })) || []
 
-    console.log('contracts API: レスポンス準備完了', { contractsCount: formattedContracts.length })
 
     return NextResponse.json({ contracts: formattedContracts }, { status: 200 })
 

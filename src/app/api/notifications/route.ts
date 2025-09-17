@@ -14,7 +14,6 @@ const supabaseAdmin = createClient(
 
 export async function GET(request: NextRequest) {
   try {
-    console.log('notifications API: リクエスト開始')
     
     // Authorizationヘッダーからユーザー情報を取得
     const authHeader = request.headers.get('authorization')
@@ -77,10 +76,6 @@ export async function GET(request: NextRequest) {
       console.error('notifications API: 未読数取得エラー:', unreadError)
     }
 
-    console.log('notifications API: 通知取得成功', { 
-      count: notifications?.length || 0, 
-      unread: unreadCount || 0 
-    })
 
     return NextResponse.json({
       notifications: notifications || [],

@@ -106,7 +106,6 @@ export function AccessControlModal({ fileId, onClose }: AccessControlModalProps)
   ]
 
   const toggleUserPermission = (permission: string, userId: string) => {
-    console.log(`Toggle ${permission} for user ${userId}`)
   }
 
   const getActionIcon = (action: string) => {

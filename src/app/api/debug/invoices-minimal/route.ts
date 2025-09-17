@@ -16,7 +16,6 @@ export async function GET(request: NextRequest) {
       status: 'issued'
     }
 
-    console.log('最小限請求書データ:', minimalInvoiceData)
 
     const { data: insertResult, error: insertError } = await supabaseAdmin
       .from('invoices')

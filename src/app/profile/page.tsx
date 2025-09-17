@@ -30,6 +30,8 @@ import { useAuth } from "@/contexts/auth-context"
 import { supabase } from "@/lib/supabase"
 import { calculateMemberLevel, getMemberLevelInfo, type MemberLevel } from "@/lib/member-level"
 import { OrganizationProfile } from "@/components/profile/organization-profile"
+import { ContractorRatingDisplay } from "@/components/evaluations/contractor-rating-display"
+import { BadgeCollection } from "@/components/badges/badge-collection"
 
 export default function ProfilePage() {
   return (
@@ -44,6 +46,10 @@ function ProfilePageContent() {
   const [isEditing, setIsEditing] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
+  const [evaluationData, setEvaluationData] = useState<any>(null)
+  const [evaluationLoading, setEvaluationLoading] = useState(false)
+  const [badgeData, setBadgeData] = useState<any[]>([])
+  const [badgeLoading, setBadgeLoading] = useState(false)
   const [formData, setFormData] = useState({
     display_name: userProfile?.display_name || '',
     specialties: userProfile?.specialties || [],
@@ -77,6 +83,10 @@ function ProfilePageContent() {
       alert('住所を入力してください')
       return
     }
+    if (!formData.address_detail.trim()) {
+      alert('住所（その他）を入力してください')
+      return
+    }
     
     // 未経験以外の専門分野を選択した場合は経験年数が必須
     const hasNonBeginnerSpecialty = formData.specialties.some(specialty => specialty !== '未経験')
@@ -87,16 +97,6 @@ function ProfilePageContent() {
 
     setIsLoading(true)
     try {
-      console.log('プロフィール更新開始:', {
-        display_name: formData.display_name,
-        formal_name: formData.formal_name,
-        postal_code: formData.postal_code,
-        address: formData.address,
-        address_detail: formData.address_detail,
-        phone_number: formData.phone_number,
-        company_number: formData.company_number,
-        registration_number: formData.registration_number
-      })
 
       await updateProfile({
         display_name: formData.display_name,
@@ -112,7 +112,6 @@ function ProfilePageContent() {
         registration_number: formData.registration_number || undefined
       })
       
-      console.log('プロフィール更新成功')
       setIsEditing(false)
       alert('プロフィールが正常に更新されました')
     } catch (error) {
@@ -122,6 +121,64 @@ function ProfilePageContent() {
       setIsLoading(false)
     }
   }
+
+  // 評価データを取得
+  const fetchEvaluationData = async () => {
+    if (!userProfile || userRole !== 'Contractor') return
+    
+    setEvaluationLoading(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
+      const response = await fetch(`/api/evaluations/contractor?contractor_id=${userProfile.id}`, {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`
+        }
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        setEvaluationData(result.evaluations || [])
+      }
+    } catch (error) {
+      console.error('評価データ取得エラー:', error)
+    } finally {
+      setEvaluationLoading(false)
+    }
+  }
+
+  // バッジデータを取得
+  const fetchBadgeData = async () => {
+    if (!userProfile) return
+    
+    setBadgeLoading(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
+      const response = await fetch(`/api/badges/user/${userProfile.id}`, {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`
+        }
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        setBadgeData(result.badges || [])
+      }
+    } catch (error) {
+      console.error('バッジデータ取得エラー:', error)
+    } finally {
+      setBadgeLoading(false)
+    }
+  }
+
+  // コンポーネントマウント時にデータを取得
+  React.useEffect(() => {
+    fetchEvaluationData()
+    fetchBadgeData()
+  }, [userProfile, userRole])
 
   const handleCancel = () => {
     setFormData({
@@ -158,7 +215,6 @@ function ProfilePageContent() {
         const fullAddress = `${result.address1}${result.address2}${result.address3}`
         setFormData(prev => ({ ...prev, address: fullAddress }))
       } else {
-        console.log('住所が見つかりませんでした')
       }
     } catch (error) {
       console.error('住所取得エラー:', error)
@@ -225,11 +281,6 @@ function ProfilePageContent() {
       const formData = new FormData()
       formData.append('avatar', file)
 
-      console.log('アバターアップロード開始:', {
-        fileName: file.name,
-        fileSize: file.size,
-        fileType: file.type
-      })
 
       // APIエンドポイント経由でアバターをアップロード
       const response = await fetch('/api/profile/avatar', {
@@ -243,7 +294,6 @@ function ProfilePageContent() {
       const result = await response.json()
 
       if (response.ok) {
-        console.log('アバターアップロード成功:', result)
         // プロフィール情報を再取得
         window.location.reload()
       } else {
@@ -280,6 +330,7 @@ function ProfilePageContent() {
       formData.location,
       formData.formal_name,
       formData.address,
+      formData.address_detail,
       formData.phone_number,
       formData.company_number,
       formData.registration_number
@@ -306,67 +357,41 @@ function ProfilePageContent() {
       <Navigation />
 
       <div className="md:ml-64 transition-all duration-300">
-        {/* Header */}
-        <motion.header
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-white/80 backdrop-blur-sm border-b border-gray-200 sticky top-0 z-30"
-        >
-          <div className="px-6 py-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                  <User className="w-6 h-6 text-engineering-blue" />
-                  プロフィール管理
-                </h1>
-                <p className="text-gray-600">あなたの専門情報と設定を管理</p>
-              </div>
-              <div className="flex items-center gap-3">
-                <Badge variant="engineering">
-                  プロフィール完成度: {getCompletionPercentage()}%
-                </Badge>
-                {!isEditing ? (
-                  <Button variant="engineering" onClick={() => setIsEditing(true)}>
-                    <Edit className="w-4 h-4 mr-2" />
-                    編集
-                  </Button>
-                ) : (
-                  <div className="flex gap-2">
-                    <Button variant="outline" onClick={handleCancel}>
-                      <X className="w-4 h-4 mr-2" />
-                      キャンセル
-                    </Button>
-                    <Button variant="engineering" onClick={handleSave} disabled={isLoading}>
-                      <Save className="w-4 h-4 mr-2" />
-                      保存
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </motion.header>
 
         <main className="px-6 py-8">
           <div className="max-w-4xl mx-auto space-y-6">
-            {/* Profile Completion Card */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-            >
-              <Card variant="engineering">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold text-white">プロフィール完成度</h3>
-                    <span className="text-2xl font-bold text-white">{getCompletionPercentage()}%</span>
-                  </div>
-                  <Progress value={getCompletionPercentage()} className="mb-4" />
-                  <p className="text-white/80 text-sm">
-                    プロフィールを完成させると、より適切な案件のマッチングや評価を受けられます。
-                  </p>
-                </CardContent>
-              </Card>
-            </motion.div>
+            
+            {/* 編集ボタン */}
+            <div className="flex justify-end">
+              {!isEditing ? (
+                <Button
+                  onClick={() => setIsEditing(true)}
+                  className="bg-engineering-blue hover:bg-engineering-blue/90"
+                >
+                  <Edit className="w-4 h-4 mr-2" />
+                  プロフィールを編集
+                </Button>
+              ) : (
+                <div className="flex gap-4">
+                  <Button
+                    onClick={handleSave}
+                    disabled={isLoading}
+                    className="bg-engineering-green hover:bg-engineering-green/90"
+                  >
+                    <Save className="w-4 h-4 mr-2" />
+                    {isLoading ? '保存中...' : '保存'}
+                  </Button>
+                  <Button
+                    onClick={handleCancel}
+                    variant="outline"
+                    disabled={isLoading}
+                  >
+                    <X className="w-4 h-4 mr-2" />
+                    キャンセル
+                  </Button>
+                </div>
+              )}
+            </div>
 
             {/* Basic Information */}
             <motion.div
@@ -632,7 +657,7 @@ function ProfilePageContent() {
                     個人情報
                   </CardTitle>
                   <CardDescription>
-                    氏名、住所（自動入力）、電話番号は必須項目です。住所（その他）、会社番号、インボイス番号は任意で入力してください
+                    氏名、住所（自動入力）、住所（その他）、電話番号は必須項目です。会社番号、インボイス番号は任意で入力してください
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -727,7 +752,7 @@ function ProfilePageContent() {
                   {/* 住所（その他） */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      住所（その他）
+                      住所（その他） *
                     </label>
                     {isEditing ? (
                       <input
@@ -736,13 +761,14 @@ function ProfilePageContent() {
                         onChange={(e) => setFormData(prev => ({ ...prev, address_detail: e.target.value }))}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
                         placeholder="マンション名、部屋番号など"
+                        required
                       />
                     ) : (
                       <p className="text-gray-900">{userProfile?.address_detail || '未設定'}</p>
                     )}
                     {isEditing && (
                       <p className="text-sm text-gray-500 mt-1">
-                        マンション名、部屋番号、建物名などを入力してください
+                        マンション名、部屋番号、建物名などを入力してください（必須項目）
                       </p>
                     )}
                   </div>
@@ -795,51 +821,32 @@ function ProfilePageContent() {
               </Card>
             </motion.div>
 
-            {/* Performance Stats */}
-            {userProfile && (
+
+            {/* 受注者評価表示 */}
+            {userRole === 'Contractor' && (
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.3 }}
               >
-                <Card className="hover-lift">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Star className="w-5 h-5" />
-                      パフォーマンス
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                      <div className="text-center">
-                        <div className="text-3xl font-bold text-engineering-blue mb-2">
-                          {userProfile.rating ? userProfile.rating.toFixed(1) : 'N/A'}
-                        </div>
-                        <p className="text-sm text-gray-600">平均評価</p>
-                        <div className="flex justify-center mt-2">
-                          {[1, 2, 3, 4, 5].map(star => (
-                            <Star
-                              key={star}
-                              className={`w-4 h-4 ${
-                                userProfile.rating && star <= userProfile.rating
-                                  ? 'text-yellow-500 fill-current'
-                                  : 'text-gray-300'
-                              }`}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-3xl font-bold text-engineering-green mb-2">12</div>
-                        <p className="text-sm text-gray-600">完了プロジェクト</p>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-3xl font-bold text-purple-600 mb-2">98%</div>
-                        <p className="text-sm text-gray-600">納期達成率</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                <ContractorRatingDisplay 
+                  evaluations={evaluationData || []} 
+                  loading={evaluationLoading} 
+                />
+              </motion.div>
+            )}
+
+            {/* バッジコレクション表示 */}
+            {userRole === 'Contractor' && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4 }}
+              >
+                <BadgeCollection 
+                  badges={badgeData || []} 
+                  loading={badgeLoading} 
+                />
               </motion.div>
             )}
           </div>

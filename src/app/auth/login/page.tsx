@@ -33,16 +33,13 @@ export default function LoginPage() {
   // 認証状態の変更を監視してリダイレクト
   useEffect(() => {
     if (!loading && userRole && success) {
-      console.log('Login page: 認証状態変更を検知', { userRole })
       
       // ユーザーロールに基づいてリダイレクト先を決定
       const redirectPath = getRedirectPath()
-      console.log('Login page: リダイレクト実行', { redirectPath })
       
       // セッションストレージに保存されたリダイレクト先を確認
       const savedRedirect = sessionStorage.getItem('redirectAfterLogin')
       if (savedRedirect && savedRedirect !== '/auth/login') {
-        console.log('Login page: 保存されたリダイレクト先を使用', { savedRedirect })
         sessionStorage.removeItem('redirectAfterLogin')
         router.push(savedRedirect)
       } else {
@@ -58,7 +55,6 @@ export default function LoginPage() {
     setIsLoading(true)
 
     try {
-      console.log('Login form: ログイン開始', { email })
       
       // タイムアウト処理を追加
       const loginPromise = signIn(email, password)
@@ -68,14 +64,12 @@ export default function LoginPage() {
       
       await Promise.race([loginPromise, timeoutPromise])
       
-      console.log('Login form: ログイン成功')
       setSuccess("ログインに成功しました")
       // リダイレクトはuseEffectで処理される
     } catch (err: any) {
       console.error('Login form: ログインエラー', err)
       setError(err.message || "ログインに失敗しました")
     } finally {
-      console.log('Login form: ログイン処理終了')
       setIsLoading(false)
     }
   }

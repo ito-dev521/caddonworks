@@ -77,31 +77,25 @@ export function MessageReactions({ messageId, className }: MessageReactionsProps
   
   // showPickerの状態変化をデバッグ
   useEffect(() => {
-    console.log('showPicker状態変化:', showPicker)
   }, [showPicker])
   const [loading, setLoading] = useState(false)
 
   // リアクション一覧を取得
   const fetchReactions = async () => {
     try {
-      console.log('リアクション取得開始:', messageId)
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
-        console.log('セッションが見つかりません')
         return
       }
 
-      console.log('セッション取得成功:', session.user.id)
       const response = await fetch(`/api/chat/reactions?message_id=${messageId}`, {
         headers: {
           'Authorization': `Bearer ${session.access_token}`
         }
       })
       
-      console.log('リアクション取得レスポンス:', response.status)
       if (response.ok) {
         const data = await response.json()
-        console.log('リアクションデータ:', data)
         setReactions(data.reactions || {})
       } else {
         const errorData = await response.json()
@@ -113,7 +107,6 @@ export function MessageReactions({ messageId, className }: MessageReactionsProps
   }
 
   useEffect(() => {
-    console.log('MessageReactions useEffect: user, authLoading', { user, authLoading })
     if (!authLoading && user) {
       fetchReactions()
     }
@@ -121,10 +114,8 @@ export function MessageReactions({ messageId, className }: MessageReactionsProps
 
   // リアクションを追加/削除
   const toggleReaction = async (reactionType: string) => {
-    console.log('リアクション操作開始:', { reactionType, messageId, user: user?.id, authLoading })
     
     if (!user) {
-      console.log('リアクション操作失敗: ユーザーが見つかりません')
       return
     }
 
@@ -132,14 +123,12 @@ export function MessageReactions({ messageId, className }: MessageReactionsProps
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
-        console.log('セッションが見つかりません')
         return
       }
 
       const userReaction = reactions[reactionType]?.find(r => r.user_id === user.id)
       const action = userReaction ? 'remove' : 'add'
       
-      console.log('リアクション操作:', { action, userReaction, reactionType })
 
       const response = await fetch('/api/chat/reactions', {
         method: 'POST',
@@ -154,10 +143,8 @@ export function MessageReactions({ messageId, className }: MessageReactionsProps
         })
       })
 
-      console.log('リアクション操作レスポンス:', response.status)
       if (response.ok) {
         const result = await response.json()
-        console.log('リアクション操作成功:', result)
         await fetchReactions() // リアクション一覧を再取得
       } else {
         const errorData = await response.json()
@@ -181,7 +168,6 @@ export function MessageReactions({ messageId, className }: MessageReactionsProps
           variant="ghost"
           size="sm"
           onClick={() => {
-            console.log('最初のリアクションボタンクリック')
             setShowPicker(true)
           }}
           className="h-6 px-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100"
@@ -332,7 +318,6 @@ export function MessageReactions({ messageId, className }: MessageReactionsProps
                     <button
                       key={type}
                       onClick={() => {
-                        console.log('リアクション選択:', type, label)
                         toggleReaction(type)
                       }}
                       disabled={loading}
@@ -370,7 +355,6 @@ export function MessageReactions({ messageId, className }: MessageReactionsProps
         variant="ghost"
         size="sm"
         onClick={() => {
-          console.log('リアクションピッカーボタンクリック:', !showPicker)
           setShowPicker(!showPicker)
         }}
         className="h-6 px-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100"

@@ -134,11 +134,9 @@ function JobsPageContent() {
   // 案件データを取得する関数
   const fetchJobs = async () => {
     try {
-      console.log('fetchJobs: 開始')
       setDataLoading(true)
       
       const { data: { session } } = await supabase.auth.getSession()
-      console.log('fetchJobs: セッション確認', session ? 'あり' : 'なし')
       
       if (!session) {
         console.error('fetchJobs: セッションが見つかりません')
@@ -148,11 +146,6 @@ function JobsPageContent() {
         return
       }
 
-      console.log('fetchJobs: APIリクエスト開始', {
-        hasAccessToken: !!session.access_token,
-        tokenLength: session.access_token?.length,
-        tokenPreview: session.access_token?.substring(0, 20) + '...'
-      })
       
       // 受注者向けの案件一覧を取得（入札可能な案件のみ）
       const response = await fetch('/api/jobs', {
@@ -163,12 +156,9 @@ function JobsPageContent() {
         }
       })
 
-      console.log('fetchJobs: APIレスポンス', response.status, response.statusText)
       const result = await response.json()
-      console.log('fetchJobs: API結果', result)
 
       if (response.ok) {
-        console.log('fetchJobs: 成功, 案件数:', result.jobs?.length || 0)
         setJobs(result.jobs)
         setFilteredJobs(result.jobs)
       } else {
@@ -180,7 +170,6 @@ function JobsPageContent() {
         
         // 認証エラーの場合はログインページにリダイレクト
         if (response.status === 401) {
-          console.log('fetchJobs: 認証エラー、ログインページにリダイレクト')
           window.location.href = '/auth/login'
           return
         }
@@ -194,7 +183,6 @@ function JobsPageContent() {
       
       // 認証エラーの場合はログインページにリダイレクト
       if (error instanceof Error && error.message.includes('401')) {
-        console.log('fetchJobs: 認証エラー、ログインページにリダイレクト')
         window.location.href = '/auth/login'
         return
       }
@@ -202,31 +190,17 @@ function JobsPageContent() {
       setJobs([])
       setFilteredJobs([])
     } finally {
-      console.log('fetchJobs: 終了')
       setDataLoading(false)
     }
   }
 
   useEffect(() => {
-    console.log('useEffect: 認証状態確認', {
-      userProfile: userProfile ? 'あり' : 'なし',
-      userRole: userRole,
-      loading: loading,
-      userProfileId: userProfile?.id,
-      userEmail: userProfile?.email
-    })
     
     if (!userProfile || userRole !== 'Contractor') {
-      console.log('useEffect: 認証条件未満のため、データ取得をスキップ', {
-        hasUserProfile: !!userProfile,
-        userRole: userRole,
-        expectedRole: 'Contractor'
-      })
       setDataLoading(false)
       
       // Contractorロールでない場合はダッシュボードにリダイレクト
       if (userProfile && userRole && userRole !== 'Contractor') {
-        console.log('useEffect: 権限不足でリダイレクト', { userRole })
         alert('このページにアクセスするには受注者権限が必要です')
         window.location.href = '/dashboard'
       }
@@ -238,7 +212,6 @@ function JobsPageContent() {
     if (lastFetchKeyRef.current === fetchKey) return
     lastFetchKeyRef.current = fetchKey
 
-    console.log('useEffect: 認証OK、データ取得開始', { userRole, userProfileId: userProfile.id })
     fetchJobs()
   }, [userProfile, userRole])
 
@@ -370,7 +343,6 @@ function JobsPageContent() {
 
   // 添付資料を取得する関数
   const loadAttachments = async (projectId: string) => {
-    console.log('=== 受注者側: 添付資料読み込み開始 ===', { projectId })
     setLoadingAttachments(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
@@ -379,10 +351,6 @@ function JobsPageContent() {
         return
       }
 
-      console.log('=== 受注者側: APIリクエスト送信 ===', { 
-        url: `/api/contractor/projects/${projectId}/attachments`,
-        tokenLength: session.access_token.length 
-      })
 
       const response = await fetch(`/api/contractor/projects/${projectId}/attachments`, {
         method: 'GET',
@@ -393,17 +361,8 @@ function JobsPageContent() {
       })
 
       const result = await response.json()
-      console.log('=== 受注者側: APIレスポンス ===', { 
-        status: response.status, 
-        ok: response.ok, 
-        result 
-      })
 
       if (response.ok) {
-        console.log('=== 受注者側: 添付資料設定 ===', { 
-          attachments: result.attachments,
-          count: result.attachments?.length || 0
-        })
         setAttachments(result.attachments || [])
       } else {
         console.error('添付資料の取得に失敗:', result.message)
@@ -414,7 +373,6 @@ function JobsPageContent() {
       setAttachments([])
     } finally {
       setLoadingAttachments(false)
-      console.log('=== 受注者側: 添付資料読み込み完了 ===')
     }
   }
 
@@ -514,7 +472,6 @@ function JobsPageContent() {
 
   // 権限チェック
   if (userRole !== 'Contractor') {
-    console.log('JobsPage: 権限チェック失敗', { userRole, userProfile: !!userProfile })
     return (
       <div className="min-h-screen bg-gradient-mesh flex items-center justify-center">
         <Card className="w-full max-w-md">

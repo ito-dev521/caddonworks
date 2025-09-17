@@ -8,6 +8,7 @@ export async function POST(request: NextRequest) {
     // ストレージバケットの設定を更新
     const { data: bucketData, error: bucketError } = await supabaseAdmin.storage
       .updateBucket('attachments', {
+        public: false,
         fileSizeLimit: 314572800, // 300MB
         allowedMimeTypes: [
           // 画像ファイル

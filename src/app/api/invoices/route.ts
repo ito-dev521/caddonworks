@@ -3,10 +3,8 @@ import { createSupabaseAdmin } from '@/lib/supabase'
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('=== 請求書作成API開始 ===')
     const authHeader = request.headers.get('authorization')
     if (!authHeader) {
-      console.log('認証ヘッダーなし')
       return NextResponse.json({ message: '認証が必要です' }, { status: 401 })
     }
 
@@ -102,6 +100,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: '契約が見つかりません' }, { status: 404 })
     }
 
+    // 既存の請求書の存在確認
+    const { data: existingInvoices, error: existingError } = await supabaseAdmin
+      .from('invoices')
+      .select('id, status')
+      .eq('contract_id', contract.id)
+
+    if (existingError) {
+      console.error('既存請求書確認エラー:', existingError)
+      return NextResponse.json({ message: '既存請求書の確認に失敗しました' }, { status: 500 })
+    }
+
+    if (existingInvoices && existingInvoices.length > 0) {
+      // 既存の請求書がある場合は、最新のものを返す
+      const latestInvoice = existingInvoices[0]
+      return NextResponse.json({
+        message: '請求書は既に作成済みです',
+        invoice: latestInvoice
+      }, { status: 200 })
+    }
+
     // 請求書番号を生成
     const invoiceNumber = `INV-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`
 
@@ -116,8 +134,8 @@ export async function POST(request: NextRequest) {
       fee_amount: 0, // 追加手数料（今回は0）
       system_fee: systemFee,
       total_amount: totalAmount,
-      status: 'issued',
-      issue_date: new Date().toISOString().split('T')[0], // YYYY-MM-DD形式
+      status: 'draft', // 下書き状態で作成
+      issue_date: null, // 発行時に設定
       due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30日後
       org_id: project.org_id,
       contractor_id: project.contractor_id,
@@ -145,10 +163,9 @@ export async function POST(request: NextRequest) {
       .from('notifications')
       .insert({
         user_id: project.contractor_id,
-        title: '請求書が発行されました',
-        message: `案件「${project.title}」の請求書（${invoiceNumber}）が発行されました。金額: ¥${totalAmount.toLocaleString()}`,
-        type: 'invoice',
-        related_id: project_id
+        title: '請求書が作成されました',
+        message: `案件「${project.title}」の請求書が作成されました。内容を確認して発行してください。金額: ¥${totalAmount.toLocaleString()}`,
+        type: 'invoice'
       })
 
     if (notificationError) {
@@ -156,15 +173,14 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({
-      message: '請求書が正常に作成されました',
+      message: '請求書が正常に作成されました。受注者に通知が送信されます。',
       invoice: invoiceData
     }, { status: 201 })
 
   } catch (error) {
-    console.error('請求書作成APIエラー:', error)
-    console.error('エラー詳細:', error instanceof Error ? error.message : 'Unknown error')
+    console.error('請求書作成エラー:', error)
     return NextResponse.json(
-      { message: 'サーバーエラーが発生しました', error: error instanceof Error ? error.message : 'Unknown error' },
+      { message: 'サーバーエラーが発生しました' },
       { status: 500 }
     )
   }

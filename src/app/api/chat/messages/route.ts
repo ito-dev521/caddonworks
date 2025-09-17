@@ -134,8 +134,6 @@ export async function GET(request: NextRequest) {
     const replyMessageIds = messages?.filter(msg => msg.reply_to).map(msg => msg.reply_to) || []
     let replyMessages: any[] = []
     
-    console.log('全メッセージ:', messages?.map(m => ({ id: m.id, reply_to: m.reply_to })))
-    console.log('返信先メッセージID:', replyMessageIds)
     
     if (replyMessageIds.length > 0) {
       const { data: replyData, error: replyError } = await supabaseAdmin
@@ -156,13 +154,12 @@ export async function GET(request: NextRequest) {
       }
       
       replyMessages = replyData || []
-      console.log('取得した返信先メッセージ:', replyMessages)
     }
 
     const formattedMessages = messages?.map(msg => {
       const replyMessage = replyMessages.find(rm => rm.id === msg.reply_to)
       
-      console.log('メッセージ処理:', {
+      return {
         msgId: msg.id,
         replyTo: msg.reply_to,
         replyMessageFound: !!replyMessage,
@@ -171,10 +168,7 @@ export async function GET(request: NextRequest) {
           content: replyMessage.message,
           sender: (replyMessage.users as any)?.display_name || (replyMessage.users as any)?.email
         } : null,
-        allReplyMessages: replyMessages.map(rm => ({ id: rm.id, message: rm.message }))
-      })
-      
-      return {
+        allReplyMessages: replyMessages.map(rm => ({ id: rm.id, message: rm.message })),
         id: msg.id,
         room_id: roomId,
         content: msg.message,

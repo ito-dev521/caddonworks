@@ -36,13 +36,6 @@ export function ReplyMessage({ replyTo, onCancel, className }: ReplyMessageProps
       message_type: 'text'
     })
     setShowSourceModal(true)
-    
-    // デバッグ用ログ
-    console.log('返信元メッセージ表示:', {
-      id: replyTo.id,
-      content: replyTo.content,
-      sender: replyTo.sender
-    })
   }
 
   return (

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Bell, X, Check, AlertCircle, FileText, Hand } from "lucide-react"
+import { Bell, X, Check, AlertCircle, FileText, Hand, Star } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/contexts/auth-context"
@@ -98,6 +98,11 @@ export function NotificationBell() {
         return <FileText className="w-4 h-4 text-green-600" />
       case 'contract_signed':
         return <Check className="w-4 h-4 text-green-600" />
+      case 'evaluation_received':
+        return <Star className="w-4 h-4 text-yellow-600" />
+      case 'invoice_created':
+      case 'invoice':
+        return <FileText className="w-4 h-4 text-purple-600" />
       default:
         return <AlertCircle className="w-4 h-4 text-gray-600" />
     }
@@ -151,6 +156,12 @@ export function NotificationBell() {
       router.push('/contracts')
     } else if (notification.type === 'contract_signed') {
       // 契約署名通知の場合は契約一覧ページへ
+      router.push('/contracts')
+    } else if (notification.type === 'evaluation_received') {
+      // 評価受信通知の場合は評価ページへ
+      router.push('/evaluations')
+    } else if (notification.type === 'invoice' || notification.type === 'invoice_created') {
+      // 請求書通知の場合は契約一覧ページへ
       router.push('/contracts')
     }
 

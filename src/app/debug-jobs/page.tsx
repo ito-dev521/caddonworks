@@ -17,15 +17,9 @@ export default function DebugJobsPage() {
     setJobsError(null)
     
     try {
-      console.log('Debug: 案件データ取得開始')
       
       // セッション取得
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-      console.log('Debug: セッション取得結果:', { 
-        hasSession: !!session, 
-        userId: session?.user?.id,
-        error: sessionError?.message 
-      })
+          const { data: { session }, error: sessionError } = await supabase.auth.getSession()
       
       if (sessionError || !session) {
         setJobsError('セッションが見つかりません: ' + (sessionError?.message || 'セッションなし'))
@@ -38,15 +32,9 @@ export default function DebugJobsPage() {
           'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json'
         }
-      })
-
-      console.log('Debug: APIレスポンス:', { 
-        status: response.status, 
-        statusText: response.statusText 
-      })
+          })
 
       const result = await response.json()
-      console.log('Debug: API結果:', result)
 
       if (response.ok) {
         setJobsData(result)

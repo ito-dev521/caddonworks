@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createSupabaseAdmin } from '@/lib/supabase'
 
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+
 // 特定のメッセージを取得
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createClient()
+    const supabase = createClient(supabaseUrl, supabaseAnonKey)
     
     // 認証チェック
     const { data: { session }, error: authError } = await supabase.auth.getSession()
@@ -67,9 +70,9 @@ export async function GET(request: NextRequest) {
       edited_at: message.edited_at,
       is_deleted: message.is_deleted,
       sender: {
-        id: message.users.id,
-        display_name: message.users.display_name,
-        avatar_url: message.users.avatar_url
+        id: (message.users as any)?.id,
+        display_name: (message.users as any)?.display_name,
+        avatar_url: (message.users as any)?.avatar_url
       }
     }
 

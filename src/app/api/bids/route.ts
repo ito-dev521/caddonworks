@@ -226,10 +226,6 @@ export async function POST(request: NextRequest) {
       }
 
       // 発注者に通知を送信
-      console.log('発注者取得開始:', {
-        org_id: projectInfoWithOrg.org_id,
-        project_title: projectInfoWithOrg.title
-      })
 
       const { data: orgAdmins, error: orgAdminsError } = await supabaseAdmin
         .from('memberships')
@@ -242,11 +238,7 @@ export async function POST(request: NextRequest) {
           error: orgAdminsError,
           org_id: projectInfoWithOrg.org_id
         })
-      } else {
-        console.log('発注者取得成功:', {
-          count: orgAdmins?.length || 0,
-          orgAdmins: orgAdmins
-        })
+          } else {
         // 各発注者に通知を作成
         const notifications = orgAdmins.map(admin => ({
           user_id: admin.user_id,
@@ -264,15 +256,6 @@ export async function POST(request: NextRequest) {
           }
         }))
 
-        console.log('通知作成開始:', {
-          notificationsCount: notifications.length,
-          notifications: notifications.map(n => ({
-            user_id: n.user_id,
-            type: n.type,
-            title: n.title
-          }))
-        })
-
         const { data: insertedNotifications, error: notificationError } = await supabaseAdmin
           .from('notifications')
           .insert(notifications)
@@ -285,11 +268,7 @@ export async function POST(request: NextRequest) {
             projectInfo: projectInfoWithOrg
           })
           // 通知作成に失敗しても入札は成功とする
-        } else {
-          console.log('入札通知を送信しました:', {
-            count: insertedNotifications?.length || 0,
-            notifications: insertedNotifications
-          })
+            } else {
         }
       }
     }

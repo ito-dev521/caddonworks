@@ -57,14 +57,10 @@ const supabaseAdmin = createClient(
 
 export async function GET(request: NextRequest) {
   try {
-    console.log('jobs API: リクエスト開始')
-    
     // Authorizationヘッダーからユーザー情報を取得
     const authHeader = request.headers.get('authorization')
-    console.log('jobs API: 認証ヘッダー', authHeader ? 'あり' : 'なし')
     
     if (!authHeader) {
-      console.log('jobs API: 認証ヘッダーなし')
       return NextResponse.json(
         { message: '認証が必要です' },
         { status: 401 }
@@ -72,7 +68,6 @@ export async function GET(request: NextRequest) {
     }
 
     const token = authHeader.replace('Bearer ', '')
-    console.log('jobs API: トークン取得完了', token.substring(0, 20) + '...')
     
     const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
     
@@ -84,7 +79,6 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    console.log('jobs API: 認証成功, ユーザーID:', user.id, 'Email:', user.email)
 
     // ユーザープロフィールを取得
     const { data: userProfile, error: userError } = await supabaseAdmin
@@ -101,11 +95,8 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    console.log('jobs API: ユーザープロフィール取得成功')
-
     // ユーザーの会員レベルを計算
     const userLevel = userProfile.member_level || calculateMemberLevel(userProfile.experience_years, userProfile.specialties || [])
-    console.log('jobs API: ユーザー会員レベル:', userLevel)
 
     // 1. 入札可能な案件を取得
     const { data: biddingJobs, error: biddingError } = await supabaseAdmin
@@ -172,11 +163,6 @@ export async function GET(request: NextRequest) {
     // 署名済み契約の案件を抽出
     const awardedJobs = contracts?.map(contract => contract.projects).filter(Boolean) || []
     
-    console.log('jobs API: データ取得結果', {
-      biddingJobsCount: biddingJobs?.length || 0,
-      contractsCount: contracts?.length || 0,
-      awardedJobsCount: awardedJobs?.length || 0
-    })
     
     // 入札可能な案件を会員レベルでフィルタリング
     const filteredBiddingJobs = biddingJobs?.filter(job => {
@@ -184,15 +170,10 @@ export async function GET(request: NextRequest) {
       return canAccessProject(userLevel as MemberLevel, requiredLevel)
     }) || []
     
-    console.log('jobs API: レベルフィルタリング結果', {
-      originalBiddingJobs: biddingJobs?.length || 0,
-      filteredBiddingJobs: filteredBiddingJobs.length
-    })
     
     // フィルタリングされた入札可能な案件と落札した案件を結合
     const jobsData = [...filteredBiddingJobs, ...awardedJobs]
 
-    console.log('jobs API: 案件データ取得成功, 件数:', jobsData?.length || 0)
 
     // 組織名を取得
     const orgIds = Array.from(new Set(jobsData?.map((job: any) => job.org_id) || []))
@@ -261,7 +242,6 @@ export async function GET(request: NextRequest) {
     // 期限切れ案件をフィルタリング（受注者側では表示しない）
     const activeJobs = formattedJobs.filter(job => !job.is_expired)
 
-    console.log('jobs API: レスポンス準備完了')
 
     return NextResponse.json({
       jobs: activeJobs

@@ -14,7 +14,6 @@ const supabaseAdmin = createClient(
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('setup-admin-org API: 開始')
 
     // 1. イースタイルラボ株式会社の組織を作成または取得
     let organization
@@ -33,7 +32,6 @@ export async function POST(request: NextRequest) {
     }
 
     if (existingOrg) {
-      console.log('イースタイルラボ株式会社は既に存在します:', existingOrg)
       organization = existingOrg
     } else {
       // 組織を作成
@@ -54,7 +52,6 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      console.log('イースタイルラボ株式会社を作成しました:', newOrg)
       organization = newOrg
     }
 
@@ -73,7 +70,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log('admin@demo.comユーザーを発見:', adminUser)
 
     // 3. ユーザーの表示名とロールを更新
     const { data: updatedUser, error: updateError } = await supabaseAdmin
@@ -95,7 +91,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log('ユーザー更新成功:', updatedUser)
 
     // 4. 既存のmembershipを削除
     const { error: deleteMembershipError } = await supabaseAdmin
@@ -107,7 +102,6 @@ export async function POST(request: NextRequest) {
       console.error('membership削除エラー:', deleteMembershipError)
       // エラーでも続行
     } else {
-      console.log('membership削除成功')
     }
 
     // 5. 新しいmembershipを作成（Adminとして）
@@ -129,7 +123,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log('membership作成成功:', newMembership)
 
     return NextResponse.json({
       message: 'admin@demo.comをイースタイルラボ株式会社の運営者（Admin）に設定しました',
@@ -146,6 +139,7 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+
 
 
 

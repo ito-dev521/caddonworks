@@ -1,133 +1,103 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createSupabaseAdmin } from '@/lib/supabase'
+
+const supabaseAdmin = createSupabaseAdmin()
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { name, email, company, phone, inquiryType, subject, message, agreeToTerms } = body
+    const { subject, message, related_invoice_id, type } = body
+
+    // 認証ヘッダーからトークンを取得
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader) {
+      return NextResponse.json(
+        { message: '認証が必要です' },
+        { status: 401 }
+      )
+    }
+
+    const token = authHeader.replace('Bearer ', '')
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
+    
+    if (authError || !user) {
+      return NextResponse.json(
+        { message: '認証に失敗しました' },
+        { status: 401 }
+      )
+    }
+
+    // ユーザープロフィール取得
+    const { data: userProfile, error: profileError } = await supabaseAdmin
+      .from('users')
+      .select('id, display_name, email')
+      .eq('auth_user_id', user.id)
+      .single()
+
+    if (profileError || !userProfile) {
+      return NextResponse.json(
+        { message: 'ユーザー情報の取得に失敗しました' },
+        { status: 400 }
+      )
+    }
 
     // バリデーション
-    if (!name || !email || !inquiryType || !subject || !message || !agreeToTerms) {
+    if (!subject?.trim() || !message?.trim()) {
       return NextResponse.json(
-        { message: '必須項目が入力されていません' },
+        { message: '件名とメッセージは必須です' },
         { status: 400 }
       )
     }
 
-    // メールアドレスの形式チェック
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(email)) {
+    // 問い合わせをデータベースに保存
+    const { data: contact, error: contactError } = await supabaseAdmin
+      .from('contacts')
+      .insert({
+        user_id: userProfile.id,
+        subject: subject.trim(),
+        message: message.trim(),
+        type: type || 'general',
+        related_invoice_id: related_invoice_id || null,
+        status: 'pending'
+      })
+      .select()
+      .single()
+
+    if (contactError) {
+      console.error('問い合わせ保存エラー:', contactError)
       return NextResponse.json(
-        { message: '正しいメールアドレスを入力してください' },
-        { status: 400 }
+        { message: '問い合わせの送信に失敗しました' },
+        { status: 500 }
       )
     }
 
-    // お問い合わせ種別のラベルを取得
-    const inquiryTypeLabels: { [key: string]: string } = {
-      demo: 'デモ・資料請求',
-      pricing: '料金について',
-      technical: '技術的な質問',
-      partnership: 'パートナーシップ',
-      support: 'サポート',
-      other: 'その他'
+    // 管理者に通知を送信（システム管理者向け）
+    const { error: notificationError } = await supabaseAdmin
+      .from('notifications')
+      .insert({
+        user_id: 'system', // システム管理者のID（実際の実装では適切なIDを設定）
+        title: '新しい問い合わせが届きました',
+        message: `${userProfile.display_name}さんから問い合わせが届きました。件名: ${subject}`,
+        type: 'contact_received',
+        related_id: contact.id
+      })
+
+    if (notificationError) {
+      console.error('通知作成エラー:', notificationError)
+      // 通知エラーは問い合わせ送信を妨げない
     }
 
-    const inquiryTypeLabel = inquiryTypeLabels[inquiryType] || inquiryType
-
-    // メール本文を作成
-    const emailContent = `
-お問い合わせを受け付けました。
-
-【お問い合わせ内容】
-お名前: ${name}
-メールアドレス: ${email}
-会社名: ${company || '未入力'}
-電話番号: ${phone || '未入力'}
-お問い合わせ種別: ${inquiryTypeLabel}
-件名: ${subject}
-
-【お問い合わせ内容】
-${message}
-
----
-このメールは土木設計業務プラットフォームのお問い合わせフォームから送信されました。
-送信日時: ${new Date().toLocaleString('ja-JP')}
-    `.trim()
-
-    // メール送信処理
-    // 実際のメール送信は、SendGrid、Nodemailer、または他のメールサービスを使用
-    // ここでは、コンソールに出力してデモンストレーション
-    console.log('=== お問い合わせメール ===')
-    console.log('送信先: info@ii-stylelab.com')
-    console.log('件名:', `[お問い合わせ] ${subject}`)
-    console.log('本文:')
-    console.log(emailContent)
-    console.log('========================')
-
-    // 実際のメール送信を実装する場合は、以下のようなコードを使用
-    /*
-    const nodemailer = require('nodemailer')
-    
-    const transporter = nodemailer.createTransporter({
-      host: process.env.SMTP_HOST,
-      port: process.env.SMTP_PORT,
-      secure: true,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
+    return NextResponse.json({
+      message: '問い合わせを送信しました',
+      contact: {
+        id: contact.id,
+        subject: contact.subject,
+        status: contact.status
+      }
     })
-
-    await transporter.sendMail({
-      from: process.env.SMTP_FROM,
-      to: 'info@ii-stylelab.com',
-      subject: `[お問い合わせ] ${subject}`,
-      text: emailContent,
-      html: emailContent.replace(/\n/g, '<br>'),
-    })
-    */
-
-    // 自動返信メール（ユーザー宛）
-    const autoReplyContent = `
-${name} 様
-
-この度は、土木設計業務プラットフォームにお問い合わせいただき、誠にありがとうございます。
-
-以下の内容でお問い合わせを受け付けました。
-
-【お問い合わせ内容】
-件名: ${subject}
-お問い合わせ種別: ${inquiryTypeLabel}
-
-【お問い合わせ内容】
-${message}
-
-担当者より2営業日以内にご連絡いたします。
-今しばらくお待ちください。
-
-ご不明な点がございましたら、お気軽にお問い合わせください。
-
----
-土木設計業務プラットフォーム運営事務局
-Email: info@ii-stylelab.com
-Tel: 03-1234-5678
-受付時間: 平日 9:00-18:00
-    `.trim()
-
-    console.log('=== 自動返信メール ===')
-    console.log('送信先:', email)
-    console.log('件名: [自動返信] お問い合わせを受け付けました')
-    console.log('本文:')
-    console.log(autoReplyContent)
-    console.log('====================')
-
-    return NextResponse.json(
-      { message: 'お問い合わせを受け付けました' },
-      { status: 200 }
-    )
 
   } catch (error) {
-    console.error('お問い合わせ送信エラー:', error)
+    console.error('問い合わせ送信エラー:', error)
     return NextResponse.json(
       { message: 'サーバーエラーが発生しました' },
       { status: 500 }

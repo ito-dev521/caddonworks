@@ -14,8 +14,6 @@ export async function GET(request: NextRequest) {
       }, { status: 400 })
     }
 
-    console.log('=== プロジェクトの契約確認開始 ===')
-    console.log('プロジェクトID:', projectId)
 
     // プロジェクト情報を取得
     const { data: project, error: projectError } = await supabaseAdmin
@@ -24,7 +22,6 @@ export async function GET(request: NextRequest) {
       .eq('id', projectId)
       .single()
 
-    console.log('プロジェクト取得結果:', { project, projectError })
 
     if (projectError) {
       return NextResponse.json({
@@ -40,7 +37,6 @@ export async function GET(request: NextRequest) {
       .select('*')
       .eq('project_id', projectId)
 
-    console.log('契約取得結果:', { contracts, contractsError })
 
     // 入札情報も取得
     const { data: bids, error: bidsError } = await supabaseAdmin
@@ -48,9 +44,7 @@ export async function GET(request: NextRequest) {
       .select('*')
       .eq('project_id', projectId)
 
-    console.log('入札取得結果:', { bids, bidsError })
 
-    console.log('=== プロジェクトの契約確認完了 ===')
 
     return NextResponse.json({
       message: 'プロジェクトの契約確認完了',

@@ -14,7 +14,6 @@ const supabaseAdmin = createClient(
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('fix-orgadmin-display API: 開始')
 
     // orgadmin@demo.comユーザーを取得
     const { data: orgAdminUser, error: userError } = await supabaseAdmin
@@ -31,7 +30,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log('orgadmin@demo.comユーザーを発見:', orgAdminUser)
 
     // ユーザーの表示名を「管理者デモ」に更新
     const { data: updatedUser, error: updateError } = await supabaseAdmin
@@ -52,7 +50,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log('ユーザー更新成功:', updatedUser)
 
     return NextResponse.json({
       message: 'orgadmin@demo.comの表示名を「管理者デモ」に変更しました',
@@ -67,6 +64,7 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+
 
 
 

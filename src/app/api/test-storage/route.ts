@@ -97,7 +97,6 @@ export async function POST(request: NextRequest) {
       }, { status: 500 })
     }
 
-    console.log('バケット作成成功:', bucketData)
 
     return NextResponse.json({
       message: 'project-attachmentsバケットが正常に作成されました',

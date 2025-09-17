@@ -1,0 +1,1 @@
+{"message":"テーブル存在確認完了","tables":{"users":{"exists":true,"count":1},"organizations":{"exists":true,"count":1},"memberships":{"exists":true,"count":1},"projects":{"exists":true,"count":1},"bids":{"exists":true,"count":1},"contracts":{"exists":true,"count":1},"notifications":{"exists":true,"count":1}}}

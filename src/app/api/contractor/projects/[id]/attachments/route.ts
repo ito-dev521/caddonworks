@@ -140,13 +140,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         )
       `)
       .eq('project_id', projectId)
-      .order('created_at', { ascending: false })
-    
-    console.log('=== 添付資料取得結果 ===', { 
-      attachmentsCount: attachments?.length || 0, 
-      attachments, 
-      error: attachmentsError 
-    })
+          .order('created_at', { ascending: false })
 
     if (attachmentsError) {
       console.error('添付資料取得エラー:', attachmentsError)
@@ -156,13 +150,13 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     // ファイルのダウンロードURLを生成（署名付きURL）
     const attachmentsWithUrls = await Promise.all(
       (attachments || []).map(async (attachment) => {
-        const { data: { signedUrl }, error: urlError } = await supabase.storage
+        const { data, error: urlError } = await supabase.storage
           .from('project-attachments')
           .createSignedUrl(attachment.file_path, 3600) // 1時間有効
 
         return {
           ...attachment,
-          download_url: signedUrl,
+          download_url: data?.signedUrl,
           uploaded_by_name: (attachment.users as any)?.display_name || '不明'
         }
       })

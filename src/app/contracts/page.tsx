@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react"
 import { motion } from "framer-motion"
-import { FileText, Calendar, User, DollarSign, CheckCircle, Clock, AlertCircle, MessageSquare, Eye } from "lucide-react"
+import { FileText, Calendar, User, DollarSign, CheckCircle, Clock, AlertCircle, MessageSquare, Eye, Star } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -11,6 +11,7 @@ import { AuthGuard } from "@/components/auth/auth-guard"
 import { Navigation } from "@/components/layouts/navigation"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
+import { ContractorEvaluationForm } from "@/components/evaluations/contractor-evaluation-form"
 
 interface Contract {
   id: string
@@ -65,6 +66,18 @@ function ContractsPageContent() {
   const [error, setError] = useState<string | null>(null)
   const [selectedTab, setSelectedTab] = useState<'signed' | 'pending' | 'invoices'>('signed')
   const lastFetchKeyRef = useRef<string | null>(null)
+  
+  // 評価フォームの状態管理
+  const [showEvaluationForm, setShowEvaluationForm] = useState(false)
+  const [evaluationTarget, setEvaluationTarget] = useState<{
+    projectId: string
+    contractId: string
+    contractorId: string
+    contractorName: string
+  } | null>(null)
+  const [evaluatedProjects, setEvaluatedProjects] = useState<Set<string>>(new Set())
+  const [invoicedProjects, setInvoicedProjects] = useState<Set<string>>(new Set())
+  const [invoiceStatuses, setInvoiceStatuses] = useState<Map<string, any>>(new Map())
 
   // 契約一覧を取得
   const fetchContracts = async () => {
@@ -127,16 +140,35 @@ function ContractsPageContent() {
         return
       }
 
-      const response = await fetch('/api/projects?status=completed', {
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json'
-        }
-      })
+      // プロジェクトと契約データを並行して取得
+      const [projectsResponse, contractsResponse] = await Promise.all([
+        fetch('/api/projects?status=completed', {
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json'
+          }
+        }),
+        fetch('/api/contracts', {
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json'
+          }
+        })
+      ])
 
-      if (response.ok) {
-        const result = await response.json()
-        setCompletedProjects(result.projects || [])
+      if (projectsResponse.ok && contractsResponse.ok) {
+        const [projectsResult, contractsResult] = await Promise.all([
+          projectsResponse.json(),
+          contractsResponse.json()
+        ])
+        
+        const projects = projectsResult.projects || []
+        const allContracts = contractsResult.contracts || []
+        
+        setCompletedProjects(projects)
+        
+        // 評価済みと請求書作成済みの状態を確認（契約データも渡す）
+        await checkProjectStatuses(projects, allContracts)
       }
     } catch (err: any) {
       console.error('完了案件取得エラー:', err)
@@ -266,7 +298,7 @@ function ContractsPageContent() {
 
       if (response.ok) {
         alert('業務完了届が作成されました。受注者に通知が送信されます。')
-        // 完了案件リストを再取得
+        // 完了案件リストを再取得（状態も更新される）
         await fetchCompletedProjects()
       } else {
         alert('業務完了届作成に失敗しました: ' + result.message)
@@ -274,6 +306,156 @@ function ContractsPageContent() {
     } catch (error) {
       console.error('業務完了届作成エラー:', error)
       alert('ネットワークエラーが発生しました')
+    }
+  }
+
+  // 評価フォームを開く
+  const openEvaluationForm = (project: any) => {
+    // 既に評価済みの場合は開かない
+    if (evaluatedProjects.has(project.id)) {
+      alert('この案件は既に評価済みです。')
+      return
+    }
+
+    const contract = contracts.find(c => c.project_id === project.id)
+    if (contract) {
+      setEvaluationTarget({
+        projectId: project.id,
+        contractId: contract.id,
+        contractorId: project.contractor_id,
+        contractorName: project.contractor_name || '受注者'
+      })
+      setShowEvaluationForm(true)
+    }
+  }
+
+  // 評価完了時の処理
+  const handleEvaluationSuccess = () => {
+    if (evaluationTarget) {
+      setEvaluatedProjects(prev => new Set(Array.from(prev).concat(evaluationTarget.projectId)))
+    }
+    setShowEvaluationForm(false)
+    setEvaluationTarget(null)
+    alert('評価が完了しました。業務完了届を作成できます。')
+  }
+
+  // 評価フォームをキャンセル
+  const handleEvaluationCancel = () => {
+    setShowEvaluationForm(false)
+    setEvaluationTarget(null)
+  }
+
+  // プロジェクトの状態を確認（評価済み、請求書作成済み）
+  const checkProjectStatuses = async (projects: any[], contractsData: Contract[]) => {
+    try {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      if (sessionError) {
+        console.error('セッション取得エラー:', sessionError)
+        return
+      }
+      if (!session) {
+        return
+      }
+
+      const evaluatedSet = new Set<string>()
+      const invoicedSet = new Set<string>()
+      const invoiceMap = new Map<string, any>()
+
+      // 各プロジェクトの状態を並行して確認
+      const statusPromises = projects.map(async (project) => {
+        const contract = contractsData.find(c => c.project_id === project.id)
+
+        // 評価データの取得
+        let evaluationResponse = null
+        try {
+          evaluationResponse = await fetch(`/api/evaluations/contractor?contractor_id=${project.contractor_id}&project_id=${project.id}`, {
+            headers: { 'Authorization': `Bearer ${session.access_token}` }
+          })
+        } catch (error) {
+          console.error(`プロジェクト ${project.id} の評価データ取得でエラー:`, error)
+          evaluationResponse = null
+        }
+
+        // 請求書データの取得（契約が存在する場合のみ）
+        let invoiceResponse = null
+        if (contract) {
+          try {
+            invoiceResponse = await fetch(`/api/invoices/contract/${contract.id}`, {
+              headers: { 'Authorization': `Bearer ${session.access_token}` }
+            })
+          } catch (error) {
+            console.error(`プロジェクト ${project.id} の請求書取得でネットワークエラー:`, error)
+            invoiceResponse = null
+          }
+        }
+
+        if (evaluationResponse && evaluationResponse.ok) {
+          const evalResult = await evaluationResponse.json()
+          if (evalResult.evaluations && evalResult.evaluations.length > 0) {
+            evaluatedSet.add(project.id)
+          }
+        } else if (evaluationResponse) {
+          console.error(`プロジェクト ${project.id} の評価データ取得エラー:`, evaluationResponse.status, evaluationResponse.statusText)
+        }
+
+        if (invoiceResponse && invoiceResponse.ok) {
+          const invoiceResult = await invoiceResponse.json()
+          if (invoiceResult.invoice) {
+            invoicedSet.add(project.id)
+            invoiceMap.set(project.id, invoiceResult.invoice)
+          }
+        } else if (invoiceResponse) {
+          console.error(`プロジェクト ${project.id} の請求書取得エラー:`, invoiceResponse.status, invoiceResponse.statusText)
+        }
+      })
+
+      await Promise.all(statusPromises)
+      
+      setEvaluatedProjects(evaluatedSet)
+      setInvoicedProjects(invoicedSet)
+      setInvoiceStatuses(invoiceMap)
+    } catch (error) {
+      console.error('プロジェクト状態確認エラー:', error)
+    }
+  }
+
+  // プロジェクトが評価済みかチェック
+  const isProjectEvaluated = async (projectId: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return false
+
+      const response = await fetch(`/api/evaluations/contractor?project_id=${projectId}`, {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`
+        }
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        return result.evaluations && result.evaluations.length > 0
+      }
+      return false
+    } catch (error) {
+      console.error('評価確認エラー:', error)
+      return false
+    }
+  }
+
+  // 請求書ステータス表示用の関数
+  const getInvoiceStatusBadge = (projectId: string) => {
+    const invoice = invoiceStatuses.get(projectId)
+    if (!invoice) return null
+
+    switch (invoice.status) {
+      case 'draft':
+        return <Badge variant="outline" className="text-orange-600 border-orange-600">下書き</Badge>
+      case 'issued':
+        return <Badge variant="default" className="bg-green-600">発行済み</Badge>
+      case 'paid':
+        return <Badge variant="default" className="bg-blue-600">支払済み</Badge>
+      default:
+        return <Badge variant="outline">{invoice.status}</Badge>
     }
   }
 
@@ -655,10 +837,40 @@ function ContractsPageContent() {
                             <Button
                               variant="outline"
                               size="sm"
+                              onClick={() => openEvaluationForm(project)}
+                              disabled={evaluatedProjects.has(project.id)}
+                              className={
+                                evaluatedProjects.has(project.id)
+                                  ? 'bg-green-50 border-green-200 text-green-800 opacity-75 cursor-not-allowed'
+                                  : 'bg-yellow-50 border-yellow-200 text-yellow-800 hover:bg-yellow-100'
+                              }
+                              title={evaluatedProjects.has(project.id) ? '評価済み' : '受注者を評価する'}
+                            >
+                              <Star className="w-4 h-4 mr-2" />
+                              {evaluatedProjects.has(project.id) ? '評価済み' : '受注者評価'}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
                               onClick={() => generateInvoice(project.id)}
+                              disabled={!evaluatedProjects.has(project.id) || invoicedProjects.has(project.id)}
+                              className={
+                                invoicedProjects.has(project.id)
+                                  ? 'bg-green-50 border-green-200 text-green-800 opacity-75 cursor-not-allowed'
+                                  : !evaluatedProjects.has(project.id)
+                                  ? 'opacity-50 cursor-not-allowed'
+                                  : ''
+                              }
+                              title={
+                                invoicedProjects.has(project.id)
+                                  ? '業務完了届作成済み'
+                                  : !evaluatedProjects.has(project.id)
+                                  ? '受注者評価を完了してから業務完了届を作成してください'
+                                  : '業務完了届を作成する'
+                              }
                             >
                               <FileText className="w-4 h-4 mr-2" />
-                              業務完了届作成
+                              {invoicedProjects.has(project.id) ? '作成済み' : '業務完了届作成'}
                             </Button>
                             <Button
                               variant="outline"
@@ -767,6 +979,18 @@ function ContractsPageContent() {
           )}
         </motion.div>
       </div>
+      
+      {/* 評価フォーム */}
+      {showEvaluationForm && evaluationTarget && (
+        <ContractorEvaluationForm
+          projectId={evaluationTarget.projectId}
+          contractId={evaluationTarget.contractId}
+          contractorId={evaluationTarget.contractorId}
+          contractorName={evaluationTarget.contractorName}
+          onSuccess={handleEvaluationSuccess}
+          onCancel={handleEvaluationCancel}
+        />
+      )}
     </div>
   )
 }

@@ -14,7 +14,6 @@ const supabaseAdmin = createClient(
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('update-jobs-deadline API: 開始')
 
     // 入札中の案件の入札締切日を30日後に更新
     const { data: updatedProjects, error: updateError } = await supabaseAdmin
@@ -33,7 +32,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log('update-jobs-deadline API: 更新完了', updatedProjects?.length || 0, '件')
 
     // 更新後の案件一覧を取得
     const { data: projects, error: fetchError } = await supabaseAdmin

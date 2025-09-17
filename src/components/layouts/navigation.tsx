@@ -18,7 +18,8 @@ import {
   User,
   LogOut,
   ChevronDown,
-  MessageCircle
+  MessageCircle,
+  Star
 } from "lucide-react"
 import { Button } from "../ui/button"
 import { Badge } from "../ui/badge"
@@ -53,6 +54,8 @@ const getNavigationItems = (userRole: string, badges: any) => {
       { icon: Home, label: "ダッシュボード", href: "/dashboard", badge: null },
       { icon: FolderOpen, label: "案件一覧", href: "/jobs", badge: badges.jobs || null },
       { icon: MessageCircle, label: "チャット", href: "/chat", badge: badges.chat || null },
+      { icon: Star, label: "受注者評価", href: "/evaluations", badge: null },
+      { icon: FileText, label: "請求書管理", href: "/invoices", badge: null },
       { icon: FileText, label: "提出物", href: "/deliverables", badge: badges.deliverables || null },
       { icon: BarChart3, label: "報酬・支払", href: "/payouts", badge: null },
     ],
@@ -113,7 +116,6 @@ export function Navigation({ userRole: propUserRole }: NavigationProps) {
       }
 
       hasFetchedOrganization.current = true
-      console.log('組織情報を取得中...', { orgId: userOrganization.id })
 
       try {
         // Supabaseから認証トークンを取得
@@ -134,7 +136,6 @@ export function Navigation({ userRole: propUserRole }: NavigationProps) {
         if (response.ok) {
           const data = await response.json()
           if (data.organization) {
-            console.log('組織情報取得成功:', data.organization)
             setOrganizationContactPerson(data.organization?.contact_person || null)
           }
         } else {
@@ -159,13 +160,6 @@ export function Navigation({ userRole: propUserRole }: NavigationProps) {
   const getDisplayName = () => {
     if (userRole === 'OrgAdmin') {
       const displayName = organizationContactPerson || userProfile?.display_name || 'ユーザー'
-      console.log('OrgAdmin表示名決定:', {
-        userRole,
-        organizationContactPerson,
-        userProfileDisplayName: userProfile?.display_name,
-        finalDisplayName: displayName,
-        organizationContactPersonType: typeof organizationContactPerson
-      })
       return displayName
     }
     return userProfile?.display_name || 'ユーザー'

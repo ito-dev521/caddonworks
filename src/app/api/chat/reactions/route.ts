@@ -53,7 +53,6 @@ export async function GET(request: NextRequest) {
       }, { status: 500 })
     }
 
-    console.log('取得したリアクション:', reactions)
 
     // リアクションタイプごとにグループ化
     const groupedReactions = reactions?.reduce((acc, reaction) => {
@@ -62,24 +61,18 @@ export async function GET(request: NextRequest) {
         acc[type] = []
       }
       
-      console.log('リアクション処理:', {
+      acc[type].push({
+        id: reaction.id,
         type,
         user_id: reaction.user_id,
         users: reaction.users,
-        display_name: reaction.users?.display_name
-      })
-      
-      acc[type].push({
-        id: reaction.id,
-        user_id: reaction.user_id,
-        display_name: reaction.users?.display_name || 'Unknown',
-        avatar_url: reaction.users?.avatar_url,
+        display_name: (reaction.users as any)?.display_name || 'Unknown',
+        avatar_url: (reaction.users as any)?.avatar_url,
         created_at: reaction.created_at
       })
       return acc
     }, {} as Record<string, any[]>) || {}
 
-    console.log('グループ化されたリアクション:', groupedReactions)
 
     return NextResponse.json({
       reactions: groupedReactions
@@ -131,7 +124,6 @@ export async function POST(request: NextRequest) {
 
     if (action === 'add') {
       // リアクションを追加
-      console.log('リアクション追加開始:', { message_id, user_id: userProfile.id, reaction_type })
       
       const { data, error } = await supabaseAdmin
         .from('message_reactions')
@@ -157,7 +149,6 @@ export async function POST(request: NextRequest) {
         }, { status: 500 })
       }
 
-      console.log('リアクション追加成功:', data)
       return NextResponse.json({
         message: 'リアクションを追加しました',
         reaction: data[0]
@@ -165,7 +156,6 @@ export async function POST(request: NextRequest) {
 
     } else if (action === 'remove') {
       // リアクションを削除
-      console.log('リアクション削除開始:', { message_id, user_id: userProfile.id, reaction_type })
       
       const { error } = await supabaseAdmin
         .from('message_reactions')
@@ -189,7 +179,6 @@ export async function POST(request: NextRequest) {
         }, { status: 500 })
       }
 
-      console.log('リアクション削除成功')
       return NextResponse.json({
         message: 'リアクションを削除しました'
       }, { status: 200 })

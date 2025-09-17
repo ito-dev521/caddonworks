@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
       .limit(5)
 
     return NextResponse.json({
-      tableExists: tableExists?.length > 0,
+      tableExists: (tableExists?.length || 0) > 0,
       tableError,
       columns,
       columnsError,

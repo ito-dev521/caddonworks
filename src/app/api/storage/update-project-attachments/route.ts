@@ -8,6 +8,7 @@ export async function POST(request: NextRequest) {
     // project-attachmentsバケットの設定を更新（動画ファイルのMIMEタイプを追加）
     const { data: bucketData, error: bucketError } = await supabaseAdmin.storage
       .updateBucket('project-attachments', {
+        public: false,
         fileSizeLimit: 314572800, // 300MB
         allowedMimeTypes: [
           // 既存のMIMEタイプ

@@ -14,7 +14,6 @@ const supabaseAdmin = createClient(
 
 export async function GET(request: NextRequest) {
   try {
-    console.log('test-org-profile API: 開始')
 
     // orgadmin@demo.comのユーザー情報を取得
     const { data: userProfile, error: userError } = await supabaseAdmin
@@ -31,7 +30,6 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    console.log('ユーザー取得成功:', userProfile)
 
     // ユーザーのmembershipを取得
     const { data: membership, error: membershipError } = await supabaseAdmin
@@ -51,7 +49,6 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    console.log('membership取得成功:', membership)
 
     return NextResponse.json({
       message: 'テスト成功',
@@ -67,6 +64,7 @@ export async function GET(request: NextRequest) {
     )
   }
 }
+
 
 
 

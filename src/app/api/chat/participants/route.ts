@@ -126,7 +126,7 @@ export async function GET(request: NextRequest) {
           // ユーザーの役割を判定
           let role = 'Member'
           if (membership?.org_id === project.org_id && item.users.id === userProfile.id) {
-            role = membership.role
+            role = membership?.role || 'Member'
           } else if (project.contractor_id === item.users.id) {
             role = 'Contractor'
           } else {

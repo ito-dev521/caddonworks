@@ -14,7 +14,6 @@ const supabaseAdmin = createClient(
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('remove-established-date API: 開始')
 
     // デモ建設株式会社の設立日をnullに更新
     const { data: updatedOrg, error: updateError } = await supabaseAdmin
@@ -35,7 +34,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log('設立日削除成功:', updatedOrg)
 
     return NextResponse.json({
       message: 'デモ建設株式会社の設立日を削除しました',
@@ -50,6 +48,7 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+
 
 
 

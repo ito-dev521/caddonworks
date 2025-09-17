@@ -14,7 +14,6 @@ const supabaseAdmin = createClient(
 
 export async function GET(request: NextRequest) {
   try {
-    console.log('contractsテーブル構造確認開始')
 
     // contractsテーブルの構造を確認
     const { data, error } = await supabaseAdmin
@@ -35,7 +34,6 @@ export async function GET(request: NextRequest) {
       .rpc('get_table_info', { table_name: 'contracts' })
       .single()
 
-    console.log('contractsテーブル構造確認結果:', { data, tableInfo })
 
     return NextResponse.json({
       message: 'contractsテーブル構造確認完了',

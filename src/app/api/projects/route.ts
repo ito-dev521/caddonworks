@@ -2,9 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
 // Service roleキーでSupabaseクライアントを作成（RLSをバイパス）
-console.log('環境変数チェック:')
-console.log('NEXT_PUBLIC_SUPABASE_URL:', process.env.NEXT_PUBLIC_SUPABASE_URL)
-console.log('SUPABASE_SERVICE_ROLE_KEY:', process.env.SUPABASE_SERVICE_ROLE_KEY ? '設定済み' : '未設定')
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -63,8 +60,6 @@ export async function POST(request: NextRequest) {
     }
 
     // ユーザーの組織情報を取得
-    console.log('ユーザーID:', user.id)
-    console.log('ユーザーEmail:', user.email)
     
     // まず、usersテーブルでユーザーが存在するか確認
     const { data: userProfile, error: userError } = await supabaseAdmin
@@ -73,8 +68,6 @@ export async function POST(request: NextRequest) {
       .eq('auth_user_id', user.id)
       .single()
 
-    console.log('ユーザープロフィール:', userProfile)
-    console.log('ユーザープロフィールエラー:', userError)
 
     if (userError || !userProfile) {
       console.error('ユーザープロフィールが見つかりません:', userError)
@@ -96,8 +89,6 @@ export async function POST(request: NextRequest) {
       `)
       .eq('user_id', userProfile.id)
 
-    console.log('メンバーシップ情報:', memberships)
-    console.log('メンバーシップエラー:', membershipError)
 
     if (membershipError || !memberships || memberships.length === 0) {
       console.error('組織情報の取得に失敗:', membershipError)
@@ -144,12 +135,6 @@ export async function POST(request: NextRequest) {
       insertData.required_level = required_level
     }
 
-    console.log('挿入データ:', insertData)
-    console.log('company.id:', company.id)
-    console.log('company:', company)
-
-    // Service roleクライアントのテスト
-    console.log('supabaseAdminクライアント作成完了')
 
     // 認証済みユーザーとして新規案件を作成（RLSをバイパス）
     const { data: projectData, error: projectError } = await supabaseAdmin
@@ -195,14 +180,10 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    console.log('projects API: リクエスト開始')
-    
     // Authorizationヘッダーからユーザー情報を取得
     const authHeader = request.headers.get('authorization')
-    console.log('projects API: 認証ヘッダー', authHeader ? 'あり' : 'なし')
     
     if (!authHeader) {
-      console.log('projects API: 認証ヘッダーなし')
       return NextResponse.json(
         { message: '認証が必要です' },
         { status: 401 }
@@ -210,7 +191,6 @@ export async function GET(request: NextRequest) {
     }
 
     const token = authHeader.replace('Bearer ', '')
-    console.log('projects API: トークン取得完了', token.substring(0, 20) + '...')
     
     const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
     
@@ -222,7 +202,6 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    console.log('projects API: 認証成功, ユーザーID:', user.id, 'Email:', user.email)
 
     // まず、usersテーブルでユーザーが存在するか確認
     const { data: userProfile, error: userError } = await supabaseAdmin

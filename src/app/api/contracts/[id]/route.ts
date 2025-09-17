@@ -90,7 +90,7 @@ export async function GET(
     }
 
     // 関連情報を取得
-    const [projectResult, orgResult, contractorResult] = await Promise.all([
+    const [projectResult, orgResult, contractorResult, orgAdminResult] = await Promise.all([
       supabaseAdmin
         .from('projects')
         .select('id, title')
@@ -105,6 +105,16 @@ export async function GET(
         .from('users')
         .select('id, display_name, email')
         .eq('id', contract.contractor_id)
+        .single(),
+      supabaseAdmin
+        .from('memberships')
+        .select(`
+          user_id,
+          users!inner(id, display_name)
+        `)
+        .eq('org_id', contract.org_id)
+        .eq('role', 'OrgAdmin')
+        .limit(1)
         .single()
     ])
 
@@ -112,6 +122,7 @@ export async function GET(
       ...contract,
       project_title: projectResult.data?.title || contract.contract_title,
       org_name: orgResult.data?.name,
+      org_admin_name: (orgAdminResult.data?.users as any)?.display_name || orgResult.data?.name,
       contractor_name: contractorResult.data?.display_name,
       contractor_email: contractorResult.data?.email
     }

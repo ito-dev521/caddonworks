@@ -14,7 +14,6 @@ const supabaseAdmin = createClient(
 
 export async function GET(request: NextRequest) {
   try {
-    console.log('通知テストAPI: 開始')
 
     // 1. notificationsテーブルの存在確認
     const { data: tableExists, error: tableError } = await supabaseAdmin
@@ -110,7 +109,6 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('通知テスト作成API: 開始')
 
     const body = await request.json()
     const { user_id, type = 'bid_received', title, message, data = {} } = body

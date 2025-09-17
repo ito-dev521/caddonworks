@@ -14,7 +14,6 @@ const supabaseAdmin = createClient(
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('confirm-orgadmin-email API: 開始')
 
     // orgadmin@demo.comのメール確認を有効化
     const { data, error } = await supabaseAdmin.auth.admin.updateUserById(
@@ -32,7 +31,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log('メール確認成功:', data)
 
     return NextResponse.json({
       message: 'orgadmin@demo.comのメール確認を有効化しました',
@@ -47,6 +45,7 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+
 
 
 

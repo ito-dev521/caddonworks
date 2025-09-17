@@ -39,7 +39,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Get initial session
     const getInitialSession = async () => {
       try {
-        console.log('AuthProvider: 初期セッション取得開始')
         const { data: { session }, error } = await supabase.auth.getSession()
         
         if (error) {
@@ -48,24 +47,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return
         }
 
-        console.log('AuthProvider: セッション取得結果:', { 
-          hasSession: !!session, 
-          userId: session?.user?.id,
-          hasAccessToken: !!session?.access_token,
-          tokenLength: session?.access_token?.length
-        })
         
         setUser(session?.user ?? null)
 
         if (session?.user && session?.access_token) {
-          console.log('🚀 AuthProvider: 初期セッション - ユーザープロフィール取得開始')
           // setTimeoutで次のイベントループで実行（React Strict Mode対策）
           setTimeout(() => {
-            console.log('⏱️ setTimeout実行: fetchUserProfile呼び出し (初期セッション)')
             fetchUserProfile(session.user.id)
           }, 0)
         } else {
-          console.log('AuthProvider: セッションまたはトークンなし、ローディング終了')
           setLoading(false)
         }
       } catch (error) {
@@ -84,24 +74,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        const timestamp = new Date().toISOString()
-        console.log(`🔄 [${timestamp}] Auth state change:`, {
-          event,
-          userId: session?.user?.id,
-          hasToken: !!session?.access_token
-        })
         setUser(session?.user ?? null)
 
         if (session?.user && event === 'SIGNED_IN') {
           // ログイン時のみプロフィールを取得（重複を避ける）
-          console.log(`🔑 [${timestamp}] Auth state change: SIGNED_IN, fetching profile`)
           // setTimeoutで次のイベントループで実行（React Strict Mode対策）
           setTimeout(() => {
-            console.log(`⏱️ [${timestamp}] setTimeout実行: fetchUserProfile呼び出し (SIGNED_IN)`)
             fetchUserProfile(session.user.id)
           }, 0)
         } else if (event === 'SIGNED_OUT') {
-          console.log('Auth state change: SIGNED_OUT, clearing profile')
           setUserProfile(null)
           setUserRole(null)
           setUserOrganization(null)
@@ -118,33 +99,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []) // fetchUserProfileを依存配列から削除
 
   const fetchUserProfile = async (authUserId: string) => {
-    const timestamp = new Date().toISOString()
-    const callStack = new Error().stack?.split('\n').slice(1, 4).join(' -> ')
-    console.log(`🔍 [${timestamp}] fetchUserProfile: 開始`, {
-      authUserId,
-      fetchingRef: fetchingRef.current,
-      callStack
-    })
-
     // 重複実行を防ぐ
     if (fetchingRef.current === authUserId) {
-      console.log(`⚠️ [${timestamp}] fetchUserProfile: 既に実行中のためスキップ`, { authUserId })
       return
     }
 
     fetchingRef.current = authUserId
-    console.log(`🏃 [${timestamp}] fetchUserProfile: 実行開始`, { authUserId })
 
     try {
       // Fetch user profile
-      console.log('fetchUserProfile: ユーザープロフィール取得開始')
       const { data: profile, error: profileError } = await supabase
         .from('users')
         .select('*')
         .eq('auth_user_id', authUserId)
         .single()
 
-      console.log('fetchUserProfile: ユーザープロフィール結果', { profile: profile?.id, error: profileError?.message })
 
       if (profileError && profileError.code !== 'PGRST116') {
         console.error('Error fetching user profile:', profileError)
@@ -155,18 +124,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Fetch user role and organization from memberships
       if (profile) {
-        console.log('fetchUserProfile: メンバーシップ取得開始', { profileId: profile.id })
         const { data: membership, error: roleError } = await supabase
           .from('memberships')
           .select('role, org_id')
           .eq('user_id', profile.id)
           .single()
-
-        console.log('fetchUserProfile: メンバーシップ結果', { 
-          role: membership?.role, 
-          org_id: membership?.org_id,
-          error: roleError?.message 
-        })
 
         if (roleError && roleError.code !== 'PGRST116') {
           console.error('Error fetching user role:', roleError)
@@ -195,11 +157,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } else {
           setUserOrganization(null)
         }
-        
-        console.log('fetchUserProfile: 完了', {
-          role: membership?.role,
-          organization: membership?.org_id
-        })
       }
     } catch (error) {
       console.error('Error in fetchUserProfile:', error)
@@ -207,15 +164,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // 実行完了後にfetchingRefをクリア
       fetchingRef.current = null
       setLoading(false) // ローディング状態を解除
-      console.log(`✅ [${timestamp}] fetchUserProfile: 実行完了`, { authUserId })
     }
   }
 
   const signIn = async (email: string, password: string) => {
-    console.log('signIn: 開始', { email })
     setLoading(true)
     try {
-      console.log('signIn: Supabase認証開始')
       
       // タイムアウト処理を追加
       const authPromise = supabase.auth.signInWithPassword({
@@ -229,25 +183,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       const { data, error } = await Promise.race([authPromise, timeoutPromise]) as any
       
-      console.log('signIn: Supabase認証結果', { data: data?.user?.id, error: error?.message })
       if (error) throw error
-      console.log('signIn: 認証成功')
       
       // 認証成功後、ユーザープロフィールを手動で取得
       if (data?.user) {
-        console.log('signIn: ユーザープロフィール取得開始')
         // fetchUserProfileを直接呼び出さず、setTimeoutで遅延実行
         setTimeout(() => {
           fetchUserProfile(data.user.id)
         }, 50)
-        console.log('signIn: ユーザープロフィール取得完了')
       }
       
     } catch (error) {
       console.error('signIn: 認証エラー', error)
       throw error
     } finally {
-      console.log('signIn: 終了')
       setLoading(false)
     }
   }
@@ -310,7 +259,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      console.log('updateProfile: 更新開始', { userId: userProfile.id, updates })
       
       const { data, error } = await supabase
         .from('users')
@@ -324,7 +272,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw error
       }
 
-      console.log('updateProfile: 更新成功', data)
       setUserProfile({ ...userProfile, ...updates })
     } catch (error) {
       console.error('Error updating profile:', error)

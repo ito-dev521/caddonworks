@@ -28,6 +28,7 @@ interface Contract {
   created_at: string
   project_title?: string
   org_name?: string
+  org_admin_name?: string
   contractor_name?: string
   contractor_email?: string
 }
@@ -272,7 +273,7 @@ function ContractDetailPageContent() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <span className="text-sm text-gray-600">発注者:</span>
-                    <p className="font-medium text-gray-900">{contract.org_name}</p>
+                    <p className="font-medium text-gray-900">{contract.org_admin_name || contract.org_name}</p>
                   </div>
                   <div>
                     <span className="text-sm text-gray-600">受注者:</span>
@@ -324,7 +325,10 @@ function ContractDetailPageContent() {
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <h3 className="font-semibold text-gray-900 mb-2">契約書内容</h3>
                   <div className="text-sm text-gray-700 whitespace-pre-line">
-                    {contract.contract_content}
+                    {contract.contract_content
+                      .replace(/受注者: [a-f0-9-]+/g, `受注者: ${contract.contractor_name}`)
+                      .replace(/発注者: [a-f0-9-]+/g, `発注者: ${contract.org_admin_name || contract.org_name}`)
+                    }
                   </div>
                 </div>
 

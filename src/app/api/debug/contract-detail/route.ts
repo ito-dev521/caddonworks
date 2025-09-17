@@ -14,8 +14,6 @@ export async function GET(request: NextRequest) {
       }, { status: 400 })
     }
 
-    console.log('=== 契約詳細デバッグ開始 ===')
-    console.log('契約ID:', contractId)
 
     // 契約情報を取得
     const { data: contract, error: contractError } = await supabaseAdmin
@@ -24,7 +22,6 @@ export async function GET(request: NextRequest) {
       .eq('id', contractId)
       .single()
 
-    console.log('契約取得結果:', { contract, contractError })
 
     if (contractError) {
       return NextResponse.json({
@@ -52,16 +49,7 @@ export async function GET(request: NextRequest) {
         .select('id, display_name, email')
         .eq('id', contract.contractor_id)
         .single()
-    ])
-
-    console.log('関連情報取得結果:', {
-      project: projectResult.data,
-      projectError: projectResult.error,
-      organization: orgResult.data,
-      orgError: orgResult.error,
-      contractor: contractorResult.data,
-      contractorError: contractorResult.error
-    })
+        ])
 
     const contractWithDetails = {
       ...contract,
@@ -72,7 +60,6 @@ export async function GET(request: NextRequest) {
       contractor_email: contractorResult.data?.email
     }
 
-    console.log('=== 契約詳細デバッグ完了 ===')
 
     return NextResponse.json({
       message: '契約詳細取得成功',

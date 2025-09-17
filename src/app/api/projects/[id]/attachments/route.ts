@@ -100,21 +100,17 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     // 認証チェック
     const authHeader = request.headers.get('authorization')
     if (!authHeader) {
-      console.log('認証ヘッダーなし')
       return NextResponse.json({ message: '認証が必要です' }, { status: 401 })
     }
 
     const token = authHeader.replace('Bearer ', '')
-    console.log('認証トークン取得:', { tokenLength: token.length })
     
     const { data: { user }, error: authError } = await supabase.auth.getUser(token)
     
     if (authError || !user) {
-      console.log('認証失敗:', authError)
       return NextResponse.json({ message: '認証に失敗しました' }, { status: 401 })
     }
     
-    console.log('認証成功:', { userId: user.id, email: user.email })
 
     // ユーザープロフィールを取得
     const { data: userProfile, error: userError } = await supabase
@@ -156,20 +152,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     }
 
     // ファイルアップロード処理（簡易実装）
-    console.log('FormData解析開始')
     const formData = await request.formData()
-    console.log('FormData解析完了')
     
-    const file = formData.get('file') as File
-    console.log('ファイル取得:', { 
-      fileName: file?.name, 
-      fileSize: file?.size, 
-      fileType: file?.type,
-      hasFile: !!file 
-    })
+        const file = formData.get('file') as File
 
     if (!file) {
-      console.log('ファイルが選択されていません')
       return NextResponse.json({ message: 'ファイルが選択されていません' }, { status: 400 })
     }
 
@@ -241,7 +228,6 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const filePath = `projects/${projectId}/${fileName}`
 
     // バケットの存在確認（Admin clientを使用）
-    console.log('バケット存在確認開始')
     const supabaseAdmin = createSupabaseAdmin()
     const { data: buckets, error: bucketError } = await supabaseAdmin.storage.listBuckets()
     
@@ -253,11 +239,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       }, { status: 500 })
     }
     
-    const bucketExists = buckets?.some(bucket => bucket.id === 'project-attachments')
-    console.log('バケット存在確認結果:', { 
-      bucketExists, 
-      availableBuckets: buckets?.map(b => b.id) 
-    })
+        const bucketExists = buckets?.some(bucket => bucket.id === 'project-attachments')
     
     if (!bucketExists) {
       console.error('バケットが存在しません:', { 
@@ -271,14 +253,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       }, { status: 404 })
     }
 
-    // Supabase Storageにファイルをアップロード（Admin clientを使用）
-    console.log('ファイルアップロード開始:', {
-      originalFileName: file.name,
-      sanitizedFileName: sanitizedFileName,
-      filePath,
-      fileSize: file.size,
-      fileType: file.type
-    })
+        // Supabase Storageにファイルをアップロード（Admin clientを使用）
 
     const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
       .from('project-attachments')
@@ -300,17 +275,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       }, { status: 400 })
     }
 
-    console.log('ファイルアップロード成功:', uploadData)
 
     // データベースに添付資料情報を保存
-    console.log('データベース保存開始:', {
-      project_id: projectId,
-      file_name: file.name,
-      file_path: filePath,
-      file_size: file.size,
-      file_type: file.type,
-      uploaded_by: userProfile.id
-    })
 
     const { data: attachmentData, error: attachmentError } = await supabaseAdmin
       .from('project_attachments')
@@ -340,16 +306,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       }, { status: 400 })
     }
 
-    console.log('データベース保存成功:', attachmentData)
 
     const endTime = Date.now()
-    const duration = endTime - startTime
-    console.log('ファイルアップロード完了:', { 
-      duration: `${duration}ms`,
-      projectId,
-      fileName: file.name,
-      fileSize: file.size
-    })
+        const duration = endTime - startTime
 
     return NextResponse.json({
       message: 'ファイルが正常にアップロードされました',

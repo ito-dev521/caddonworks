@@ -14,7 +14,6 @@ const supabaseAdmin = createClient(
 
 export async function GET(request: NextRequest) {
   try {
-    console.log('jobs-test API: 開始')
 
     // 案件データを取得（認証なしでテスト）
     const { data: projects, error: projectsError } = await supabaseAdmin
@@ -28,7 +27,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ message: '案件の取得に失敗しました' }, { status: 500 })
     }
 
-    console.log('案件データ取得成功:', { count: projects?.length })
 
     // 組織情報を個別に取得
     const orgIds = Array.from(new Set(projects?.map(p => p.org_id) || []))
@@ -52,7 +50,6 @@ export async function GET(request: NextRequest) {
       org_name: orgMap[project.org_id]?.name || '不明な組織'
     })) || []
 
-    console.log('jobs-test API: レスポンス準備完了', { jobsCount: jobsData.length })
 
     return NextResponse.json({ jobs: jobsData }, { status: 200 })
 

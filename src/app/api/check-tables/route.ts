@@ -14,7 +14,6 @@ const supabaseAdmin = createClient(
 
 export async function GET(request: NextRequest) {
   try {
-    console.log('テーブル存在確認開始')
 
     // 各テーブルの存在確認
     const tables = ['users', 'organizations', 'memberships', 'projects', 'bids', 'contracts', 'notifications']
@@ -37,7 +36,6 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    console.log('テーブル存在確認結果:', results)
 
     return NextResponse.json({
       message: 'テーブル存在確認完了',

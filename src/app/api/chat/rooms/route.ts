@@ -87,15 +87,6 @@ export async function GET(request: NextRequest) {
     // ユーザーがアクセス可能な署名済み契約のプロジェクトをフィルタリング
     const accessibleProjects = contracts?.filter(contract => {
       const project = contract.projects as any
-      console.log('chat-rooms API: プロジェクトフィルタリング', {
-        project_id: project?.id,
-        project_title: project?.title,
-        org_id: project?.org_id,
-        contractor_id: project?.contractor_id,
-        user_id: userProfile.id,
-        membership_org_id: membership?.org_id,
-        membership_role: membership?.role
-      })
       return project && (
         membership?.org_id === project.org_id || 
         project.contractor_id === userProfile.id

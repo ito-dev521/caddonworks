@@ -23,7 +23,6 @@ export async function GET(request: NextRequest) {
 
   try {
     // 現在APIエンドポイントが404を返すため、一時的にモックデータとAPIテストを併用
-    console.log('Searching for:', name || number)
 
     // まず実APIを試行（デバッグ用）
     const params = new URLSearchParams({
@@ -45,7 +44,6 @@ export async function GET(request: NextRequest) {
     }
 
     const apiUrl = `${API_BASE_URL}?${params.toString()}`
-    console.log('Testing API URL:', apiUrl.replace(APPLICATION_ID, '***'))
 
     try {
       const response = await fetch(apiUrl, {
@@ -56,11 +54,9 @@ export async function GET(request: NextRequest) {
         }
       })
 
-      console.log('API Test - Status:', response.status)
 
       if (response.ok) {
         const responseText = await response.text()
-        console.log('API Success - Response length:', responseText.length)
 
         try {
           const data = JSON.parse(responseText)
@@ -68,15 +64,12 @@ export async function GET(request: NextRequest) {
             return NextResponse.json(data)
           }
         } catch (parseError) {
-          console.log('API parse error, falling back to mock data')
         }
       }
     } catch (apiError) {
-      console.log('API request failed, falling back to mock data:', apiError)
     }
 
     // APIが失敗した場合はモックデータを返す
-    console.log('Using mock data for search term:', name)
 
     const mockCorporations = []
     if (name) {
@@ -178,7 +171,6 @@ export async function GET(request: NextRequest) {
       corporations: mockCorporations
     }
 
-    console.log('Returning mock data with', mockCorporations.length, 'corporations')
     return NextResponse.json(mockResponse)
 
   } catch (error) {

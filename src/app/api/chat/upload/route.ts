@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
     
     const fileExtension = file.name.split('.').pop()?.toLowerCase()
     const isAllowedExtension = allowedExtensions.includes(fileExtension || '')
-    const isVideoFile = ['mp4', 'avi', 'mov', 'wmv', 'flv', 'webm', 'mkv'].includes(fileExtension || '')
+    const isVideoFileByExtension = ['mp4', 'avi', 'mov', 'wmv', 'flv', 'webm', 'mkv'].includes(fileExtension || '')
     
     if (!isAllowedExtension) {
       return NextResponse.json(

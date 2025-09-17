@@ -14,7 +14,6 @@ const supabaseAdmin = createClient(
 
 export async function GET(request: NextRequest) {
   try {
-    console.log('bidsテーブル構造確認開始')
 
     // bidsテーブルの構造を確認
     const { data: tableInfo, error: tableError } = await supabaseAdmin

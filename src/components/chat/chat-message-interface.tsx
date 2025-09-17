@@ -276,14 +276,6 @@ export function ChatMessageInterface({
         formData.append('reply_to', replyingTo.id)
       }
 
-      console.log('ファイルアップロード開始:', {
-        fileName: file.name,
-        fileSize: file.size,
-        fileType: file.type,
-        roomId,
-        comment
-      })
-
       // APIエンドポイント経由でファイルをアップロード
       const response = await fetch('/api/chat/upload', {
         method: 'POST',
@@ -296,7 +288,6 @@ export function ChatMessageInterface({
       const result = await response.json()
 
       if (response.ok) {
-        console.log('ファイルアップロード成功:', result)
         // メッセージ一覧を再取得
         fetchMessages()
         // モーダルを閉じる
@@ -446,26 +437,6 @@ export function ChatMessageInterface({
           {messages.map((message) => {
             const isOwnMessage = message.sender_id === user?.id
             const showAvatar = !isOwnMessage
-            
-            // デバッグ用ログ
-            console.log('メッセージデータ:', {
-              id: message.id,
-              content: message.content,
-              reply_to: message.reply_to,
-              reply_message: message.reply_message,
-              sender: message.sender
-            })
-            
-            // 返信データの詳細ログ
-            if (message.reply_to) {
-              console.log('返信データ詳細:', {
-                reply_to: message.reply_to,
-                reply_message: message.reply_message,
-                has_reply_message: !!message.reply_message,
-                reply_message_content: message.reply_message?.content,
-                reply_message_sender: message.reply_message?.sender_name
-              })
-            }
 
             return (
               <motion.div
@@ -707,7 +678,7 @@ export function ChatMessageInterface({
 
       {/* Reply Preview */}
       <ReplyMessage 
-        replyTo={replyTo} 
+        replyTo={replyTo || undefined} 
         onCancel={handleCancelReply}
         className="px-4 py-2 bg-gray-50 border-t"
       />

@@ -114,7 +114,6 @@ function ProjectsPageContent() {
         return
       }
 
-      console.log('fetchProjects: APIリクエスト開始')
       const response = await fetch('/api/projects', {
         method: 'GET',
         headers: {
@@ -122,12 +121,9 @@ function ProjectsPageContent() {
         }
       })
 
-      console.log('fetchProjects: APIレスポンス', response.status, response.statusText)
       const result = await response.json()
-      console.log('fetchProjects: API結果', result)
 
       if (response.ok) {
-        console.log('fetchProjects: 成功, 案件数:', result.projects?.length || 0)
         setProjects(result.projects || [])
         setFilteredProjects(result.projects || [])
       } else {
@@ -491,7 +487,6 @@ function ProjectsPageContent() {
       })
 
       if (response.ok) {
-        console.log('請求書が作成されました')
       }
     } catch (error) {
       console.error('請求書作成エラー:', error)
@@ -532,37 +527,18 @@ function ProjectsPageContent() {
 
   const uploadFile = async (projectId: string, file: File) => {
     setIsUploadingFile(true)
-    console.log('=== フロントエンド: ファイルアップロード開始 ===', { 
-      projectId, 
-      fileName: file.name, 
-      fileSize: file.size,
-      fileType: file.type,
-      timestamp: new Date().toISOString()
-    })
     
     try {
-      console.log('セッション取得開始')
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
         console.error('セッションがありません')
         alert('ログインが必要です')
         return
       }
-      console.log('セッション取得成功:', { 
-        hasAccessToken: !!session.access_token,
-        tokenLength: session.access_token?.length 
-      })
 
-      console.log('FormData作成開始')
       const formData = new FormData()
       formData.append('file', file)
-      console.log('FormData作成完了')
 
-      console.log('APIリクエスト送信開始:', {
-        url: `/api/projects/${projectId}/attachments`,
-        method: 'POST',
-        hasAuthHeader: !!session.access_token
-      })
       
       // タイムアウト処理を追加（5分）
       const controller = new AbortController()
@@ -581,15 +557,8 @@ function ProjectsPageContent() {
       })
 
       clearTimeout(timeoutId)
-      console.log('=== フロントエンド: APIレスポンス受信 ===', { 
-        status: response.status, 
-        statusText: response.statusText,
-        headers: Object.fromEntries(response.headers.entries())
-      })
 
-      console.log('レスポンスJSON解析開始')
       const result = await response.json()
-      console.log('=== フロントエンド: APIレスポンス解析完了 ===', result)
 
       if (response.ok) {
         alert('ファイルが正常にアップロードされました')
@@ -626,9 +595,6 @@ function ProjectsPageContent() {
       }
     } finally {
       setIsUploadingFile(false)
-      console.log('=== フロントエンド: ファイルアップロード処理完了 ===', {
-        timestamp: new Date().toISOString()
-      })
     }
   }
 

@@ -16,7 +16,6 @@ export async function GET(request: NextRequest) {
       created_at: new Date().toISOString()
     }
 
-    console.log('最小限テストデータ:', minimalData)
 
     const { data: insertResult, error: insertError } = await supabaseAdmin
       .from('invoices')

@@ -25,16 +25,13 @@ export async function GET(request: NextRequest) {
           const arrayBuffer = await res.arrayBuffer()
           const bytes = new Uint8Array(arrayBuffer)
           font = await pdfDoc.embedFont(bytes, { subset: false })
-          console.log('Japanese font loaded successfully from Google Fonts')
         } else {
           throw new Error(`Font fetch failed: ${res.status}`)
         }
       } catch (e) {
-        console.log('Failed to load Japanese font:', e)
       }
       if (!font) {
         font = await pdfDoc.embedFont(StandardFonts.Helvetica)
-        console.log('Using fallback Helvetica font')
       }
     }
     await tryLoadJapaneseFont()

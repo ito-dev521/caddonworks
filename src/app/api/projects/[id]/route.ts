@@ -167,26 +167,11 @@ export async function PUT(
 
     // リクエストボディを取得
     const body = await request.json()
-    const { title, description, budget, start_date, end_date, category, required_contractors, required_level, assignee_name, status, isStatusUpdate } = body
-
-    // デバッグ用ログ
-    console.log('案件更新リクエスト:', {
-      projectId,
-      isStatusUpdate,
-      status,
-      hasTitle: !!title,
-      hasDescription: !!description,
-      hasBudget: budget !== undefined,
-      hasStartDate: !!start_date,
-      hasEndDate: !!end_date,
-      hasCategory: !!category,
-      hasRequiredContractors: required_contractors !== undefined
-    })
+        const { title, description, budget, start_date, end_date, category, required_contractors, required_level, assignee_name, status, isStatusUpdate } = body
 
     // ステータス更新のみの場合は必須フィールドの検証をスキップ
     const isStatusOnlyUpdate = isStatusUpdate === true
     
-    console.log('ステータス更新判定:', { isStatusOnlyUpdate, isStatusUpdate })
 
     // 通常の更新時のみ必須フィールドの検証
     if (!isStatusOnlyUpdate && (!title || !description || !budget || !start_date || !end_date || !category || !required_contractors)) {

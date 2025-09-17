@@ -14,7 +14,6 @@ const supabaseAdmin = createClient(
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('fix-admin-membership API: 開始')
 
     // 1. 発注者ユーザーを取得
     const { data: adminUser, error: userError } = await supabaseAdmin
@@ -30,7 +29,6 @@ export async function POST(request: NextRequest) {
       }, { status: 404 })
     }
 
-    console.log('fix-admin-membership API: 発注者ユーザー取得完了', adminUser.id)
 
     // 2. デモ建設株式会社を取得
     const { data: demoOrg, error: orgError } = await supabaseAdmin
@@ -46,7 +44,6 @@ export async function POST(request: NextRequest) {
       }, { status: 404 })
     }
 
-    console.log('fix-admin-membership API: デモ建設株式会社取得完了', demoOrg.id)
 
     // 3. 既存のメンバーシップを削除
     const { error: deleteError } = await supabaseAdmin
@@ -55,9 +52,7 @@ export async function POST(request: NextRequest) {
       .eq('user_id', adminUser.id)
 
     if (deleteError) {
-      console.log('fix-admin-membership API: 既存メンバーシップ削除エラー（無視）', deleteError.message)
     } else {
-      console.log('fix-admin-membership API: 既存メンバーシップ削除完了')
     }
 
     // 4. 新しいメンバーシップを作成
@@ -79,18 +74,12 @@ export async function POST(request: NextRequest) {
       }, { status: 500 })
     }
 
-    console.log('fix-admin-membership API: メンバーシップ作成完了', membership)
 
     // 5. 確認：発注者の案件を取得
     const { data: projects, error: projectsError } = await supabaseAdmin
       .from('projects')
       .select('*')
-      .eq('org_id', demoOrg.id)
-
-    console.log('fix-admin-membership API: 発注者の案件確認', { 
-      count: projects?.length || 0, 
-      error: projectsError?.message 
-    })
+          .eq('org_id', demoOrg.id)
 
     return NextResponse.json({
       message: '発注者の組織所属を修正しました',
