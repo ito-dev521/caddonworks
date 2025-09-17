@@ -663,7 +663,15 @@ function ContractsPageContent() {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => router.push(`/contracts/${project.id}`)}
+                              onClick={() => {
+                                // プロジェクトに対応する契約IDを取得
+                                const contract = contracts.find(c => c.project_id === project.id)
+                                if (contract) {
+                                  router.push(`/contracts/${contract.id}`)
+                                } else {
+                                  alert('この案件の契約情報が見つかりません')
+                                }
+                              }}
                             >
                               <Eye className="w-4 h-4 mr-2" />
                               詳細

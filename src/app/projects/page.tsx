@@ -517,7 +517,7 @@ function ProjectsPageContent() {
       const result = await response.json()
 
       if (response.ok) {
-        setAttachments(result.attachments)
+        setAttachments(result.attachments || [])
       } else {
         console.error('添付資料取得エラー:', result.message)
         setAttachments([])

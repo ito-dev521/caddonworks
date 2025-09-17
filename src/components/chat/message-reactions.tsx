@@ -2,10 +2,11 @@
 
 import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Smile, ThumbsUp, Heart, Laugh, Sad, Angry } from 'lucide-react'
+import { Smile, ThumbsUp, Heart, Laugh, Frown, Angry } from 'lucide-react'
 import { Button } from '../ui/button'
 import { useAuth } from '@/contexts/auth-context'
 import { cn } from '@/lib/utils'
+import { supabase } from '@/lib/supabase'
 
 interface Reaction {
   id: string
@@ -24,8 +25,9 @@ const REACTION_TYPES = [
   // 基本の感情
   { type: '👍', icon: ThumbsUp, label: 'いいね', category: 'basic' },
   { type: '❤️', icon: Heart, label: 'ハート', category: 'basic' },
+  { type: '🙏', icon: Smile, label: 'ありがとう', category: 'basic' },
   { type: '😂', icon: Laugh, label: '笑い', category: 'basic' },
-  { type: '😢', icon: Sad, label: '悲しい', category: 'basic' },
+  { type: '😢', icon: Frown, label: '悲しい', category: 'basic' },
   { type: '😡', icon: Angry, label: '怒り', category: 'basic' },
   { type: '😊', icon: Smile, label: '笑顔', category: 'basic' },
   
@@ -37,7 +39,7 @@ const REACTION_TYPES = [
   { type: '😎', icon: Smile, label: 'クール', category: 'emotion' },
   { type: '🥺', icon: Smile, label: 'お願い', category: 'emotion' },
   { type: '🤯', icon: Smile, label: 'びっくり', category: 'emotion' },
-  { type: '😭', icon: Sad, label: '大泣き', category: 'emotion' },
+  { type: '😭', icon: Frown, label: '大泣き', category: 'emotion' },
   { type: '🤩', icon: Smile, label: '興奮', category: 'emotion' },
   { type: '😤', icon: Angry, label: 'むかつく', category: 'emotion' },
   
@@ -50,6 +52,8 @@ const REACTION_TYPES = [
   { type: '🎉', icon: Smile, label: 'お祝い', category: 'action' },
   { type: '💯', icon: ThumbsUp, label: '完璧', category: 'action' },
   { type: '🚀', icon: Smile, label: 'ロケット', category: 'action' },
+  { type: '🙇‍♂️', icon: Smile, label: 'お辞儀', category: 'action' },
+  { type: '🙇‍♀️', icon: Smile, label: 'お辞儀', category: 'action' },
   
   // 食べ物・飲み物
   { type: '☕', icon: Smile, label: 'コーヒー', category: 'food' },
@@ -67,18 +71,41 @@ const REACTION_TYPES = [
 ]
 
 export function MessageReactions({ messageId, className }: MessageReactionsProps) {
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   const [reactions, setReactions] = useState<Record<string, Reaction[]>>({})
   const [showPicker, setShowPicker] = useState(false)
+  
+  // showPickerの状態変化をデバッグ
+  useEffect(() => {
+    console.log('showPicker状態変化:', showPicker)
+  }, [showPicker])
   const [loading, setLoading] = useState(false)
 
   // リアクション一覧を取得
   const fetchReactions = async () => {
     try {
-      const response = await fetch(`/api/chat/reactions?message_id=${messageId}`)
+      console.log('リアクション取得開始:', messageId)
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        console.log('セッションが見つかりません')
+        return
+      }
+
+      console.log('セッション取得成功:', session.user.id)
+      const response = await fetch(`/api/chat/reactions?message_id=${messageId}`, {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`
+        }
+      })
+      
+      console.log('リアクション取得レスポンス:', response.status)
       if (response.ok) {
         const data = await response.json()
+        console.log('リアクションデータ:', data)
         setReactions(data.reactions || {})
+      } else {
+        const errorData = await response.json()
+        console.error('リアクション取得エラー:', errorData)
       }
     } catch (error) {
       console.error('リアクション取得エラー:', error)
@@ -86,22 +113,39 @@ export function MessageReactions({ messageId, className }: MessageReactionsProps
   }
 
   useEffect(() => {
-    fetchReactions()
-  }, [messageId])
+    console.log('MessageReactions useEffect: user, authLoading', { user, authLoading })
+    if (!authLoading && user) {
+      fetchReactions()
+    }
+  }, [messageId, user, authLoading])
 
   // リアクションを追加/削除
   const toggleReaction = async (reactionType: string) => {
-    if (!user) return
+    console.log('リアクション操作開始:', { reactionType, messageId, user: user?.id, authLoading })
+    
+    if (!user) {
+      console.log('リアクション操作失敗: ユーザーが見つかりません')
+      return
+    }
 
     setLoading(true)
     try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        console.log('セッションが見つかりません')
+        return
+      }
+
       const userReaction = reactions[reactionType]?.find(r => r.user_id === user.id)
       const action = userReaction ? 'remove' : 'add'
+      
+      console.log('リアクション操作:', { action, userReaction, reactionType })
 
       const response = await fetch('/api/chat/reactions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
         },
         body: JSON.stringify({
           message_id: messageId,
@@ -110,8 +154,14 @@ export function MessageReactions({ messageId, className }: MessageReactionsProps
         })
       })
 
+      console.log('リアクション操作レスポンス:', response.status)
       if (response.ok) {
+        const result = await response.json()
+        console.log('リアクション操作成功:', result)
         await fetchReactions() // リアクション一覧を再取得
+      } else {
+        const errorData = await response.json()
+        console.error('リアクション操作エラー:', errorData)
       }
     } catch (error) {
       console.error('リアクション操作エラー:', error)
@@ -130,7 +180,10 @@ export function MessageReactions({ messageId, className }: MessageReactionsProps
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => setShowPicker(true)}
+          onClick={() => {
+            console.log('最初のリアクションボタンクリック')
+            setShowPicker(true)
+          }}
           className="h-6 px-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100"
         >
           <Smile className="h-3 w-3" />
@@ -140,7 +193,7 @@ export function MessageReactions({ messageId, className }: MessageReactionsProps
   }
 
   return (
-    <div className={cn("flex items-center gap-1 flex-wrap", className)}>
+    <div className={cn("flex items-center gap-1 flex-wrap relative", className)}>
       {/* 既存のリアクション表示 */}
       {Object.entries(reactions).map(([type, reactionList]) => {
         const userReacted = reactionList.some(r => r.user_id === user?.id)
@@ -173,64 +226,153 @@ export function MessageReactions({ messageId, className }: MessageReactionsProps
           </motion.div>
         )
       })}
-
-      {/* リアクションピッカー */}
-      <AnimatePresence>
-        {showPicker && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.8, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.8, y: 10 }}
-            className="absolute bottom-full left-0 mb-2 bg-white border border-gray-200 rounded-lg shadow-xl p-4 z-10 w-80 max-h-96 overflow-y-auto"
-          >
-            {/* カテゴリ別にリアクションを表示 */}
-            {['basic', 'emotion', 'action', 'food', 'other'].map(category => {
-              const categoryReactions = REACTION_TYPES.filter(r => r.category === category)
-              if (categoryReactions.length === 0) return null
-              
-              return (
-                <div key={category} className="mb-4 last:mb-0">
-                  <div className="text-xs font-medium text-gray-500 mb-2 px-1">
-                    {category === 'basic' && '基本'}
-                    {category === 'emotion' && '感情'}
-                    {category === 'action' && 'アクション'}
-                    {category === 'food' && '食べ物・飲み物'}
-                    {category === 'other' && 'その他'}
+      
+      {/* 統合されたリアクション詳細ポップアップ */}
+      {totalReactions > 0 && (
+        <div className="relative group">
+          <div className="h-7 px-2 flex items-center text-xs text-gray-500 cursor-pointer hover:text-gray-700">
+            詳細
+          </div>
+          
+          {/* 全リアクションの統合ポップアップ */}
+          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 bg-white border border-gray-200 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 min-w-64 max-w-80">
+            {/* ヘッダー */}
+            <div className="px-4 py-3 border-b border-gray-100">
+              <h3 className="text-sm font-semibold text-gray-900">リアクション詳細</h3>
+              <p className="text-xs text-gray-500 mt-1">合計 {totalReactions} 件のリアクション</p>
+            </div>
+            
+            {/* リアクション別ユーザーリスト */}
+            <div className="max-h-64 overflow-y-auto">
+              {Object.entries(reactions).map(([type, reactionList]) => (
+                <div key={type} className="border-b border-gray-50 last:border-b-0">
+                  {/* リアクションタイプヘッダー */}
+                  <div className="px-4 py-2 bg-gray-50 flex items-center gap-2">
+                    <span className="text-lg">{type}</span>
+                    <span className="text-sm font-medium text-gray-700">{reactionList.length}人</span>
                   </div>
-                  <div className="grid grid-cols-8 gap-1">
-                    {categoryReactions.map(({ type, label }) => (
-                      <Button
-                        key={type}
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => toggleReaction(type)}
-                        disabled={loading}
-                        className="h-8 w-8 p-0 hover:bg-gray-100 rounded-md"
-                        title={label}
-                      >
-                        <span className="text-lg">{type}</span>
-                      </Button>
+                  
+                  {/* ユーザーリスト */}
+                  <div className="py-1">
+                    {reactionList.map((reaction) => (
+                      <div key={reaction.id} className="px-4 py-2 hover:bg-gray-50 flex items-center gap-3">
+                        {/* アバター */}
+                        <div 
+                          className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-medium"
+                          style={{
+                            background: `linear-gradient(135deg, 
+                              hsl(${(reaction.user_id.charCodeAt(0) * 137.5) % 360}, 70%, 60%), 
+                              hsl(${(reaction.user_id.charCodeAt(1) * 137.5) % 360}, 70%, 50%)
+                            )`
+                          }}
+                        >
+                          {reaction.display_name?.charAt(0) || '?'}
+                        </div>
+                        
+                        {/* ユーザー名 */}
+                        <div className="flex-1">
+                          <span className="text-sm text-gray-900">{reaction.display_name}</span>
+                          {reaction.user_id === user?.id && (
+                            <span className="text-xs text-blue-600 ml-2">(あなた)</span>
+                          )}
+                        </div>
+                      </div>
                     ))}
                   </div>
                 </div>
-              )
-            })}
-            
-            {/* ツールチップ */}
-            <div className="mt-3 pt-2 border-t border-gray-100">
-              <div className="text-xs text-gray-500 text-center">
-                リアクションを選択する
-              </div>
+              ))}
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            
+            {/* 矢印 */}
+            <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-white"></div>
+            <div className="absolute top-full left-1/2 transform -translate-x-1/2 -mt-px w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-200"></div>
+          </div>
+        </div>
+      )}
+
+      {/* リアクションピッカー */}
+      {showPicker && (
+        <div 
+          style={{ 
+            position: 'fixed', 
+            top: '50%', 
+            left: '50%', 
+            transform: 'translate(-50%, -50%)',
+            backgroundColor: 'white',
+            border: '1px solid #e5e7eb',
+            padding: '20px',
+            zIndex: 10000,
+            borderRadius: '8px',
+            boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+            width: '320px',
+            maxHeight: '400px',
+            overflowY: 'auto'
+          }}
+        >
+          <div className="text-center mb-4">
+            <h3 className="text-lg font-semibold">リアクションを選択</h3>
+          </div>
+          
+          {/* カテゴリ別にリアクションを表示 */}
+          {['basic', 'emotion', 'action'].map(category => {
+            const categoryReactions = REACTION_TYPES.filter(r => r.category === category)
+            if (categoryReactions.length === 0) return null
+            
+            return (
+              <div key={category} className="mb-4 last:mb-0">
+                <div className="text-xs font-medium text-gray-500 mb-2 px-1">
+                  {category === 'basic' && '基本'}
+                  {category === 'emotion' && '感情'}
+                  {category === 'action' && 'アクション'}
+                  {category === 'food' && '食べ物・飲み物'}
+                  {category === 'other' && 'その他'}
+                </div>
+                <div className="grid grid-cols-8 gap-1">
+                  {categoryReactions.map(({ type, label }) => (
+                    <button
+                      key={type}
+                      onClick={() => {
+                        console.log('リアクション選択:', type, label)
+                        toggleReaction(type)
+                      }}
+                      disabled={loading}
+                      className="h-8 w-8 p-0 hover:bg-gray-100 rounded-md border border-transparent hover:border-gray-200 transition-colors"
+                      title={label}
+                      style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center',
+                        fontSize: '18px'
+                      }}
+                    >
+                      {type}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+          
+          {/* 閉じるボタン */}
+          <div className="mt-4 pt-3 border-t border-gray-100 text-center">
+            <button
+              onClick={() => setShowPicker(false)}
+              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-md transition-colors"
+            >
+              閉じる
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* リアクション追加ボタン */}
       <Button
         variant="ghost"
         size="sm"
-        onClick={() => setShowPicker(!showPicker)}
+        onClick={() => {
+          console.log('リアクションピッカーボタンクリック:', !showPicker)
+          setShowPicker(!showPicker)
+        }}
         className="h-6 px-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100"
       >
         <Smile className="h-3 w-3" />

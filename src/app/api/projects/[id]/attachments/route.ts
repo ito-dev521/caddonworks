@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { supabase, createSupabaseAdmin } from '@/lib/supabase'
 
 // 添付資料の一覧取得
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
@@ -19,8 +19,48 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ message: '認証に失敗しました' }, { status: 401 })
     }
 
-    // 案件の添付資料を取得
-    const { data: attachments, error: attachmentsError } = await supabase
+    // ユーザープロフィールを取得
+    const { data: userProfile, error: userError } = await supabase
+      .from('users')
+      .select('id, email, display_name')
+      .eq('auth_user_id', user.id)
+      .single()
+
+    if (userError || !userProfile) {
+      return NextResponse.json({ message: 'ユーザープロフィールが見つかりません' }, { status: 403 })
+    }
+
+    // 案件の存在確認
+    const { data: project, error: projectError } = await supabase
+      .from('projects')
+      .select('id, org_id, title')
+      .eq('id', projectId)
+      .single()
+
+    if (projectError || !project) {
+      return NextResponse.json({ message: '案件が見つかりません' }, { status: 404 })
+    }
+
+    // ユーザーの権限チェック（発注者または受注者）
+    const { data: membership, error: membershipError } = await supabase
+      .from('memberships')
+      .select('role, org_id')
+      .eq('user_id', userProfile.id)
+      .eq('org_id', project.org_id)
+      .single()
+
+    if (membershipError || !membership) {
+      return NextResponse.json({ message: 'この案件へのアクセス権限がありません' }, { status: 403 })
+    }
+
+    // 権限チェック（発注者または受注者）
+    if (!['OrgAdmin', 'Contractor'].includes(membership.role)) {
+      return NextResponse.json({ message: '添付資料の閲覧権限がありません' }, { status: 403 })
+    }
+
+    // Admin clientを使用して添付資料を取得
+    const supabaseAdmin = createSupabaseAdmin()
+    const { data: attachments, error: attachmentsError } = await supabaseAdmin
       .from('project_attachments')
       .select(`
         id,
@@ -42,7 +82,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ message: '添付資料の取得に失敗しました' }, { status: 400 })
     }
 
-    return NextResponse.json({ attachments }, { status: 200 })
+    return NextResponse.json({ attachments: attachments || [] }, { status: 200 })
 
   } catch (error) {
     console.error('添付資料取得エラー:', error)
@@ -53,7 +93,6 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 // 添付資料のアップロード
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   const startTime = Date.now()
-  console.log('=== ファイルアップロード開始 ===', { projectId: params.id, timestamp: new Date().toISOString() })
   
   try {
     const { id: projectId } = params
@@ -178,14 +217,33 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       }, { status: 400 })
     }
 
+    // ファイル名のサニタイズ（日本語文字や特殊文字を安全な文字に変換）
+    const sanitizeFileName = (fileName: string) => {
+      // ファイル名から拡張子を分離
+      const lastDotIndex = fileName.lastIndexOf('.')
+      const nameWithoutExt = lastDotIndex > 0 ? fileName.substring(0, lastDotIndex) : fileName
+      const extension = lastDotIndex > 0 ? fileName.substring(lastDotIndex) : ''
+      
+      // 日本語文字や特殊文字を安全な文字に変換
+      const sanitizedName = nameWithoutExt
+        .replace(/[^\w\-_.]/g, '_') // 英数字、ハイフン、アンダースコア、ドット以外をアンダースコアに変換
+        .replace(/_{2,}/g, '_') // 連続するアンダースコアを1つに
+        .replace(/^_|_$/g, '') // 先頭と末尾のアンダースコアを削除
+        .substring(0, 100) // ファイル名の長さを制限
+      
+      return sanitizedName + extension
+    }
+
     // ファイル名の生成（重複回避）
     const timestamp = Date.now()
-    const fileName = `${timestamp}_${file.name}`
+    const sanitizedFileName = sanitizeFileName(file.name)
+    const fileName = `${timestamp}_${sanitizedFileName}`
     const filePath = `projects/${projectId}/${fileName}`
 
-    // バケットの存在確認
+    // バケットの存在確認（Admin clientを使用）
     console.log('バケット存在確認開始')
-    const { data: buckets, error: bucketError } = await supabase.storage.listBuckets()
+    const supabaseAdmin = createSupabaseAdmin()
+    const { data: buckets, error: bucketError } = await supabaseAdmin.storage.listBuckets()
     
     if (bucketError) {
       console.error('バケット一覧取得エラー:', bucketError)
@@ -213,15 +271,16 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       }, { status: 404 })
     }
 
-    // Supabase Storageにファイルをアップロード
+    // Supabase Storageにファイルをアップロード（Admin clientを使用）
     console.log('ファイルアップロード開始:', {
+      originalFileName: file.name,
+      sanitizedFileName: sanitizedFileName,
       filePath,
-      fileName: file.name,
       fileSize: file.size,
       fileType: file.type
     })
 
-    const { data: uploadData, error: uploadError } = await supabase.storage
+    const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
       .from('project-attachments')
       .upload(filePath, file)
 
@@ -253,12 +312,12 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       uploaded_by: userProfile.id
     })
 
-    const { data: attachmentData, error: attachmentError } = await supabase
+    const { data: attachmentData, error: attachmentError } = await supabaseAdmin
       .from('project_attachments')
       .insert({
         project_id: projectId,
-        file_name: file.name,
-        file_path: filePath,
+        file_name: file.name, // 元のファイル名を保存
+        file_path: filePath, // サニタイズされたファイルパス
         file_size: file.size,
         file_type: file.type,
         uploaded_by: userProfile.id
@@ -273,7 +332,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         uploaded_by: userProfile.id
       })
       // アップロードしたファイルを削除
-      await supabase.storage.from('project-attachments').remove([filePath])
+      await supabaseAdmin.storage.from('project-attachments').remove([filePath])
       return NextResponse.json({ 
         message: '添付資料の保存に失敗しました',
         error: attachmentError.message,
@@ -285,7 +344,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     const endTime = Date.now()
     const duration = endTime - startTime
-    console.log('=== ファイルアップロード完了 ===', { 
+    console.log('ファイルアップロード完了:', { 
       duration: `${duration}ms`,
       projectId,
       fileName: file.name,

@@ -1,26 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createSupabaseAdmin } from '@/lib/supabase'
 
 export async function POST(request: NextRequest) {
   try {
+    console.log('=== 請求書作成API開始 ===')
     const authHeader = request.headers.get('authorization')
     if (!authHeader) {
+      console.log('認証ヘッダーなし')
       return NextResponse.json({ message: '認証が必要です' }, { status: 401 })
     }
 
     const token = authHeader.replace('Bearer ', '')
 
     // Supabaseクライアントを作成
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false
-        }
-      }
-    )
+    const supabaseAdmin = createSupabaseAdmin()
 
     const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
 
@@ -96,49 +89,55 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: '組織情報が見つかりません' }, { status: 404 })
     }
 
+    // 契約データの存在確認
+    const { data: contract, error: contractError } = await supabaseAdmin
+      .from('contracts')
+      .select('id, status, bid_amount')
+      .eq('project_id', project_id)
+      .eq('contractor_id', project.contractor_id)
+      .eq('status', 'signed')
+      .single()
+
+    if (contractError || !contract) {
+      return NextResponse.json({ message: '契約が見つかりません' }, { status: 404 })
+    }
+
     // 請求書番号を生成
     const invoiceNumber = `INV-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`
 
-    // 請求書データを作成
+    // 請求書データを作成（実際のテーブル構造に合わせて）
+    const contractAmount = contract.bid_amount || project.budget || 0
+    const systemFee = 50000 // システム手数料（デフォルト値）
+    const totalAmount = contractAmount + systemFee
+    
     const invoiceData = {
-      id: crypto.randomUUID(),
-      project_id: project_id,
-      invoice_number: invoiceNumber,
-      contractor_id: project.contractor_id,
-      org_id: project.org_id,
-      amount: project.budget,
-      tax_rate: 0.1, // 10%
-      tax_amount: Math.floor(project.budget * 0.1),
-      total_amount: Math.floor(project.budget * 1.1),
-      issue_date: new Date().toISOString(),
-      due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30日後
+      client_org_id: project.org_id,
+      base_amount: contractAmount,
+      fee_amount: 0, // 追加手数料（今回は0）
+      system_fee: systemFee,
+      total_amount: totalAmount,
       status: 'issued',
-      description: `案件「${project.title}」の完了に伴う請求書`,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      // 請求書詳細情報
-      billing_details: {
-        project_title: project.title,
-        project_description: project.description,
-        contract_period: `${project.start_date} - ${project.end_date}`,
-        contractor_name: contractor.display_name,
-        contractor_email: contractor.email,
-        organization_name: organization.name,
-        organization_contact: organization.contact_person,
-        organization_address: organization.address,
-        organization_phone: organization.phone,
-        organization_email: organization.email
-      }
+      issue_date: new Date().toISOString().split('T')[0], // YYYY-MM-DD形式
+      due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30日後
+      org_id: project.org_id,
+      contractor_id: project.contractor_id,
+      contract_id: contract.id
     }
 
     // 請求書をデータベースに保存
-    const { error: invoiceError } = await supabaseAdmin
+    const { data: insertedInvoice, error: invoiceError } = await supabaseAdmin
       .from('invoices')
       .insert(invoiceData)
+      .select()
+      .single()
 
     if (invoiceError) {
       console.error('請求書作成エラー:', invoiceError)
-      return NextResponse.json({ message: '請求書の作成に失敗しました' }, { status: 500 })
+      return NextResponse.json({ 
+        message: '請求書の作成に失敗しました', 
+        error: invoiceError.message,
+        details: invoiceError 
+      }, { status: 500 })
     }
 
     // 通知を作成（受注者向け）
@@ -147,10 +146,9 @@ export async function POST(request: NextRequest) {
       .insert({
         user_id: project.contractor_id,
         title: '請求書が発行されました',
-        message: `案件「${project.title}」の請求書（${invoiceNumber}）が発行されました。`,
+        message: `案件「${project.title}」の請求書（${invoiceNumber}）が発行されました。金額: ¥${totalAmount.toLocaleString()}`,
         type: 'invoice',
-        related_id: project_id,
-        created_at: new Date().toISOString()
+        related_id: project_id
       })
 
     if (notificationError) {
@@ -164,8 +162,9 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('請求書作成APIエラー:', error)
+    console.error('エラー詳細:', error instanceof Error ? error.message : 'Unknown error')
     return NextResponse.json(
-      { message: 'サーバーエラーが発生しました' },
+      { message: 'サーバーエラーが発生しました', error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     )
   }
@@ -181,16 +180,7 @@ export async function GET(request: NextRequest) {
     const token = authHeader.replace('Bearer ', '')
 
     // Supabaseクライアントを作成
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false
-        }
-      }
-    )
+    const supabaseAdmin = createSupabaseAdmin()
 
     const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
 

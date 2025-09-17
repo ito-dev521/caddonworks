@@ -370,6 +370,7 @@ function JobsPageContent() {
 
   // 添付資料を取得する関数
   const loadAttachments = async (projectId: string) => {
+    console.log('=== 受注者側: 添付資料読み込み開始 ===', { projectId })
     setLoadingAttachments(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
@@ -377,6 +378,11 @@ function JobsPageContent() {
         console.error('セッションが見つかりません')
         return
       }
+
+      console.log('=== 受注者側: APIリクエスト送信 ===', { 
+        url: `/api/contractor/projects/${projectId}/attachments`,
+        tokenLength: session.access_token.length 
+      })
 
       const response = await fetch(`/api/contractor/projects/${projectId}/attachments`, {
         method: 'GET',
@@ -387,8 +393,17 @@ function JobsPageContent() {
       })
 
       const result = await response.json()
+      console.log('=== 受注者側: APIレスポンス ===', { 
+        status: response.status, 
+        ok: response.ok, 
+        result 
+      })
 
       if (response.ok) {
+        console.log('=== 受注者側: 添付資料設定 ===', { 
+          attachments: result.attachments,
+          count: result.attachments?.length || 0
+        })
         setAttachments(result.attachments || [])
       } else {
         console.error('添付資料の取得に失敗:', result.message)
@@ -399,6 +414,7 @@ function JobsPageContent() {
       setAttachments([])
     } finally {
       setLoadingAttachments(false)
+      console.log('=== 受注者側: 添付資料読み込み完了 ===')
     }
   }
 
