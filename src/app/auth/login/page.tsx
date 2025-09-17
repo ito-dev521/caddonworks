@@ -80,11 +80,13 @@ export default function LoginPage() {
     }
   }
 
-  const demoLogin = (role: 'admin' | 'orgadmin' | 'contractor' | 'reviewer') => {
+  const demoLogin = (role: 'admin' | 'orgadmin' | 'orgadmin2' | 'contractor' | 'contractor2' | 'reviewer') => {
     const demoCredentials = {
       admin: { email: "admin@demo.com", password: "demo123" },
       orgadmin: { email: "orgadmin@demo.com", password: "demo123" },
+      orgadmin2: { email: "orgadmin2@demo.com", password: "demo123" },
       contractor: { email: "contractor@demo.com", password: "demo123" },
+      contractor2: { email: "contractor2@demo.com", password: "demo123" },
       reviewer: { email: "reviewer@demo.com", password: "demo123" }
     }
 
@@ -168,10 +170,26 @@ export default function LoginPage() {
                 <Button
                   variant="outline"
                   size="sm"
+                  onClick={() => demoLogin('orgadmin2')}
+                  className="hover:border-engineering-blue"
+                >
+                  発注者デモ2
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={() => demoLogin('contractor')}
                   className="hover:border-engineering-green"
                 >
                   受注者デモ
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => demoLogin('contractor2')}
+                  className="hover:border-engineering-green"
+                >
+                  受注者デモ2
                 </Button>
                 <Button
                   variant="outline"
@@ -329,9 +347,23 @@ export default function LoginPage() {
               <Button
                 variant="outline"
                 size="sm"
+                onClick={() => demoLogin('orgadmin2')}
+              >
+                発注者2
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => demoLogin('contractor')}
               >
                 受注者
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => demoLogin('contractor2')}
+              >
+                受注者2
               </Button>
               <Button
                 variant="outline"

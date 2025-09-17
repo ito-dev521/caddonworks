@@ -66,6 +66,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }, 0)
         } else {
           console.log('AuthProvider: セッションまたはトークンなし、ローディング終了')
+          setLoading(false)
         }
       } catch (error) {
         console.error('AuthProvider: 初期化エラー:', error)
@@ -74,7 +75,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUserProfile(null)
         setUserRole(null)
         setUserOrganization(null)
-      } finally {
         setLoading(false)
       }
     }
@@ -206,6 +206,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       // 実行完了後にfetchingRefをクリア
       fetchingRef.current = null
+      setLoading(false) // ローディング状態を解除
       console.log(`✅ [${timestamp}] fetchUserProfile: 実行完了`, { authUserId })
     }
   }

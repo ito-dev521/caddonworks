@@ -167,10 +167,29 @@ export async function PUT(
 
     // リクエストボディを取得
     const body = await request.json()
-    const { title, description, budget, start_date, end_date, category, required_contractors, required_level, assignee_name, status } = body
+    const { title, description, budget, start_date, end_date, category, required_contractors, required_level, assignee_name, status, isStatusUpdate } = body
 
-    // 必須フィールドの検証
-    if (!title || !description || !budget || !start_date || !end_date || !category || !required_contractors) {
+    // デバッグ用ログ
+    console.log('案件更新リクエスト:', {
+      projectId,
+      isStatusUpdate,
+      status,
+      hasTitle: !!title,
+      hasDescription: !!description,
+      hasBudget: budget !== undefined,
+      hasStartDate: !!start_date,
+      hasEndDate: !!end_date,
+      hasCategory: !!category,
+      hasRequiredContractors: required_contractors !== undefined
+    })
+
+    // ステータス更新のみの場合は必須フィールドの検証をスキップ
+    const isStatusOnlyUpdate = isStatusUpdate === true
+    
+    console.log('ステータス更新判定:', { isStatusOnlyUpdate, isStatusUpdate })
+
+    // 通常の更新時のみ必須フィールドの検証
+    if (!isStatusOnlyUpdate && (!title || !description || !budget || !start_date || !end_date || !category || !required_contractors)) {
       return NextResponse.json({ message: '必須フィールドが不足しています' }, { status: 400 })
     }
 
@@ -205,21 +224,28 @@ export async function PUT(
 
     // 案件を更新
     const updateData: any = {
-      title,
-      description,
-      budget: Number(budget),
-      start_date,
-      end_date,
-      category,
-      required_contractors: Number(required_contractors),
-      required_level: required_level || 'beginner',
-      assignee_name: assignee_name || null,
       updated_at: new Date().toISOString()
     }
 
-    // ステータスが提供されている場合は追加
-    if (status) {
+    // ステータス更新のみの場合
+    if (isStatusOnlyUpdate) {
       updateData.status = status
+    } else {
+      // 通常の更新時は全フィールドを更新
+      updateData.title = title
+      updateData.description = description
+      updateData.budget = Number(budget)
+      updateData.start_date = start_date
+      updateData.end_date = end_date
+      updateData.category = category
+      updateData.required_contractors = Number(required_contractors)
+      updateData.required_level = required_level || 'beginner'
+      updateData.assignee_name = assignee_name || null
+
+      // ステータスが提供されている場合は追加
+      if (status) {
+        updateData.status = status
+      }
     }
 
     const { data: updatedProject, error: updateError } = await supabaseAdmin

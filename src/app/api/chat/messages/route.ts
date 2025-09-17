@@ -103,6 +103,7 @@ export async function GET(request: NextRequest) {
         file_url,
         file_name,
         file_size,
+        reply_to,
         created_at,
         updated_at,
         users:sender_id (
@@ -117,28 +118,91 @@ export async function GET(request: NextRequest) {
 
     if (messagesError) {
       console.error('メッセージ取得エラー:', messagesError)
+      console.error('プロジェクトID:', projectId)
+      console.error('ルームID:', roomId)
       return NextResponse.json(
-        { message: 'メッセージの取得に失敗しました' },
+        { 
+          message: 'メッセージの取得に失敗しました',
+          error: messagesError.message,
+          details: messagesError
+        },
         { status: 400 }
       )
     }
 
-    const formattedMessages = messages?.map(msg => ({
-      id: msg.id,
-      room_id: roomId,
-      content: msg.message,
-      sender_id: (msg.users as any)?.id,
-      sender_name: (msg.users as any)?.display_name || 'Unknown',
-      sender_email: (msg.users as any)?.email,
-      sender_avatar_url: (msg.users as any)?.avatar_url,
-      sender_type: msg.sender_type,
-      created_at: msg.created_at,
-      is_deleted: false,
-      message_type: msg.message_type || 'text',
-      file_url: msg.file_url,
-      file_name: msg.file_name,
-      file_size: msg.file_size
-    })) || []
+    // 返信先メッセージの情報を取得
+    const replyMessageIds = messages?.filter(msg => msg.reply_to).map(msg => msg.reply_to) || []
+    let replyMessages: any[] = []
+    
+    console.log('全メッセージ:', messages?.map(m => ({ id: m.id, reply_to: m.reply_to })))
+    console.log('返信先メッセージID:', replyMessageIds)
+    
+    if (replyMessageIds.length > 0) {
+      const { data: replyData, error: replyError } = await supabaseAdmin
+        .from('chat_messages')
+        .select(`
+          id,
+          message,
+          project_id,
+          users:sender_id (
+            display_name,
+            email
+          )
+        `)
+        .in('id', replyMessageIds)
+      
+      if (replyError) {
+        console.error('返信先メッセージ取得エラー:', replyError)
+      }
+      
+      replyMessages = replyData || []
+      console.log('取得した返信先メッセージ:', replyMessages)
+    }
+
+    const formattedMessages = messages?.map(msg => {
+      const replyMessage = replyMessages.find(rm => rm.id === msg.reply_to)
+      
+      console.log('メッセージ処理:', {
+        msgId: msg.id,
+        replyTo: msg.reply_to,
+        replyMessageFound: !!replyMessage,
+        replyMessage: replyMessage ? {
+          id: replyMessage.id,
+          content: replyMessage.message,
+          sender: (replyMessage.users as any)?.display_name || (replyMessage.users as any)?.email
+        } : null,
+        allReplyMessages: replyMessages.map(rm => ({ id: rm.id, message: rm.message }))
+      })
+      
+      return {
+        id: msg.id,
+        room_id: roomId,
+        content: msg.message,
+        sender_id: (msg.users as any)?.id,
+        sender_name: (msg.users as any)?.display_name || 'Unknown',
+        sender_email: (msg.users as any)?.email,
+        sender_avatar_url: (msg.users as any)?.avatar_url,
+        sender_type: msg.sender_type,
+        created_at: msg.created_at,
+        is_deleted: false,
+        message_type: msg.message_type || 'text',
+        file_url: msg.file_url,
+        file_name: msg.file_name,
+        file_size: msg.file_size,
+        reply_to: msg.reply_to,
+        reply_message: replyMessage ? {
+          id: replyMessage.id,
+          content: replyMessage.message,
+          sender_name: (replyMessage.users as any)?.display_name || (replyMessage.users as any)?.email || 'Unknown'
+        } : null,
+        sender: {
+          id: (msg.users as any)?.id,
+          display_name: (msg.users as any)?.display_name || 'Unknown',
+          email: (msg.users as any)?.email,
+          avatar_url: (msg.users as any)?.avatar_url
+        }
+      }
+    }) || []
 
     return NextResponse.json({
       messages: formattedMessages
@@ -157,7 +221,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { room_id, content, message_type = 'text' } = body
+    const { room_id, content, message_type = 'text', reply_to } = body
 
     // バリデーション
     if (!room_id || !content) {
@@ -244,6 +308,7 @@ export async function POST(request: NextRequest) {
         sender_id: userProfile.id,
         sender_type: senderType,
         message: content,
+        reply_to: reply_to || null,
         created_at: new Date().toISOString()
       })
       .select(`

@@ -26,39 +26,42 @@ export function AuthGuard({
   const isRedirectingRef = useRef(false)
 
   useEffect(() => {
-    if (!loading) {
-      if (isRedirectingRef.current) return
-
-      if (!user) {
-        // Store the attempted URL for redirect after login
-        sessionStorage.setItem('redirectAfterLogin', pathname)
-        if (pathname !== redirectTo) {
-          isRedirectingRef.current = true
-          router.push(redirectTo)
-        }
-        return
-      }
-
-      // Check role permissions
-      if (requiredRole && userRole !== requiredRole) {
-        // User doesn't have the required role
-        if (pathname !== "/unauthorized") {
-          isRedirectingRef.current = true
-          router.push("/unauthorized")
-        }
-        return
-      }
-
-      if (allowedRoles && allowedRoles.length > 0 && (!userRole || !allowedRoles.includes(userRole))) {
-        // User doesn't have any of the allowed roles
-        if (pathname !== "/unauthorized") {
-          isRedirectingRef.current = true
-          router.push("/unauthorized")
-        }
-        return
-      }
+    // ローディング中は何もしない
+    if (loading) {
+      return
     }
-  }, [user, userRole, loading, requiredRole, allowedRoles]) // router, redirectTo, pathnameを依存配列から削除
+
+    if (isRedirectingRef.current) return
+
+    if (!user) {
+      // Store the attempted URL for redirect after login
+      sessionStorage.setItem('redirectAfterLogin', pathname)
+      if (pathname !== redirectTo) {
+        isRedirectingRef.current = true
+        router.push(redirectTo)
+      }
+      return
+    }
+
+    // Check role permissions
+    if (requiredRole && userRole !== requiredRole) {
+      // User doesn't have the required role
+      if (pathname !== "/unauthorized") {
+        isRedirectingRef.current = true
+        router.push("/unauthorized")
+      }
+      return
+    }
+
+    if (allowedRoles && allowedRoles.length > 0 && (!userRole || !allowedRoles.includes(userRole))) {
+      // User doesn't have any of the allowed roles
+      if (pathname !== "/unauthorized") {
+        isRedirectingRef.current = true
+        router.push("/unauthorized")
+      }
+      return
+    }
+  }, [user, userRole, loading, requiredRole, allowedRoles, router, redirectTo, pathname])
 
   if (loading) {
     return (

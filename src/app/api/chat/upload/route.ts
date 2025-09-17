@@ -61,6 +61,9 @@ export async function POST(request: NextRequest) {
 
     // プロジェクトIDを取得
     const projectId = roomId.replace('project_', '')
+    
+    // 返信情報を取得
+    const replyTo = formData.get('reply_to') as string
 
     // プロジェクトの存在確認とアクセス権限チェック
     const { data: project, error: projectError } = await supabaseAdmin
@@ -92,45 +95,35 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // ファイルサイズチェック（100MB制限）
-    if (file.size > 100 * 1024 * 1024) {
+    // ファイルサイズチェック（動画ファイルは300MB、その他は100MB制限）
+    const isVideoFile = file.type.startsWith('video/')
+    const maxSize = isVideoFile ? 300 * 1024 * 1024 : 100 * 1024 * 1024
+    const maxSizeText = isVideoFile ? '300MB' : '100MB'
+    
+    if (file.size > maxSize) {
       return NextResponse.json(
-        { message: 'ファイルサイズが大きすぎます（100MB以下にしてください）' },
+        { message: `ファイルサイズが大きすぎます（${maxSizeText}以下にしてください）` },
         { status: 400 }
       )
     }
 
-    // ファイルタイプチェック
-    const allowedTypes = [
-      'image/jpeg', 'image/png', 'image/gif', 'image/webp',
-      'application/pdf',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'application/vnd.ms-excel',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'text/plain',
-      'application/zip',
-      'application/x-zip-compressed',
-      'application/dwg',
-      'application/x-dwg',
-      'application/acad',
-      'application/x-acad',
-      'application/step',
-      'application/x-step',
-      'application/iges',
-      'application/x-iges',
-      'application/octet-stream'
-    ]
-
+    // ファイルタイプチェック（拡張子ベースで判定）
     const allowedExtensions = [
+      // 画像ファイル
+      'jpg', 'jpeg', 'png', 'gif', 'webp',
+      // 動画ファイル
+      'mp4', 'avi', 'mov', 'wmv', 'flv', 'webm', 'mkv',
+      // 文書ファイル
+      'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'zip',
+      // CADファイル
       'dwg', 'p21', 'sfc', 'bfo', 'step', 'stp', 'iges', 'igs'
     ]
     
     const fileExtension = file.name.split('.').pop()?.toLowerCase()
     const isAllowedExtension = allowedExtensions.includes(fileExtension || '')
-    const isAllowedMimeType = allowedTypes.includes(file.type)
+    const isVideoFile = ['mp4', 'avi', 'mov', 'wmv', 'flv', 'webm', 'mkv'].includes(fileExtension || '')
     
-    if (!isAllowedMimeType && !isAllowedExtension) {
+    if (!isAllowedExtension) {
       return NextResponse.json(
         { message: 'サポートされていないファイル形式です' },
         { status: 400 }
@@ -142,12 +135,19 @@ export async function POST(request: NextRequest) {
     const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`
     const filePath = `chat-attachments/${roomId}/${fileName}`
 
+    // アップロードオプション（MIMEタイプ制限を回避）
+    const uploadOptions: any = {
+      cacheControl: '3600',
+      upsert: false,
+      contentType: 'application/octet-stream' // 汎用的なMIMEタイプを使用
+    }
+
+    // 動画ファイルの場合はproject-attachmentsバケットを使用（より大きなサイズ制限）
+    const bucketName = isVideoFile ? 'project-attachments' : 'attachments'
+    
     const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
-      .from('attachments')
-      .upload(filePath, file, {
-        cacheControl: '3600',
-        upsert: false
-      })
+      .from(bucketName)
+      .upload(filePath, file, uploadOptions)
 
     if (uploadError) {
       console.error('ファイルアップロードエラー:', uploadError)
@@ -159,7 +159,7 @@ export async function POST(request: NextRequest) {
 
     // 公開URLを取得
     const { data: { publicUrl } } = supabaseAdmin.storage
-      .from('attachments')
+      .from(bucketName)
       .getPublicUrl(filePath)
 
     // sender_typeを決定
@@ -179,7 +179,9 @@ export async function POST(request: NextRequest) {
         file_url: publicUrl,
         file_name: file.name,
         file_size: file.size,
-        message_type: file.type.startsWith('image/') ? 'image' : 'file'
+        reply_to: replyTo || null,
+        message_type: file.type.startsWith('image/') ? 'image' : 
+                     file.type.startsWith('video/') ? 'video' : 'file'
       })
       .select()
       .single()

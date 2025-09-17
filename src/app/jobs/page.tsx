@@ -47,7 +47,9 @@ interface JobData {
   required_contractors: number
   current_bid_count: number
   is_full: boolean
+  is_expired: boolean
   can_bid: boolean
+  advice: string
   contractor_id?: string
   required_level?: MemberLevel
 }
@@ -636,20 +638,35 @@ function JobsPageContent() {
                   exit={{ opacity: 0, y: -20 }}
                   transition={{ delay: index * 0.1 }}
                 >
-                  <Card className="hover-lift cursor-pointer group">
+                  <Card className={`hover-lift cursor-pointer group ${
+                    job.is_full ? 'border-orange-200 bg-orange-50' : 
+                    job.is_expired ? 'border-gray-200 bg-gray-50' : 
+                    'border-gray-200 bg-white'
+                  }`}>
                     <CardHeader className="pb-3">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          <CardTitle className="text-lg text-gray-900 group-hover:text-engineering-blue transition-colors">
+                          <CardTitle className={`text-lg transition-colors ${
+                            job.is_full ? 'text-orange-800' : 
+                            job.is_expired ? 'text-gray-600' : 
+                            'text-gray-900 group-hover:text-engineering-blue'
+                          }`}>
                             {job.title}
                           </CardTitle>
                           <CardDescription className="mt-1">
                             {job.org_name} • {job.category}
                           </CardDescription>
                         </div>
-                        <Badge className={getStatusColor(job.status)}>
-                          {getStatusText(job.status)}
-                        </Badge>
+                        <div className="flex flex-col gap-2">
+                          <Badge className={getStatusColor(job.status)}>
+                            {getStatusText(job.status)}
+                          </Badge>
+                          {job.is_full && (
+                            <Badge variant="outline" className="border-orange-300 text-orange-700 bg-orange-100">
+                              募集完了
+                            </Badge>
+                          )}
+                        </div>
                       </div>
                     </CardHeader>
 
@@ -765,6 +782,16 @@ function JobsPageContent() {
                           )}
                         </div>
                       </div>
+
+                      {/* アドバイス表示 */}
+                      {job.advice && (
+                        <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                          <div className="flex items-start gap-2">
+                            <AlertCircle className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                            <p className="text-sm text-blue-800">{job.advice}</p>
+                          </div>
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 </motion.div>

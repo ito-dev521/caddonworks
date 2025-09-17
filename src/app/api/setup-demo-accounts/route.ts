@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { supabase, createSupabaseAdmin } from '@/lib/supabase'
 
 export async function POST(request: NextRequest) {
   try {
+    // Service Role Keyを使用してメール確認をスキップ
+    const supabaseAdmin = createSupabaseAdmin()
+    
     const demoAccounts = [
       {
         email: 'admin@demo.com',
@@ -19,12 +22,27 @@ export async function POST(request: NextRequest) {
         organizationName: 'デモ建設株式会社'
       },
       {
+        email: 'orgadmin2@demo.com',
+        password: 'demo123',
+        displayName: '発注者デモ2',
+        role: 'OrgAdmin' as const,
+        organizationName: 'デモ建設株式会社2'
+      },
+      {
         email: 'contractor@demo.com',
         password: 'demo123',
         displayName: '受注者デモ',
         role: 'Contractor' as const,
         specialties: ['道路設計', '橋梁設計'],
         qualifications: ['技術士（建設部門）', '一級建築士']
+      },
+      {
+        email: 'contractor2@demo.com',
+        password: 'demo123',
+        displayName: '受注者デモ2',
+        role: 'Contractor' as const,
+        specialties: ['構造設計', '設備設計'],
+        qualifications: ['技術士（機械部門）', '一級建築士']
       },
       {
         email: 'reviewer@demo.com',
@@ -40,7 +58,7 @@ export async function POST(request: NextRequest) {
     for (const account of demoAccounts) {
       try {
         // 既存のユーザーをチェック
-        const { data: existingUser } = await supabase
+        const { data: existingUser } = await supabaseAdmin
           .from('users')
           .select('id')
           .eq('email', account.email)
@@ -55,15 +73,14 @@ export async function POST(request: NextRequest) {
           continue
         }
 
-        // 1. Supabase Authでユーザーを作成（メール確認を無効にする）
-        const { data: authData, error: authError } = await supabase.auth.signUp({
+        // 1. Service Role Keyを使用してユーザーを作成（メール確認をスキップ）
+        const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
           email: account.email,
           password: account.password,
-          options: {
-            data: {
-              display_name: account.displayName,
-              role: account.role
-            }
+          email_confirm: true, // メール確認を有効にする
+          user_metadata: {
+            display_name: account.displayName,
+            role: account.role
           }
         })
 
@@ -86,7 +103,7 @@ export async function POST(request: NextRequest) {
         }
 
         // 2. ユーザープロフィールを作成
-        const { data: userData, error: userError } = await supabase
+        const { data: userData, error: userError } = await supabaseAdmin
           .from('users')
           .insert({
             auth_user_id: authData.user.id,
@@ -111,7 +128,7 @@ export async function POST(request: NextRequest) {
         let orgId = null
         if (account.organizationName) {
           // 既存の組織をチェック
-          const { data: existingOrg } = await supabase
+          const { data: existingOrg } = await supabaseAdmin
             .from('organizations')
             .select('id')
             .eq('name', account.organizationName)
@@ -121,7 +138,7 @@ export async function POST(request: NextRequest) {
             orgId = existingOrg.id
           } else {
             // 新しい組織を作成
-            const { data: orgData, error: orgError } = await supabase
+            const { data: orgData, error: orgError } = await supabaseAdmin
               .from('organizations')
               .insert({
                 name: account.organizationName,
@@ -157,7 +174,7 @@ export async function POST(request: NextRequest) {
           membershipData.org_id = orgId
         } else if (account.role === 'Contractor') {
           // 受注者の場合は、デフォルト組織を作成または取得
-          const { data: defaultOrg } = await supabase
+          const { data: defaultOrg } = await supabaseAdmin
             .from('organizations')
             .select('id')
             .eq('name', 'デフォルト組織')
@@ -166,7 +183,7 @@ export async function POST(request: NextRequest) {
           if (defaultOrg) {
             membershipData.org_id = defaultOrg.id
           } else {
-            const { data: newDefaultOrg, error: defaultOrgError } = await supabase
+            const { data: newDefaultOrg, error: defaultOrgError } = await supabaseAdmin
               .from('organizations')
               .insert({
                 name: 'デフォルト組織',
@@ -191,7 +208,7 @@ export async function POST(request: NextRequest) {
           }
         }
         
-        const { error: membershipError } = await supabase
+        const { error: membershipError } = await supabaseAdmin
           .from('memberships')
           .insert(membershipData)
 

@@ -2,6 +2,48 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { calculateMemberLevel, canAccessProject, type MemberLevel } from '@/lib/member-level'
 
+// アドバイス生成関数
+function generateAdvice(job: any, currentBidCount: number, isExpired: boolean): string {
+  if (isExpired) {
+    return '期限が切れています。次回は早めの応募をお勧めします。'
+  }
+  
+  if (currentBidCount === 0) {
+    return 'まだ応募者がいません。早めの応募で受注のチャンスが高まります。'
+  }
+  
+  const requiredContractors = job.required_contractors || 1
+  const remainingSlots = requiredContractors - currentBidCount
+  
+  if (remainingSlots <= 0) {
+    return '募集人数に達しました。'
+  }
+  
+  // 期限までの日数を計算
+  const now = new Date()
+  const deadline = new Date(job.bidding_deadline)
+  const daysUntilDeadline = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+  
+  if (daysUntilDeadline <= 1) {
+    return '期限が迫っています。急いで応募してください。'
+  }
+  
+  if (daysUntilDeadline <= 3) {
+    return '期限まで3日以内です。早めの応募をお勧めします。'
+  }
+  
+  // 競争率に基づくアドバイス
+  const competitionRate = currentBidCount / requiredContractors
+  
+  if (competitionRate < 0.3) {
+    return '競争率が低めです。受注のチャンスが高い案件です。'
+  } else if (competitionRate < 0.7) {
+    return '適度な競争があります。質の高い提案で差をつけましょう。'
+  } else {
+    return '競争が激しい案件です。差別化された提案が重要です。'
+  }
+}
+
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -182,6 +224,14 @@ export async function GET(request: NextRequest) {
       const currentBidCount = bidCountMap[job.id] || 0
       const isFull = currentBidCount >= (job.required_contractors || 1)
       
+      // 期限切れチェック
+      const now = new Date()
+      const deadline = new Date(job.bidding_deadline)
+      const isExpired = deadline < now
+      
+      // アドバイス生成
+      const advice = generateAdvice(job, currentBidCount, isExpired)
+      
       return {
         id: job.id,
         title: job.title,
@@ -202,14 +252,19 @@ export async function GET(request: NextRequest) {
         required_level: job.required_level || 'beginner',
         current_bid_count: currentBidCount,
         is_full: isFull,
-        can_bid: !isFull && job.status === 'bidding'
+        is_expired: isExpired,
+        can_bid: !isFull && !isExpired && job.status === 'bidding',
+        advice: advice
       }
     }) || []
+
+    // 期限切れ案件をフィルタリング（受注者側では表示しない）
+    const activeJobs = formattedJobs.filter(job => !job.is_expired)
 
     console.log('jobs API: レスポンス準備完了')
 
     return NextResponse.json({
-      jobs: formattedJobs
+      jobs: activeJobs
     }, { status: 200 })
 
   } catch (error) {

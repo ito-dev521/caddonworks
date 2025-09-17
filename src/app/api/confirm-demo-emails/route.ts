@@ -1,22 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    }
-  }
-)
+import { createSupabaseAdmin } from '@/lib/supabase'
 
 export async function POST(request: NextRequest) {
   try {
+    const supabaseAdmin = createSupabaseAdmin()
+    
     const demoEmails = [
       'admin@demo.com',
+      'orgadmin@demo.com',
+      'orgadmin2@demo.com',
       'contractor@demo.com',
+      'contractor2@demo.com',
       'reviewer@demo.com'
     ]
 
@@ -24,21 +18,14 @@ export async function POST(request: NextRequest) {
 
     for (const email of demoEmails) {
       try {
-        // ユーザーを検索
-        const { data: users, error: listError } = await supabaseAdmin.auth.admin.listUsers()
-        
-        if (listError) {
-          results.push({
-            email,
-            status: 'error',
-            message: listError.message
-          })
-          continue
-        }
+        // usersテーブルからauth_user_idを取得
+        const { data: userData, error: userError } = await supabaseAdmin
+          .from('users')
+          .select('auth_user_id')
+          .eq('email', email)
+          .single()
 
-        const user = users.users.find(u => u.email === email)
-        
-        if (!user) {
+        if (userError || !userData) {
           results.push({
             email,
             status: 'not_found',
@@ -47,9 +34,9 @@ export async function POST(request: NextRequest) {
           continue
         }
 
-        // メール確認を有効化
+        // メール確認を有効にする
         const { data: updateData, error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
-          user.id,
+          userData.auth_user_id,
           {
             email_confirm: true
           }
@@ -58,8 +45,8 @@ export async function POST(request: NextRequest) {
         if (updateError) {
           results.push({
             email,
-            status: 'error',
-            message: updateError.message
+            status: 'update_error',
+            message: `更新エラー: ${updateError.message}`
           })
           continue
         }
@@ -67,25 +54,26 @@ export async function POST(request: NextRequest) {
         results.push({
           email,
           status: 'success',
-          message: 'メール確認を有効化しました'
+          message: 'メール確認を有効にしました'
         })
 
       } catch (error) {
+        console.error(`Error processing ${email}:`, error)
         results.push({
           email,
           status: 'error',
-          message: '予期しないエラーが発生しました'
+          message: `予期しないエラー: ${error instanceof Error ? error.message : 'Unknown error'}`
         })
       }
     }
 
     return NextResponse.json({
-      message: 'デモアカウントのメール確認が完了しました',
+      message: 'デモアカウントのメール確認状態を更新しました',
       results
     }, { status: 200 })
 
   } catch (error) {
-    console.error('Email confirmation error:', error)
+    console.error('Demo email confirmation error:', error)
     return NextResponse.json(
       { message: 'サーバーエラーが発生しました' },
       { status: 500 }

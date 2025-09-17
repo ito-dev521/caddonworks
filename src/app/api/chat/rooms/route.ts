@@ -102,9 +102,17 @@ export async function GET(request: NextRequest) {
       )
     }).map(contract => contract.projects as any) || []
 
+    // プロジェクトIDで重複を除去（同じプロジェクトの複数契約を統合）
+    const uniqueProjects = accessibleProjects.reduce((acc, project) => {
+      if (!acc.find((p: any) => p.id === project.id)) {
+        acc.push(project)
+      }
+      return acc
+    }, [] as any[])
+
     // 各プロジェクトのチャットルーム情報を構築
     const chatRooms = await Promise.all(
-      accessibleProjects.map(async (project) => {
+      uniqueProjects.map(async (project: any) => {
         // 最新メッセージを取得
         const { data: lastMessage } = await supabaseAdmin
           .from('chat_messages')
@@ -121,8 +129,11 @@ export async function GET(request: NextRequest) {
           .limit(1)
           .single()
 
-        // 未読メッセージ数を計算（実際のロジックに置き換え可能）
+        // 未読メッセージ数を計算
         const unreadCount = 0 // TODO: 実装
+
+        // プロジェクトの参加者数を計算（発注者 + 受注者）
+        const participantCount = 2 // 基本的に発注者と受注者
 
         return {
           id: `project_${project.id}`,
@@ -133,7 +144,7 @@ export async function GET(request: NextRequest) {
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
           is_active: project.status === 'in_progress',
-          participant_count: 2, // TODO: 実際の参加者数を計算
+          participant_count: participantCount,
           unread_count: unreadCount,
           last_message: lastMessage ? {
             content: lastMessage.message,

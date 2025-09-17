@@ -27,49 +27,55 @@ import { supabase } from "@/lib/supabase"
 import { useRoleAccess } from "../auth/auth-guard"
 import { cn } from "@/lib/utils"
 import { NotificationBell } from "../notifications/notification-bell"
+import { useNavigationBadges } from "@/hooks/use-navigation-badges"
 
 interface NavigationProps {
   userRole?: "Admin" | "OrgAdmin" | "Staff" | "Contractor" | "Reviewer" | "Auditor"
 }
 
-const navigationItems = {
-  Admin: [
-    { icon: Home, label: "ダッシュボード", href: "/dashboard", badge: null },
-    { icon: Users, label: "会員管理", href: "/admin/users", badge: null },
-    { icon: BarChart3, label: "統計・レポート", href: "/admin/reports", badge: null },
-    { icon: Settings, label: "システム設定", href: "/admin/settings", badge: null },
-  ],
-  OrgAdmin: [
-    { icon: Home, label: "ダッシュボード", href: "/dashboard", badge: null },
-    { icon: FolderOpen, label: "案件管理", href: "/projects", badge: "3" },
-    { icon: MessageCircle, label: "チャット", href: "/chat", badge: "2" },
-    { icon: FileText, label: "契約管理", href: "/contracts", badge: "2" },
-    { icon: BarChart3, label: "会計・請求", href: "/billing", badge: "新" },
-    { icon: Users, label: "お気に入り会員", href: "/favorites", badge: null },
-  ],
-  Contractor: [
-    { icon: Home, label: "ダッシュボード", href: "/dashboard", badge: null },
-    { icon: FolderOpen, label: "案件一覧", href: "/jobs", badge: "5" },
-    { icon: MessageCircle, label: "チャット", href: "/chat", badge: "3" },
-    { icon: FileText, label: "提出物", href: "/deliverables", badge: "1" },
-    { icon: BarChart3, label: "報酬・支払", href: "/payouts", badge: null },
-  ],
-  Reviewer: [
-    { icon: Home, label: "ダッシュボード", href: "/dashboard", badge: null },
-    { icon: FolderOpen, label: "審査案件", href: "/reviews", badge: "7" },
-    { icon: MessageCircle, label: "チャット", href: "/chat", badge: "1" },
-    { icon: FileText, label: "評価履歴", href: "/evaluations", badge: null },
-  ],
-  Auditor: [
-    { icon: Home, label: "ダッシュボード", href: "/dashboard", badge: null },
-    { icon: FileText, label: "監査ログ", href: "/audit-logs", badge: null },
-    { icon: MessageCircle, label: "チャット", href: "/chat", badge: null },
-    { icon: BarChart3, label: "レポート", href: "/reports", badge: null },
-  ]
+const getNavigationItems = (userRole: string, badges: any) => {
+  const baseItems = {
+    Admin: [
+      { icon: Home, label: "ダッシュボード", href: "/dashboard", badge: null },
+      { icon: Users, label: "会員管理", href: "/admin/users", badge: null },
+      { icon: BarChart3, label: "統計・レポート", href: "/admin/reports", badge: null },
+      { icon: Settings, label: "システム設定", href: "/admin/settings", badge: null },
+    ],
+    OrgAdmin: [
+      { icon: Home, label: "ダッシュボード", href: "/dashboard", badge: null },
+      { icon: FolderOpen, label: "案件管理", href: "/projects", badge: badges.projects || null },
+      { icon: MessageCircle, label: "チャット", href: "/chat", badge: badges.chat || null },
+      { icon: FileText, label: "契約管理", href: "/contracts", badge: badges.contracts || null },
+      { icon: BarChart3, label: "会計・請求", href: "/billing", badge: "新" },
+      { icon: Users, label: "お気に入り会員", href: "/favorites", badge: null },
+    ],
+    Contractor: [
+      { icon: Home, label: "ダッシュボード", href: "/dashboard", badge: null },
+      { icon: FolderOpen, label: "案件一覧", href: "/jobs", badge: badges.jobs || null },
+      { icon: MessageCircle, label: "チャット", href: "/chat", badge: badges.chat || null },
+      { icon: FileText, label: "提出物", href: "/deliverables", badge: badges.deliverables || null },
+      { icon: BarChart3, label: "報酬・支払", href: "/payouts", badge: null },
+    ],
+    Reviewer: [
+      { icon: Home, label: "ダッシュボード", href: "/dashboard", badge: null },
+      { icon: FolderOpen, label: "審査案件", href: "/reviews", badge: badges.reviews || null },
+      { icon: MessageCircle, label: "チャット", href: "/chat", badge: badges.chat || null },
+      { icon: FileText, label: "評価履歴", href: "/evaluations", badge: null },
+    ],
+    Auditor: [
+      { icon: Home, label: "ダッシュボード", href: "/dashboard", badge: null },
+      { icon: FileText, label: "監査ログ", href: "/audit-logs", badge: null },
+      { icon: MessageCircle, label: "チャット", href: "/chat", badge: null },
+      { icon: BarChart3, label: "レポート", href: "/reports", badge: null },
+    ]
+  }
+
+  return baseItems[userRole as keyof typeof baseItems] || baseItems.Admin
 }
 
 export function Navigation({ userRole: propUserRole }: NavigationProps) {
   const { user, userProfile, userRole, userOrganization, signOut } = useAuth()
+  const { badges, loading: badgesLoading } = useNavigationBadges()
   const router = useRouter()
   const pathname = usePathname()
   const [isExpanded, setIsExpanded] = useState(true)
@@ -147,7 +153,7 @@ export function Navigation({ userRole: propUserRole }: NavigationProps) {
     }
   }, [userRole, userOrganization?.id, organizationContactPerson]) // organizationContactPersonも依存配列に追加
 
-  const navItems = navigationItems[userRole as keyof typeof navigationItems] || navigationItems.Admin
+  const navItems = getNavigationItems(userRole || 'Admin', badges)
 
   // 表示名を決定（OrgAdminの場合は担当者名を優先）
   const getDisplayName = () => {
@@ -231,7 +237,7 @@ export function Navigation({ userRole: propUserRole }: NavigationProps) {
                     >
                       {isExpanded ? item.label : ""}
                     </motion.span>
-                    {item.badge && isExpanded && (
+                    {item.badge && isExpanded && (typeof item.badge !== 'number' || item.badge > 0) && (
                       <Badge
                         variant="engineering"
                         className="ml-auto text-xs"
@@ -395,7 +401,7 @@ export function Navigation({ userRole: propUserRole }: NavigationProps) {
                   <div className="flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-engineering-blue/10 transition-colors">
                     <item.icon className="w-5 h-5 text-gray-600" />
                     <span className="text-gray-700 font-medium">{item.label}</span>
-                    {item.badge && (
+                    {item.badge && (typeof item.badge !== 'number' || item.badge > 0) && (
                       <Badge variant="engineering" className="ml-auto text-xs">
                         {item.badge}
                       </Badge>

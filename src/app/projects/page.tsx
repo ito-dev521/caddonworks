@@ -447,7 +447,8 @@ function ProjectsPageContent() {
           end_date: project.end_date,
           category: project.category,
           required_contractors: project.required_contractors,
-          status: newStatus
+          status: newStatus,
+          isStatusUpdate: true // ステータス更新フラグを追加
         })
       })
 
