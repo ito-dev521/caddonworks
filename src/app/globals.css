@@ -148,3 +148,79 @@
 .status-inactive {
   @apply bg-gray-400;
 }
+
+/* Additional Engineering Theme Classes */
+.bg-gradient-mesh {
+  background: linear-gradient(135deg, rgba(0, 102, 204, 0.1) 0%, rgba(16, 185, 129, 0.1) 100%);
+}
+
+.gradient-engineering {
+  background: linear-gradient(135deg, #0066CC 0%, #10B981 100%);
+}
+
+.bg-gradient-engineering {
+  background: linear-gradient(135deg, #0066CC 0%, #10B981 100%);
+}
+
+.text-gradient-engineering {
+  background: linear-gradient(135deg, #0066CC 0%, #10B981 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Engineering Blue Color Classes */
+.bg-engineering-blue {
+  background-color: #0066CC;
+}
+
+.text-engineering-blue {
+  color: #0066CC;
+}
+
+.border-engineering-blue {
+  border-color: #0066CC;
+}
+
+.hover\:bg-engineering-blue-dark:hover {
+  background-color: #004499;
+}
+
+.bg-engineering-blue\/10 {
+  background-color: rgba(0, 102, 204, 0.1);
+}
+
+.border-engineering-blue\/20 {
+  border-color: rgba(0, 102, 204, 0.2);
+}
+
+/* Engineering Green Color Classes */
+.bg-engineering-green {
+  background-color: #10B981;
+}
+
+.text-engineering-green {
+  color: #10B981;
+}
+
+.border-engineering-green {
+  border-color: #10B981;
+}
+
+.hover\:bg-engineering-green-dark:hover {
+  background-color: #059669;
+}
+
+.bg-engineering-green\/5 {
+  background-color: rgba(16, 185, 129, 0.05);
+}
+
+.from-engineering-blue\/5 {
+  --tw-gradient-from: rgba(0, 102, 204, 0.05);
+  --tw-gradient-to: rgba(0, 102, 204, 0);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+}
+
+.to-engineering-green\/5 {
+  --tw-gradient-to: rgba(16, 185, 129, 0.05);
+}

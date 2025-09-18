@@ -49,6 +49,7 @@ const getNavigationItems = (userRole: string, badges: any) => {
       { icon: FileText, label: "契約管理", href: "/contracts", badge: badges.contracts || null },
       { icon: BarChart3, label: "会計・請求", href: "/billing", badge: "新" },
       { icon: Users, label: "お気に入り会員", href: "/favorite-members", badge: null },
+      { icon: Settings, label: "設定", href: "/settings", badge: null },
     ],
     Contractor: [
       { icon: Home, label: "ダッシュボード", href: "/dashboard", badge: null },

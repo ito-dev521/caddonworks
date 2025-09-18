@@ -114,48 +114,65 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .eq('auth_user_id', authUserId)
         .single()
 
-
       if (profileError && profileError.code !== 'PGRST116') {
         console.error('Error fetching user profile:', profileError)
-        return
+        // プロフィールが見つからない場合でも続行
       }
 
       setUserProfile(profile)
 
       // Fetch user role and organization from memberships
-      if (profile) {
-        const { data: membership, error: roleError } = await supabase
-          .from('memberships')
-          .select('role, org_id')
-          .eq('user_id', profile.id)
+      // プロフィールがある場合はprofile.id、ない場合はauthUserIdを使用
+      const userId = profile?.id || authUserId
+      
+      const { data: membership, error: roleError } = await supabase
+        .from('memberships')
+        .select('role, org_id')
+        .eq('user_id', userId)
+        .single()
+
+      if (roleError && roleError.code !== 'PGRST116') {
+        console.error('Error fetching user role:', roleError)
+        return
+      }
+
+      setUserRole(membership?.role || null)
+      
+      // 組織情報を取得
+      if (membership?.org_id) {
+        const { data: orgData, error: orgError } = await supabase
+          .from('organizations')
+          .select('id, name')
+          .eq('id', membership.org_id)
           .single()
-
-        if (roleError && roleError.code !== 'PGRST116') {
-          console.error('Error fetching user role:', roleError)
-          return
-        }
-
-        setUserRole(membership?.role || null)
         
-        // 組織情報を取得
-        if (membership?.org_id) {
-          const { data: orgData, error: orgError } = await supabase
-            .from('organizations')
-            .select('id, name')
-            .eq('id', membership.org_id)
-            .single()
-          
-          if (orgError) {
-            console.error('Error fetching organization:', orgError)
-            setUserOrganization(null)
-          } else {
-            setUserOrganization({
-              id: orgData.id,
-              name: orgData.name
-            })
-          }
-        } else {
+        if (orgError) {
+          console.error('Error fetching organization:', orgError)
           setUserOrganization(null)
+        } else {
+          setUserOrganization({
+            id: orgData.id,
+            name: orgData.name
+          })
+        }
+      } else {
+        setUserOrganization(null)
+      }
+
+      // プロフィールがない場合（発注者の場合）は基本的な情報を作成
+      if (!profile && membership) {
+        const { data: authUser } = await supabase.auth.getUser()
+        if (authUser.user) {
+          setUserProfile({
+            id: authUserId,
+            auth_user_id: authUserId,
+            display_name: authUser.user.email?.split('@')[0] || '管理者',
+            email: authUser.user.email || '',
+            specialties: [],
+            qualifications: [],
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
         }
       }
     } catch (error) {
