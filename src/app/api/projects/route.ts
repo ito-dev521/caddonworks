@@ -266,7 +266,9 @@ export async function GET(request: NextRequest) {
         contractor_id,
         assignee_name,
         category,
-        created_at
+        created_at,
+        bidding_deadline,
+        required_contractors
       `)
       .eq('org_id', company.id) // 組織IDでフィルタリング
 
@@ -301,22 +303,39 @@ export async function GET(request: NextRequest) {
       }, {}) || {}
     }
 
-    const formattedProjects = projectsData?.map(project => ({
-      id: project.id,
-      title: project.title,
-      description: project.description,
-      status: project.status,
-      budget: project.budget,
-      start_date: project.start_date,
-      end_date: project.end_date,
-      contractor_id: project.contractor_id,
-      contractor_name: contractorMap[project.contractor_id]?.display_name || '未割当',
-      contractor_email: contractorMap[project.contractor_id]?.email || '',
-      progress: Math.floor(Math.random() * 100), // 実際の進捗計算ロジックに置き換え
-      category: project.category || '道路設計',
-      assignee_name: project.assignee_name,
-      created_at: project.created_at
-    })) || []
+    const formattedProjects = projectsData?.map(project => {
+      // 期限切れチェック
+      const now = new Date()
+      const deadline = project.bidding_deadline ? new Date(project.bidding_deadline) : null
+      const isExpired = deadline && deadline < now && project.status === 'bidding'
+      
+      // 期限までの日数を計算
+      let daysUntilDeadline = null
+      if (deadline) {
+        daysUntilDeadline = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+      }
+
+      return {
+        id: project.id,
+        title: project.title,
+        description: project.description,
+        status: project.status,
+        budget: project.budget,
+        start_date: project.start_date,
+        end_date: project.end_date,
+        contractor_id: project.contractor_id,
+        contractor_name: contractorMap[project.contractor_id]?.display_name || '未割当',
+        contractor_email: contractorMap[project.contractor_id]?.email || '',
+        progress: Math.floor(Math.random() * 100), // 実際の進捗計算ロジックに置き換え
+        category: project.category || '道路設計',
+        assignee_name: project.assignee_name,
+        created_at: project.created_at,
+        bidding_deadline: project.bidding_deadline,
+        required_contractors: project.required_contractors || 1,
+        is_expired: isExpired,
+        days_until_deadline: daysUntilDeadline
+      }
+    }) || []
 
     return NextResponse.json({
       projects: formattedProjects

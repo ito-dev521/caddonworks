@@ -313,7 +313,9 @@ function CreateContractPageContent() {
                 </div>
                 <div>
                   <span className="text-sm text-gray-600">入札メッセージ:</span>
-                  <p className="text-gray-900 bg-gray-50 p-3 rounded-lg">{bid.message}</p>
+                  <p className="text-gray-900 bg-gray-50 p-3 rounded-lg">
+                    {bid.message || 'メッセージはありません'}
+                  </p>
                 </div>
                 <div>
                   <span className="text-sm text-gray-600">入札日時:</span>

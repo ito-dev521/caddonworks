@@ -336,7 +336,7 @@ function ContractsPageContent() {
     }
     setShowEvaluationForm(false)
     setEvaluationTarget(null)
-    alert('評価が完了しました。業務完了届を作成できます。')
+    alert('評価が完了しました。業務完了届作成ボタンが有効になりました。')
   }
 
   // 評価フォームをキャンセル

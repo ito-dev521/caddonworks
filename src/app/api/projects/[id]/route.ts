@@ -245,6 +245,35 @@ export async function PUT(
       return NextResponse.json({ message: '案件の更新に失敗しました' }, { status: 500 })
     }
 
+    // ステータスが「completed」に変更された場合、受注者に通知を送信
+    if (status === 'completed' && updatedProject.contractor_id) {
+      try {
+        // 受注者情報を取得
+        const { data: contractor, error: contractorError } = await supabaseAdmin
+          .from('users')
+          .select('id, display_name')
+          .eq('id', updatedProject.contractor_id)
+          .single()
+
+        if (!contractorError && contractor) {
+          // 受注者に業務完了通知を送信
+          await supabaseAdmin.from('notifications').insert({
+            user_id: contractor.id,
+            type: 'project_completed',
+            title: '案件が完了しました',
+            message: `案件「${updatedProject.title}」が完了しました。評価と業務完了届の作成をお待ちください。`,
+            data: {
+              project_id: projectId,
+              project_title: updatedProject.title
+            }
+          })
+        }
+      } catch (notificationError) {
+        console.error('業務完了通知送信エラー:', notificationError)
+        // 通知エラーが発生しても案件更新は成功しているので、処理を続行
+      }
+    }
+
     return NextResponse.json({
       message: '案件が正常に更新されました',
       project: updatedProject

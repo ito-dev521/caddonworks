@@ -115,7 +115,7 @@ export async function GET(
       project_id: bid.project_id,
       contractor_id: bid.contractor_id,
       bid_amount: bid.bid_amount,
-      message: bid.message,
+      message: bid.proposal,
       created_at: bid.created_at,
       contractor_name: contractor?.display_name,
       contractor_email: contractor?.email,

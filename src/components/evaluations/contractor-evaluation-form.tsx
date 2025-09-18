@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
-import { Star, StarIcon } from 'lucide-react'
+import { Star, StarIcon, Heart } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { supabase } from '@/lib/supabase'
 
@@ -72,6 +72,8 @@ export function ContractorEvaluationForm({
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [isAddingToFavorites, setIsAddingToFavorites] = useState(false)
+  const [isFavorite, setIsFavorite] = useState(false)
 
   const handleScoreChange = (criteria: keyof EvaluationData, score: number) => {
     setEvaluation(prev => ({
@@ -93,6 +95,46 @@ export function ContractorEvaluationForm({
            evaluation.communication_score > 0 &&
            evaluation.understanding_score > 0 &&
            evaluation.professionalism_score > 0
+  }
+
+  const handleAddToFavorites = async () => {
+    setIsAddingToFavorites(true)
+    setError('')
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        setError('認証が必要です。ログインし直してください。')
+        setIsAddingToFavorites(false)
+        return
+      }
+
+      const response = await fetch('/api/favorite-members', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          contractor_id: contractorId,
+          notes: `評価時の平均スコア: ${(evaluation.deadline_score + evaluation.quality_score + evaluation.communication_score + evaluation.understanding_score + evaluation.professionalism_score) / 5}`
+        })
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        setIsFavorite(true)
+        alert('お気に入り会員に追加されました')
+      } else {
+        setError(result.message || 'お気に入り会員の追加に失敗しました')
+      }
+    } catch (error) {
+      console.error('お気に入り追加エラー:', error)
+      setError('ネットワークエラーが発生しました')
+    } finally {
+      setIsAddingToFavorites(false)
+    }
   }
 
   const handleSubmit = async () => {
@@ -232,28 +274,54 @@ export function ContractorEvaluationForm({
             />
           </div>
 
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+          <div className="flex justify-between items-center pt-4 border-t border-gray-200">
             <Button
               variant="outline"
-              onClick={onCancel}
-              disabled={isSubmitting}
+              onClick={handleAddToFavorites}
+              disabled={isAddingToFavorites || isFavorite || !isFormValid()}
+              className="text-pink-600 border-pink-200 hover:bg-pink-50"
             >
-              キャンセル
-            </Button>
-            <Button
-              onClick={handleSubmit}
-              disabled={!isFormValid() || isSubmitting}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
-              {isSubmitting ? (
+              {isAddingToFavorites ? (
                 <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  送信中...
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-pink-600 mr-2"></div>
+                  追加中...
+                </>
+              ) : isFavorite ? (
+                <>
+                  <Heart className="w-4 h-4 mr-2 fill-pink-600 text-pink-600" />
+                  お気に入り済み
                 </>
               ) : (
-                '評価を送信'
+                <>
+                  <Heart className="w-4 h-4 mr-2" />
+                  お気に入り会員に追加
+                </>
               )}
             </Button>
+            
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={onCancel}
+                disabled={isSubmitting}
+              >
+                キャンセル
+              </Button>
+              <Button
+                onClick={handleSubmit}
+                disabled={!isFormValid() || isSubmitting}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                {isSubmitting ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    送信中...
+                  </>
+                ) : (
+                  '評価を送信'
+                )}
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

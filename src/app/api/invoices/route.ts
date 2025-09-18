@@ -163,9 +163,13 @@ export async function POST(request: NextRequest) {
       .from('notifications')
       .insert({
         user_id: project.contractor_id,
-        title: '請求書が作成されました',
-        message: `案件「${project.title}」の請求書が作成されました。内容を確認して発行してください。金額: ¥${totalAmount.toLocaleString()}`,
-        type: 'invoice'
+        title: '業務完了届が作成されました',
+        message: `案件「${project.title}」の業務完了届が作成されました。請求書ページで確認できます。金額: ¥${totalAmount.toLocaleString()}`,
+        type: 'completion_report_created',
+        data: {
+          project_id: projectId,
+          invoice_id: invoiceData.id
+        }
       })
 
     if (notificationError) {

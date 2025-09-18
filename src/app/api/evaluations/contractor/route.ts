@@ -190,6 +190,21 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    // 評価完了を受注者に通知（業務完了届は手動作成）
+    if (!contractorUserError && contractorUser) {
+      await supabaseAdmin.from('notifications').insert({
+        user_id: contractorUser.id,
+        type: 'evaluation_completed',
+        title: '評価が完了しました',
+        message: `案件「${project.title}」の評価が完了しました。業務完了届の作成をお待ちください。`,
+        data: {
+          project_id,
+          contract_id,
+          evaluation_id: evaluation.id
+        }
+      })
+    }
+
     return NextResponse.json({
       message: '評価が正常に保存されました',
       evaluation: {

@@ -163,6 +163,39 @@ export async function GET(request: NextRequest) {
     // 署名済み契約の案件を抽出
     const awardedJobs = contracts?.map(contract => contract.projects).filter(Boolean) || []
     
+    // 3. お気に入り会員が断った案件を取得（優先依頼で辞退された案件）
+    const { data: declinedInvitations, error: declinedError } = await supabaseAdmin
+      .from('priority_invitations')
+      .select(`
+        project_id,
+        projects (
+          id,
+          title,
+          description,
+          status,
+          budget,
+          start_date,
+          end_date,
+          category,
+          created_at,
+          assignee_name,
+          bidding_deadline,
+          requirements,
+          location,
+          org_id,
+          required_contractors,
+          contractor_id,
+          required_level
+        )
+      `)
+      .eq('contractor_id', userProfile.id)
+      .eq('response', 'declined')
+
+    if (declinedError) {
+      console.error('jobs API: 辞退案件取得エラー:', declinedError)
+    }
+
+    const declinedJobs = declinedInvitations?.map(invitation => invitation.projects).filter(Boolean) || []
     
     // 入札可能な案件を会員レベルでフィルタリング
     const filteredBiddingJobs = biddingJobs?.filter(job => {
@@ -170,9 +203,14 @@ export async function GET(request: NextRequest) {
       return canAccessProject(userLevel as MemberLevel, requiredLevel)
     }) || []
     
+    // 辞退した案件も会員レベルでフィルタリング
+    const filteredDeclinedJobs = declinedJobs?.filter(job => {
+      const requiredLevel = (job.required_level as MemberLevel) || 'beginner'
+      return canAccessProject(userLevel as MemberLevel, requiredLevel)
+    }) || []
     
-    // フィルタリングされた入札可能な案件と落札した案件を結合
-    const jobsData = [...filteredBiddingJobs, ...awardedJobs]
+    // フィルタリングされた入札可能な案件、落札した案件、辞退した案件を結合
+    const jobsData = [...filteredBiddingJobs, ...awardedJobs, ...filteredDeclinedJobs]
 
 
     // 組織名を取得
@@ -210,6 +248,9 @@ export async function GET(request: NextRequest) {
       const deadline = new Date(job.bidding_deadline)
       const isExpired = deadline < now
       
+      // 辞退案件かチェック
+      const isDeclined = declinedJobs.some(declinedJob => declinedJob.id === job.id)
+      
       // アドバイス生成
       const advice = generateAdvice(job, currentBidCount, isExpired)
       
@@ -234,7 +275,8 @@ export async function GET(request: NextRequest) {
         current_bid_count: currentBidCount,
         is_full: isFull,
         is_expired: isExpired,
-        can_bid: !isFull && !isExpired && job.status === 'bidding',
+        is_declined: isDeclined,
+        can_bid: !isFull && !isExpired && job.status === 'bidding' && !isDeclined,
         advice: advice
       }
     }) || []

@@ -52,6 +52,7 @@ interface JobData {
   advice: string
   contractor_id?: string
   required_level?: MemberLevel
+  is_declined?: boolean
 }
 
 interface BidData {
@@ -612,6 +613,7 @@ function JobsPageContent() {
                   transition={{ delay: index * 0.1 }}
                 >
                   <Card className={`hover-lift cursor-pointer group ${
+                    job.is_declined ? 'border-red-200 bg-red-50' :
                     job.is_full ? 'border-orange-200 bg-orange-50' : 
                     job.is_expired ? 'border-gray-200 bg-gray-50' : 
                     'border-gray-200 bg-white'
@@ -620,6 +622,7 @@ function JobsPageContent() {
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <CardTitle className={`text-lg transition-colors ${
+                            job.is_declined ? 'text-red-800' :
                             job.is_full ? 'text-orange-800' : 
                             job.is_expired ? 'text-gray-600' : 
                             'text-gray-900 group-hover:text-engineering-blue'
@@ -634,7 +637,12 @@ function JobsPageContent() {
                           <Badge className={getStatusColor(job.status)}>
                             {getStatusText(job.status)}
                           </Badge>
-                          {job.is_full && (
+                          {job.is_declined && (
+                            <Badge variant="outline" className="border-red-300 text-red-700 bg-red-100">
+                              辞退済み
+                            </Badge>
+                          )}
+                          {job.is_full && !job.is_declined && (
                             <Badge variant="outline" className="border-orange-300 text-orange-700 bg-orange-100">
                               募集完了
                             </Badge>
@@ -687,7 +695,13 @@ function JobsPageContent() {
                             </Badge>
                           </div>
                         )}
-                        {job.is_full && (
+                        {job.is_declined && (
+                          <div className="flex items-center gap-2 text-red-600 font-medium">
+                            <AlertCircle className="w-4 h-4" />
+                            お気に入り会員として優先依頼を辞退しました
+                          </div>
+                        )}
+                        {job.is_full && !job.is_declined && (
                           <div className="flex items-center gap-2 text-red-600 font-medium">
                             <AlertCircle className="w-4 h-4" />
                             募集人数に達しました

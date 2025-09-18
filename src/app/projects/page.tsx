@@ -52,6 +52,8 @@ interface ProjectData {
   bidding_deadline?: string
   required_contractors?: number
   required_level?: MemberLevel
+  is_expired?: boolean
+  days_until_deadline?: number | null
 }
 
 function ProjectsPageContent() {
@@ -87,6 +89,11 @@ function ProjectsPageContent() {
   const [attachments, setAttachments] = useState<any[]>([])
   const [isLoadingAttachments, setIsLoadingAttachments] = useState(false)
   const [isUploadingFile, setIsUploadingFile] = useState(false)
+  const [showExpiredNotification, setShowExpiredNotification] = useState(false)
+  const [expiredProjectsCount, setExpiredProjectsCount] = useState(0)
+  const [favoriteMembers, setFavoriteMembers] = useState<any[]>([])
+  const [selectedFavoriteMembers, setSelectedFavoriteMembers] = useState<string[]>([])
+  const [showFavoriteMembersModal, setShowFavoriteMembersModal] = useState(false)
   const lastFetchKeyRef = useRef<string | null>(null)
 
   // 予算のフォーマット処理
@@ -101,6 +108,29 @@ function ProjectsPageContent() {
   const parseBudget = (value: string) => {
     return parseInt(value.replace(/[^\d]/g, ''), 10) || 0
   }
+
+  // お気に入り会員データを取得する関数
+  const fetchFavoriteMembers = useCallback(async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
+      const response = await fetch('/api/favorite-members', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        }
+      })
+
+      const result = await response.json()
+      if (response.ok) {
+        setFavoriteMembers(result.favorite_members || [])
+      }
+    } catch (error) {
+      console.error('お気に入り会員取得エラー:', error)
+    }
+  }, [])
 
   // 案件データを取得する関数
   const fetchProjects = useCallback(async () => {
@@ -124,8 +154,14 @@ function ProjectsPageContent() {
       const result = await response.json()
 
       if (response.ok) {
-        setProjects(result.projects || [])
-        setFilteredProjects(result.projects || [])
+        const projectsData = result.projects || []
+        setProjects(projectsData)
+        setFilteredProjects(projectsData)
+        
+        // 期限切れ案件の通知設定
+        const expiredCount = projectsData.filter((p: ProjectData) => p.is_expired).length
+        setExpiredProjectsCount(expiredCount)
+        setShowExpiredNotification(expiredCount > 0)
       } else {
         console.error('fetchProjects: 案件データの取得に失敗:', result.message)
         setProjects([])
@@ -154,7 +190,8 @@ function ProjectsPageContent() {
     lastFetchKeyRef.current = fetchKey
 
     fetchProjects()
-  }, [userProfile, userRole, fetchProjects])
+    fetchFavoriteMembers()
+  }, [userProfile, userRole, fetchProjects, fetchFavoriteMembers])
 
   // フィルタリング
   useEffect(() => {
@@ -205,7 +242,38 @@ function ProjectsPageContent() {
       const result = await response.json()
 
       if (response.ok) {
-        alert('案件が正常に作成されました')
+        const projectId = result.project.id
+        
+        // お気に入り会員に優先依頼を送信
+        if (selectedFavoriteMembers.length > 0) {
+          try {
+            const invitationResponse = await fetch('/api/priority-invitations', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${session.access_token}`
+              },
+              body: JSON.stringify({
+                project_id: projectId,
+                contractor_ids: selectedFavoriteMembers,
+                expires_in_hours: 72 // 3日間
+              })
+            })
+
+            const invitationResult = await invitationResponse.json()
+            if (invitationResponse.ok) {
+              alert(`案件が正常に作成されました。${selectedFavoriteMembers.length}名のお気に入り会員に優先依頼を送信しました。`)
+            } else {
+              alert(`案件は作成されましたが、優先依頼の送信に失敗しました: ${invitationResult.message}`)
+            }
+          } catch (error) {
+            console.error('優先依頼送信エラー:', error)
+            alert('案件は作成されましたが、優先依頼の送信に失敗しました')
+          }
+        } else {
+          alert('案件が正常に作成されました')
+        }
+
         setShowNewProjectForm(false)
         setNewProject({
           title: '',
@@ -220,6 +288,7 @@ function ProjectsPageContent() {
           required_contractors: 1,
           required_level: 'beginner'
         })
+        setSelectedFavoriteMembers([])
         // 案件一覧を再読み込み
         await fetchProjects()
       } else {
@@ -730,6 +799,39 @@ function ProjectsPageContent() {
         </motion.header>
 
         <main className="px-6 py-8">
+          {/* 期限切れ案件の通知バナー */}
+          {showExpiredNotification && (
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
+                    <Clock className="w-4 h-4 text-red-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-red-800">
+                      入札期限切れ案件があります
+                    </h3>
+                    <p className="text-sm text-red-700">
+                      {expiredProjectsCount}件の案件の入札期限が切れています。対応が必要です。
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowExpiredNotification(false)}
+                  className="text-red-600 border-red-200 hover:bg-red-50"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+            </motion.div>
+          )}
+
           {/* フィルターと検索 */}
           <div className="mb-8">
             <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
@@ -788,7 +890,13 @@ function ProjectsPageContent() {
                   exit={{ opacity: 0, y: -20 }}
                   transition={{ delay: index * 0.1 }}
                 >
-                  <Card className="hover-lift cursor-pointer group">
+                  <Card className={`hover-lift cursor-pointer group ${
+                    project.is_expired 
+                      ? 'border-red-200 bg-red-50/50' 
+                      : project.days_until_deadline !== null && project.days_until_deadline <= 3 
+                        ? 'border-orange-200 bg-orange-50/50' 
+                        : ''
+                  }`}>
                     <CardHeader className="pb-3">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
@@ -799,32 +907,42 @@ function ProjectsPageContent() {
                             {project.contractor_name} • {project.category}
                           </CardDescription>
                         </div>
-                        <Badge className={getStatusColor(project.status)}>
-                          {getStatusText(project.status)}
-                        </Badge>
+                        <div className="flex flex-col gap-1">
+                          <Badge className={getStatusColor(project.status)}>
+                            {getStatusText(project.status)}
+                          </Badge>
+                          {project.is_expired && (
+                            <Badge className="bg-red-100 text-red-800 border-red-200">
+                              期限切れ
+                            </Badge>
+                          )}
+                          {!project.is_expired && project.days_until_deadline !== null && project.days_until_deadline <= 3 && (
+                            <Badge className="bg-orange-100 text-orange-800 border-orange-200">
+                              期限間近
+                            </Badge>
+                          )}
+                        </div>
                       </div>
                     </CardHeader>
 
                     <CardContent className="space-y-4">
-                      {/* 進捗バー */}
-                      <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium text-gray-700">進捗</span>
-                          <span className="text-sm text-gray-600">{project.progress}%</span>
-                        </div>
-                        <Progress
-                          value={project.progress}
-                          variant="engineering"
-                          className="mb-3"
-                        />
-                      </div>
-
                       {/* 案件詳細 */}
                       <div className="space-y-2 text-sm">
                         {project.bidding_deadline && (
-                          <div className="flex items-center gap-2 text-orange-600 font-medium">
+                          <div className={`flex items-center gap-2 font-medium ${
+                            project.is_expired 
+                              ? 'text-red-600' 
+                              : project.days_until_deadline !== null && project.days_until_deadline <= 3 
+                                ? 'text-orange-600' 
+                                : 'text-gray-600'
+                          }`}>
                             <Clock className="w-4 h-4" />
                             入札締切: {new Date(project.bidding_deadline).toLocaleDateString('ja-JP')}
+                            {project.days_until_deadline !== null && (
+                              <span className="text-xs">
+                                ({project.days_until_deadline > 0 ? `あと${project.days_until_deadline}日` : '期限切れ'})
+                              </span>
+                            )}
                           </div>
                         )}
                         <div className="flex items-center gap-2 text-gray-600">

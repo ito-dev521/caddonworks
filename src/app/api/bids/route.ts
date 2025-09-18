@@ -359,6 +359,7 @@ export async function GET(request: NextRequest) {
       project_id: bid.project_id,
       bid_amount: bid.bid_amount,
       proposal: bid.proposal,
+      message: bid.proposal, // proposalフィールドをmessageとして使用
       estimated_duration: bid.estimated_duration,
       start_date: bid.start_date,
       status: bid.status,
