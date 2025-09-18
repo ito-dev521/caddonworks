@@ -54,6 +54,7 @@ const getNavigationItems = (userRole: string, badges: any) => {
       { icon: Home, label: "ダッシュボード", href: "/dashboard", badge: null },
       { icon: FolderOpen, label: "案件一覧", href: "/jobs", badge: badges.jobs || null },
       { icon: MessageCircle, label: "チャット", href: "/chat", badge: badges.chat || null },
+      { icon: FileText, label: "契約管理", href: "/contracts", badge: badges.contracts || null },
       { icon: Star, label: "受注者評価", href: "/evaluations", badge: null },
       { icon: FileText, label: "請求書管理", href: "/invoices", badge: null },
       { icon: FileText, label: "提出物", href: "/deliverables", badge: badges.deliverables || null },

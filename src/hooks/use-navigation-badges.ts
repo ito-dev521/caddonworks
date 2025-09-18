@@ -68,11 +68,12 @@ export function useNavigationBadges() {
             break
 
           case 'Contractor':
-            // 受注者: 案件一覧、チャット、提出物
+            // 受注者: 案件一覧、チャット、契約管理、提出物
             try {
-              const [jobsRes, chatRes, deliverablesRes] = await Promise.all([
+              const [jobsRes, chatRes, contractsRes, deliverablesRes] = await Promise.all([
                 fetch('/api/jobs', { headers }),
                 fetch('/api/chat/rooms', { headers }),
+                fetch('/api/contracts', { headers }),
                 fetch('/api/deliverables', { headers })
               ])
 
@@ -84,6 +85,11 @@ export function useNavigationBadges() {
               if (chatRes.ok) {
                 const chatData = await chatRes.json()
                 badgeData.chat = chatData.rooms?.filter((room: any) => room.unread_count > 0).length || 0
+              }
+
+              if (contractsRes.ok) {
+                const contractsData = await contractsRes.json()
+                badgeData.contracts = contractsData.contracts?.length || 0
               }
 
               if (deliverablesRes.ok) {

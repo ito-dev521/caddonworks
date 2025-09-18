@@ -3,15 +3,13 @@ import { createSupabaseAdmin } from '@/lib/supabase'
 
 const supabaseAdmin = createSupabaseAdmin()
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const { id: invoiceId } = params
+    const invoiceId = params.id
 
     // 認証ヘッダーからトークンを取得
     const authHeader = request.headers.get('authorization')
+    
     if (!authHeader) {
       return NextResponse.json(
         { message: '認証が必要です' },
@@ -29,31 +27,16 @@ export async function POST(
       )
     }
 
-    // ユーザープロフィール取得
-    const { data: userProfile, error: profileError } = await supabaseAdmin
-      .from('users')
-      .select('id')
-      .eq('auth_user_id', user.id)
-      .single()
-
-    if (profileError || !userProfile) {
-      return NextResponse.json(
-        { message: 'ユーザー情報の取得に失敗しました' },
-        { status: 400 }
-      )
-    }
-
-    // 請求書を取得
+    // 請求書の存在確認と権限チェック
     const { data: invoice, error: invoiceError } = await supabaseAdmin
       .from('invoices')
       .select(`
-        id,
-        contractor_id,
-        status,
-        projects (
-          id,
-          title,
-          org_id
+        *,
+        contracts!inner(
+          projects!inner(
+            org_id,
+            title
+          )
         )
       `)
       .eq('id', invoiceId)
@@ -66,19 +49,18 @@ export async function POST(
       )
     }
 
-    // 受注者のみ発行可能
-    if (invoice.contractor_id !== userProfile.id) {
-      return NextResponse.json(
-        { message: 'この請求書を発行する権限がありません' },
-        { status: 403 }
-      )
-    }
+    // 組織の管理者権限をチェック
+    const { data: membership, error: membershipError } = await supabaseAdmin
+      .from('memberships')
+      .select('role')
+      .eq('user_id', user.id)
+      .eq('org_id', invoice.contracts.projects.org_id)
+      .single()
 
-    // 下書き状態のみ発行可能
-    if (invoice.status !== 'draft') {
+    if (membershipError || !membership || membership.role !== 'OrgAdmin') {
       return NextResponse.json(
-        { message: 'この請求書は既に発行済みです' },
-        { status: 400 }
+        { message: 'この操作を実行する権限がありません' },
+        { status: 403 }
       )
     }
 
@@ -101,20 +83,22 @@ export async function POST(
       )
     }
 
-    // 発注者に通知を送信
+    // 受注者に通知を送信
     const { error: notificationError } = await supabaseAdmin
       .from('notifications')
       .insert({
-        user_id: (invoice.projects as any)?.org_id, // 発注者組織のID
+        user_id: invoice.contractor_id,
         title: '請求書が発行されました',
-        message: `案件「${(invoice.projects as any)?.title}」の請求書が発行されました。支払いをお願いします。`,
+        message: `案件「${invoice.contracts.projects.title}」の請求書が発行されました。請求書ページで確認できます。`,
         type: 'invoice_issued',
-        related_id: invoiceId
+        data: {
+          invoice_id: invoiceId,
+          project_id: invoice.contracts.projects.id
+        }
       })
 
     if (notificationError) {
       console.error('通知作成エラー:', notificationError)
-      // 通知エラーは請求書発行を妨げない
     }
 
     return NextResponse.json({

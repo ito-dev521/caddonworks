@@ -129,6 +129,7 @@ export async function GET(request: NextRequest) {
       .select(`
         project_id,
         status,
+        bid_amount,
         projects (
           id,
           title,
@@ -160,8 +161,12 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // 署名済み契約の案件を抽出
-    const awardedJobs = contracts?.map(contract => contract.projects).filter(Boolean) || []
+    // 署名済み契約の案件を抽出（契約金額を含める）
+    const awardedJobs = contracts?.map(contract => ({
+      ...contract.projects,
+      contract_amount: contract.bid_amount, // 契約金額を追加
+      status: 'awarded' // 落札案件として明確にステータスを設定
+    })).filter(Boolean) || []
     
     // 3. お気に入り会員が断った案件を取得（優先依頼で辞退された案件）
     const { data: declinedInvitations, error: declinedError } = await supabaseAdmin
@@ -204,7 +209,7 @@ export async function GET(request: NextRequest) {
     }) || []
     
     // 辞退した案件も会員レベルでフィルタリング
-    const filteredDeclinedJobs = declinedJobs?.filter(job => {
+    const filteredDeclinedJobs = declinedJobs?.filter((job: any) => {
       const requiredLevel = (job.required_level as MemberLevel) || 'beginner'
       return canAccessProject(userLevel as MemberLevel, requiredLevel)
     }) || []
@@ -249,7 +254,7 @@ export async function GET(request: NextRequest) {
       const isExpired = deadline < now
       
       // 辞退案件かチェック
-      const isDeclined = declinedJobs.some(declinedJob => declinedJob.id === job.id)
+      const isDeclined = declinedJobs.some((declinedJob: any) => declinedJob.id === job.id)
       
       // アドバイス生成
       const advice = generateAdvice(job, currentBidCount, isExpired)
@@ -277,7 +282,8 @@ export async function GET(request: NextRequest) {
         is_expired: isExpired,
         is_declined: isDeclined,
         can_bid: !isFull && !isExpired && job.status === 'bidding' && !isDeclined,
-        advice: advice
+        advice: advice,
+        contract_amount: job.contract_amount // 契約金額を追加
       }
     }) || []
 

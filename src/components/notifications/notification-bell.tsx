@@ -1,8 +1,8 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Bell, X, Check, AlertCircle, FileText, Hand, Star } from "lucide-react"
+import { Bell, X, Check, AlertCircle, FileText, Hand, Star, GripVertical } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/contexts/auth-context"
@@ -26,6 +26,12 @@ export function NotificationBell() {
   const [unreadCount, setUnreadCount] = useState(0)
   const [isOpen, setIsOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  
+  // ドラッグ機能のための状態
+  const [position, setPosition] = useState({ x: -1, y: -1 }) // -1は未初期化を示す
+  const [isDragging, setIsDragging] = useState(false)
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
+  const modalRef = useRef<HTMLDivElement>(null)
 
   // 通知を取得
   const fetchNotifications = async () => {
@@ -89,6 +95,75 @@ export function NotificationBell() {
     }
   }
 
+  // ドラッグハンドラー
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.target instanceof HTMLElement && e.target.closest('[data-draggable="false"]')) {
+      return // ドラッグ不可の要素の場合は何もしない
+    }
+    
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(true)
+    
+    // モーダルの現在位置を取得
+    const rect = modalRef.current?.getBoundingClientRect()
+    if (rect) {
+      setDragStart({
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top
+      })
+    }
+  }
+
+  const handleMouseMove = (e: MouseEvent) => {
+    if (!isDragging) return
+    
+    e.preventDefault()
+    
+    // マウス位置からドラッグ開始時のオフセットを引く
+    const newX = e.clientX - dragStart.x
+    const newY = e.clientY - dragStart.y
+    
+    // 画面境界内に制限
+    const modalWidth = modalRef.current?.offsetWidth || 448
+    const modalHeight = modalRef.current?.offsetHeight || 400
+    const maxX = Math.max(0, window.innerWidth - modalWidth)
+    const maxY = Math.max(0, window.innerHeight - modalHeight)
+    
+    // 境界内に制限
+    const clampedX = Math.max(0, Math.min(newX, maxX))
+    const clampedY = Math.max(0, Math.min(newY, maxY))
+    
+    setPosition({
+      x: clampedX,
+      y: clampedY
+    })
+  }
+
+  const handleMouseUp = () => {
+    setIsDragging(false)
+  }
+
+
+  // マウスイベントのリスナーを設定
+  useEffect(() => {
+    if (isDragging) {
+      document.addEventListener('mousemove', handleMouseMove)
+      document.addEventListener('mouseup', handleMouseUp)
+      document.body.style.userSelect = 'none'
+    } else {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+      document.body.style.userSelect = ''
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+      document.body.style.userSelect = ''
+    }
+  }, [isDragging, dragStart])
+
   // 通知アイコンを取得
   const getNotificationIcon = (type: string) => {
     switch (type) {
@@ -135,6 +210,19 @@ export function NotificationBell() {
   const handleToggle = () => {
     setIsOpen(!isOpen)
   }
+
+  // モーダルが開かれた時に中央位置を設定
+  useEffect(() => {
+    if (isOpen && position.x < 0) {
+      const modalWidth = 448 // 28rem = 448px
+      const modalHeight = 400 // 推定高さ
+      const centerX = (window.innerWidth - modalWidth) / 2
+      const centerY = (window.innerHeight - modalHeight) / 2
+      
+      console.log('Setting position:', { x: centerX, y: centerY })
+      setPosition({ x: centerX, y: centerY })
+    }
+  }, [isOpen, position.x])
 
   // 通知クリック時の処理
   const handleNotificationClick = (notification: Notification) => {
@@ -203,22 +291,36 @@ export function NotificationBell() {
             
             {/* 通知モーダル */}
             <motion.div
-              initial={{ opacity: 0, y: -20, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -20, scale: 0.95 }}
-              className="fixed top-1/3 left-1/3 transform -translate-x-1/2 -translate-y-1/2 w-[28rem] max-w-[calc(100vw-2rem)] bg-white rounded-lg shadow-xl border border-gray-200 z-50"
+              ref={modalRef}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ 
+                opacity: 1, 
+                scale: 1
+              }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="fixed w-[28rem] max-w-[calc(100vw-2rem)] bg-white rounded-lg shadow-xl border border-gray-200 z-50"
               style={{
-                maxHeight: 'calc(100vh - 4rem)'
+                maxHeight: 'calc(100vh - 4rem)',
+                left: position.x >= 0 ? position.x : '50%',
+                top: position.y >= 0 ? position.y : '50%',
+                transform: position.x >= 0 ? 'none' : 'translate(-50%, -50%)'
               }}
             >
             <div className="p-4 border-b border-gray-200">
               <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-gray-900">通知</h3>
+                <div 
+                  className="flex items-center gap-2 cursor-grab active:cursor-grabbing"
+                  onMouseDown={handleMouseDown}
+                >
+                  <GripVertical className="w-4 h-4 text-gray-400" />
+                  <h3 className="font-semibold text-gray-900">通知</h3>
+                </div>
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={() => setIsOpen(false)}
                   className="h-6 w-6"
+                  data-draggable="false"
                 >
                   <X className="w-4 h-4" />
                 </Button>
@@ -230,6 +332,7 @@ export function NotificationBell() {
               style={{
                 maxHeight: 'calc(100vh - 12rem)'
               }}
+              data-draggable="false"
             >
               {isLoading ? (
                 <div className="p-4 text-center text-gray-500">
@@ -247,6 +350,7 @@ export function NotificationBell() {
                       !notification.read_at ? 'bg-blue-50' : ''
                     }`}
                     onClick={() => handleNotificationClick(notification)}
+                    data-draggable="false"
                   >
                     <div className="flex items-start gap-3">
                       <div className="flex-shrink-0 mt-1">

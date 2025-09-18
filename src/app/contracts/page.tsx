@@ -39,16 +39,14 @@ interface Invoice {
   id: string
   project_id: string
   invoice_number: string
-  contractor_id: string
-  org_id: string
+  contract_id: string
   amount: number
-  tax_rate: number
   tax_amount: number
   total_amount: number
+  status: string
   issue_date: string
   due_date: string
   paid_date?: string
-  status: string
   description: string
   billing_details: any
   created_at: string
@@ -98,33 +96,30 @@ function ContractsPageContent() {
         }
       })
 
-      const result = await response.json()
-
       if (response.ok) {
+        const result = await response.json()
+        console.log('契約データ:', result)
+        
         const allContracts = result.contracts || []
-
-        if (allContracts.length === 0) {
-          setContracts([])
-          setPendingContracts([])
-        } else {
-          // 署名済み契約と署名待ち契約を分ける
-          const signedContracts = allContracts.filter((contract: any) =>
-            contract.status === 'signed' || contract.status === 'completed'
-          )
-          const pendingContracts = allContracts.filter((contract: any) =>
-            contract.status === 'pending_contractor' || contract.status === 'pending_org'
-          )
-
-          setContracts(signedContracts)
-          setPendingContracts(pendingContracts)
-        }
+        
+        // 署名済み契約と署名待ち契約を分離
+        const signed = allContracts.filter((contract: Contract) => contract.status === 'signed')
+        const pending = allContracts.filter((contract: Contract) => 
+          contract.status === 'pending' || 
+          contract.status === 'pending_contractor' || 
+          contract.status === 'pending_org'
+        )
+        
+        setContracts(signed)
+        setPendingContracts(pending)
       } else {
-        console.error('契約取得エラー:', result.message)
-        setError(result.message || '契約データの取得に失敗しました')
+        const errorResult = await response.json()
+        console.error('契約取得エラー:', errorResult)
+        setError(errorResult.message || '契約データの取得に失敗しました')
       }
     } catch (err: any) {
       console.error('契約取得エラー:', err)
-      setError('サーバーエラーが発生しました')
+      setError('契約データの取得に失敗しました')
     } finally {
       setLoading(false)
     }
@@ -201,159 +196,13 @@ function ContractsPageContent() {
     }
   }
 
-  useEffect(() => {
-    if (!userProfile || !userRole) {
-      setLoading(false)
-      return
-    }
-
-    // 同一ユーザー・ロールの組み合わせでは1回のみフェッチ（開発時のStrictMode重複実行対策）
-    const fetchKey = `${userProfile.id}:${userRole}`
-    if (lastFetchKeyRef.current === fetchKey) return
-    lastFetchKeyRef.current = fetchKey
-
-    fetchContracts()
-    if (userRole === 'OrgAdmin') {
-      fetchCompletedProjects()
-    } else if (userRole === 'Contractor') {
-      fetchInvoices()
-    }
-  }, [userProfile, userRole])
-
-  // 契約を月毎にグループ化
-  const groupContractsByMonth = (contracts: Contract[]) => {
-    const grouped = contracts.reduce((acc, contract) => {
-      const date = new Date(contract.created_at)
-      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-      if (!acc[monthKey]) {
-        acc[monthKey] = {
-          monthName: date.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' }),
-          contracts: []
-        }
-      }
-      acc[monthKey].contracts.push(contract)
-      return acc
-    }, {} as Record<string, { monthName: string; contracts: Contract[] }>)
-
-    return Object.values(grouped).sort((a, b) => b.monthName.localeCompare(a.monthName))
-  }
-
-  // 契約に署名
-  const handleSignContract = async (contractId: string) => {
-    try {
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-
-      if (sessionError || !session) {
-        console.error('セッション取得エラー:', sessionError)
-        setError('認証が必要です')
-        return
-      }
-
-      const response = await fetch(`/api/contracts/${contractId}/sign`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json'
-        }
-      })
-
-      const result = await response.json()
-
-      if (response.ok) {
-        // 契約一覧を再取得
-        await fetchContracts()
-      } else {
-        setError(result.message || '契約の署名に失敗しました')
-      }
-    } catch (err: any) {
-      console.error('契約署名エラー:', err)
-      setError('サーバーエラーが発生しました')
-    }
-  }
-
-  // 業務完了届作成機能（実際は請求書を作成）
-  const generateInvoice = async (projectId: string) => {
-    try {
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-
-      if (sessionError || !session) {
-        console.error('セッション取得エラー:', sessionError)
-        alert('認証が必要です')
-        return
-      }
-
-      const response = await fetch('/api/invoices', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`
-        },
-        body: JSON.stringify({
-          project_id: projectId,
-          type: 'completion'
-        })
-      })
-
-      const result = await response.json()
-
-      if (response.ok) {
-        alert('業務完了届が作成されました。受注者に通知が送信されます。')
-        // 完了案件リストを再取得（状態も更新される）
-        await fetchCompletedProjects()
-      } else {
-        alert('業務完了届作成に失敗しました: ' + result.message)
-      }
-    } catch (error) {
-      console.error('業務完了届作成エラー:', error)
-      alert('ネットワークエラーが発生しました')
-    }
-  }
-
-  // 評価フォームを開く
-  const openEvaluationForm = (project: any) => {
-    // 既に評価済みの場合は開かない
-    if (evaluatedProjects.has(project.id)) {
-      alert('この案件は既に評価済みです。')
-      return
-    }
-
-    const contract = contracts.find(c => c.project_id === project.id)
-    if (contract) {
-      setEvaluationTarget({
-        projectId: project.id,
-        contractId: contract.id,
-        contractorId: project.contractor_id,
-        contractorName: project.contractor_name || '受注者'
-      })
-      setShowEvaluationForm(true)
-    }
-  }
-
-  // 評価完了時の処理
-  const handleEvaluationSuccess = () => {
-    if (evaluationTarget) {
-      setEvaluatedProjects(prev => new Set(Array.from(prev).concat(evaluationTarget.projectId)))
-    }
-    setShowEvaluationForm(false)
-    setEvaluationTarget(null)
-    alert('評価が完了しました。業務完了届作成ボタンが有効になりました。')
-  }
-
-  // 評価フォームをキャンセル
-  const handleEvaluationCancel = () => {
-    setShowEvaluationForm(false)
-    setEvaluationTarget(null)
-  }
-
-  // プロジェクトの状態を確認（評価済み、請求書作成済み）
+  // プロジェクトの状態を確認（評価済み・請求書作成済み）
   const checkProjectStatuses = async (projects: any[], contractsData: Contract[]) => {
     try {
       const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-      if (sessionError) {
+
+      if (sessionError || !session) {
         console.error('セッション取得エラー:', sessionError)
-        return
-      }
-      if (!session) {
         return
       }
 
@@ -368,7 +217,7 @@ function ContractsPageContent() {
         // 評価データの取得
         let evaluationResponse = null
         try {
-          evaluationResponse = await fetch(`/api/evaluations/contractor?contractor_id=${project.contractor_id}&project_id=${project.id}`, {
+          evaluationResponse = await fetch(`/api/evaluations/contractor?project_id=${project.id}`, {
             headers: { 'Authorization': `Bearer ${session.access_token}` }
           })
         } catch (error) {
@@ -405,80 +254,157 @@ function ContractsPageContent() {
             invoiceMap.set(project.id, invoiceResult.invoice)
           }
         } else if (invoiceResponse) {
-          console.error(`プロジェクト ${project.id} の請求書取得エラー:`, invoiceResponse.status, invoiceResponse.statusText)
+          console.error(`プロジェクト ${project.id} の請求書データ取得エラー:`, invoiceResponse.status, invoiceResponse.statusText)
         }
       })
 
       await Promise.all(statusPromises)
-      
+
       setEvaluatedProjects(evaluatedSet)
       setInvoicedProjects(invoicedSet)
       setInvoiceStatuses(invoiceMap)
-    } catch (error) {
-      console.error('プロジェクト状態確認エラー:', error)
+    } catch (err: any) {
+      console.error('プロジェクト状態確認エラー:', err)
     }
   }
 
-  // プロジェクトが評価済みかチェック
-  const isProjectEvaluated = async (projectId: string) => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) return false
+  const isProjectEvaluated = (projectId: string) => {
+    return evaluatedProjects.has(projectId)
+  }
 
-      const response = await fetch(`/api/evaluations/contractor?project_id=${projectId}`, {
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`
+  const isProjectInvoiced = (projectId: string) => {
+    return invoicedProjects.has(projectId)
+  }
+
+  const getInvoiceStatus = (projectId: string) => {
+    return invoiceStatuses.get(projectId)
+  }
+
+  // 契約を月毎にグループ化
+  const groupContractsByMonth = (contracts: Contract[]) => {
+    const grouped = contracts.reduce((acc, contract) => {
+      const date = new Date(contract.created_at)
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+      if (!acc[monthKey]) {
+        acc[monthKey] = {
+          monthName: date.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' }),
+          contracts: []
         }
+      }
+      acc[monthKey].contracts.push(contract)
+      return acc
+    }, {} as Record<string, { monthName: string; contracts: Contract[] }>)
+
+    return Object.values(grouped).sort((a, b) => b.monthName.localeCompare(a.monthName))
+  }
+
+  // 契約をプロジェクトごとにグループ化（複数受注者対応）
+  const groupContractsByProject = (contracts: Contract[]) => {
+    const grouped = contracts.reduce((acc, contract) => {
+      const projectKey = contract.project_id
+      if (!acc[projectKey]) {
+        acc[projectKey] = {
+          projectTitle: contract.project_title || contract.contract_title,
+          projectId: contract.project_id,
+          contracts: []
+        }
+      }
+      acc[projectKey].contracts.push(contract)
+      return acc
+    }, {} as Record<string, { projectTitle: string; projectId: string; contracts: Contract[] }>)
+
+    return Object.values(grouped)
+  }
+
+  // 評価フォームを開く
+  const handleEvaluateContractor = (project: any, contract: Contract) => {
+    setEvaluationTarget({
+      projectId: project.id,
+      contractId: contract.id,
+      contractorId: contract.contractor_id,
+      contractorName: contract.contractor_name || 'Unknown'
+    })
+    setShowEvaluationForm(true)
+  }
+
+  // 評価成功時の処理
+  const handleEvaluationSuccess = () => {
+    setShowEvaluationForm(false)
+    setEvaluationTarget(null)
+    // 完了案件を再取得して状態を更新
+    fetchCompletedProjects()
+    
+    // 成功メッセージを表示
+    alert('評価が完了しました。受注者に通知が送信されました。')
+  }
+
+  // 評価キャンセル時の処理
+  const handleEvaluationCancel = () => {
+    setShowEvaluationForm(false)
+    setEvaluationTarget(null)
+  }
+
+  // 業務完了届の作成
+  const handleCreateInvoice = async (projectId: string) => {
+    try {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+
+      if (sessionError || !session) {
+        console.error('セッション取得エラー:', sessionError)
+        alert('認証エラーが発生しました')
+        return
+      }
+
+      const response = await fetch('/api/invoices', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          project_id: projectId,
+          type: 'completion'
+        })
       })
 
+      const result = await response.json()
+
       if (response.ok) {
-        const result = await response.json()
-        return result.evaluations && result.evaluations.length > 0
+        if (result.alreadyExists) {
+          alert('業務完了届は既に作成済みです')
+        } else {
+          alert('業務完了届を作成しました。受注者に通知が送信されました。')
+          // 完了案件を再取得して状態を更新
+          fetchCompletedProjects()
+        }
+      } else {
+        console.error('業務完了届作成エラー:', result)
+        alert(`業務完了届の作成に失敗しました: ${result.message || '不明なエラー'}`)
       }
-      return false
-    } catch (error) {
-      console.error('評価確認エラー:', error)
-      return false
+    } catch (err: any) {
+      console.error('業務完了届作成エラー:', err)
+      alert('業務完了届の作成に失敗しました')
     }
   }
 
-  // 請求書ステータス表示用の関数
-  const getInvoiceStatusBadge = (projectId: string) => {
-    const invoice = invoiceStatuses.get(projectId)
-    if (!invoice) return null
-
-    switch (invoice.status) {
-      case 'draft':
-        return <Badge variant="outline" className="text-orange-600 border-orange-600">下書き</Badge>
-      case 'issued':
-        return <Badge variant="default" className="bg-green-600">発行済み</Badge>
-      case 'paid':
-        return <Badge variant="default" className="bg-blue-600">支払済み</Badge>
-      default:
-        return <Badge variant="outline">{invoice.status}</Badge>
+  useEffect(() => {
+    if (userProfile && userRole) {
+      fetchContracts()
+      
+      if (userRole === 'OrgAdmin') {
+        fetchCompletedProjects()
+      } else if (userRole === 'Contractor') {
+        fetchInvoices()
+      }
     }
-  }
+  }, [userProfile, userRole])
 
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-mesh flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-engineering-blue mx-auto mb-4"></div>
-          <p className="text-gray-600">データを読み込み中...</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (!userProfile || !userRole) {
-    return (
-      <div className="min-h-screen bg-gradient-mesh flex items-center justify-center">
-        <div className="text-center bg-white p-8 rounded-lg shadow-xl max-w-md">
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">ログインが必要です</h2>
-          <p className="text-gray-600 mb-4">契約管理ページにアクセスするにはログインしてください。</p>
-          <Button onClick={() => window.location.href = '/auth/login'} variant="engineering">
-            ログインページへ
-          </Button>
+          <p className="text-gray-600">読み込み中...</p>
         </div>
       </div>
     )
@@ -517,10 +443,10 @@ function ContractsPageContent() {
             </p>
           </div>
 
-          {/* タブ */}
-          <div className="mb-6">
-            <div className="border-b border-gray-200">
-              <nav className="-mb-px flex space-x-8">
+          {/* タブナビゲーション */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
+            <div className="p-6">
+              <nav className="flex space-x-8">
                 <button
                   onClick={() => setSelectedTab('signed')}
                   className={`py-2 px-1 border-b-2 font-medium text-sm ${
@@ -531,7 +457,7 @@ function ContractsPageContent() {
                 >
                   署名済み契約
                   {contracts.length > 0 && (
-                    <span className="ml-2 bg-engineering-blue text-white text-xs px-2 py-1 rounded-full">
+                    <span className="ml-2 bg-blue-500 text-white text-xs px-2 py-1 rounded-full">
                       {contracts.length}
                     </span>
                   )}
@@ -560,9 +486,9 @@ function ContractsPageContent() {
                   }`}
                 >
                   {userRole === 'OrgAdmin' ? '業務完了届発行' : '請求書'}
-                  {(userRole === 'OrgAdmin' && completedProjects.length > 0) && (
+                  {(userRole === 'OrgAdmin' && completedProjects.filter(project => !invoicedProjects.has(project.id)).length > 0) && (
                     <span className="ml-2 bg-green-500 text-white text-xs px-2 py-1 rounded-full">
-                      {completedProjects.length}
+                      {completedProjects.filter(project => !invoicedProjects.has(project.id)).length}
                     </span>
                   )}
                   {(userRole === 'Contractor' && invoices.length > 0) && (
@@ -577,28 +503,27 @@ function ContractsPageContent() {
 
           {/* 契約一覧 */}
           {selectedTab === 'signed' && (
-            // 署名済み契約
             contracts.length === 0 ? (
               <Card className="p-8 text-center">
                 <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">署名済み契約がありません</h3>
                 <p className="text-gray-600">
-                  まだ署名済みの契約がありません。
+                  署名済みの契約がありません。
                 </p>
               </Card>
             ) : (
               <div className="space-y-8">
-                {groupContractsByMonth(contracts).map((monthGroup, monthIndex) => (
-                  <div key={monthIndex}>
+                {groupContractsByProject(contracts).map((projectGroup, projectIndex) => (
+                  <div key={projectIndex}>
                     <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
-                      <Calendar className="w-5 h-5 mr-2" />
-                      {monthGroup.monthName}
+                      <FileText className="w-5 h-5 mr-2" />
+                      {projectGroup.projectTitle}
                       <span className="ml-2 text-sm font-normal text-gray-500">
-                        ({monthGroup.contracts.length}件)
+                        ({projectGroup.contracts.length}件の契約)
                       </span>
                     </h2>
                     <div className="grid gap-4">
-                      {monthGroup.contracts.map((contract) => (
+                      {projectGroup.contracts.map((contract) => (
                         <motion.div
                           key={contract.id}
                           initial={{ opacity: 0, y: 20 }}
@@ -609,7 +534,7 @@ function ContractsPageContent() {
                             <div className="flex justify-between items-start mb-4">
                               <div>
                                 <h3 className="text-lg font-semibold text-gray-900 mb-1">
-                                  {contract.project_title}
+                                  {contract.contract_title || contract.project_title}
                                 </h3>
                                 <p className="text-sm text-gray-600 mb-2">契約ID: {contract.id.slice(0, 8).toUpperCase()}</p>
                                 <Badge variant="default" className="bg-green-100 text-green-800">
@@ -640,6 +565,19 @@ function ContractsPageContent() {
                                 </p>
                               </div>
                             </div>
+                            
+                            {/* 複数受注者対応の表示 */}
+                            {userRole === 'OrgAdmin' && (
+                              <div className="bg-blue-50 p-3 rounded-lg mb-4">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-sm text-blue-700">この受注者との契約金額:</span>
+                                  <span className="font-semibold text-blue-900">¥{contract.bid_amount.toLocaleString()}</span>
+                                </div>
+                                <p className="text-xs text-blue-600 mt-1">
+                                  受注者: {contract.contractor_name} 様
+                                </p>
+                              </div>
+                            )}
 
                             {/* アクションボタン */}
                             <div className="flex justify-between items-center">
@@ -671,117 +609,143 @@ function ContractsPageContent() {
           )}
 
           {selectedTab === 'pending' && (
-            // 署名待ち契約
             pendingContracts.length === 0 ? (
               <Card className="p-8 text-center">
                 <Clock className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">署名待ち契約がありません</h3>
                 <p className="text-gray-600">
-                  現在署名待ちの契約はありません。
+                  署名待ちの契約がありません。
                 </p>
               </Card>
             ) : (
-              <div className="space-y-6">
-                {pendingContracts.map((contract) => (
-                  <motion.div
-                    key={contract.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3 }}
-                  >
-                    <Card className="p-6 border-l-4 border-l-yellow-500">
-                      <div className="flex justify-between items-start mb-4">
-                        <div>
-                          <h3 className="text-lg font-semibold text-gray-900 mb-1">
-                            {contract.project_title}
-                          </h3>
-                          <p className="text-sm text-gray-600 mb-2">契約ID: {contract.id.slice(0, 8).toUpperCase()}</p>
-                          <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-300">
-                            署名待ち
-                          </Badge>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-2xl font-bold text-engineering-blue">
-                            ¥{contract.bid_amount.toLocaleString()}
-                          </p>
-                          <p className="text-xs text-gray-500 mt-1">
-                            作成日: {new Date(contract.created_at).toLocaleDateString('ja-JP')}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
-                        <div>
-                          <span className="text-gray-600">{userRole === 'OrgAdmin' ? '受注者' : '発注者'}:</span>
-                          <p className="font-medium text-gray-900">
-                            {userRole === 'OrgAdmin' ? contract.contractor_name : contract.org_name}
-                          </p>
-                        </div>
-                        <div>
-                          <span className="text-gray-600">契約期間:</span>
-                          <p className="text-gray-900">
-                            {new Date(contract.start_date).toLocaleDateString('ja-JP')} - {new Date(contract.end_date).toLocaleDateString('ja-JP')}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* アクションボタン */}
-                      <div className="flex justify-between items-center">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => router.push(`/contracts/${contract.id}`)}
+              <div className="space-y-8">
+                {groupContractsByProject(pendingContracts).map((projectGroup, projectIndex) => (
+                  <div key={projectIndex}>
+                    <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+                      <FileText className="w-5 h-5 mr-2" />
+                      {projectGroup.projectTitle}
+                      <span className="ml-2 text-sm font-normal text-gray-500">
+                        ({projectGroup.contracts.length}件の契約)
+                      </span>
+                    </h2>
+                    <div className="grid gap-4">
+                      {projectGroup.contracts.map((contract) => (
+                        <motion.div
+                          key={contract.id}
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.3 }}
                         >
-                          <Eye className="w-4 h-4 mr-2" />
-                          詳細表示
-                        </Button>
-                        <div className="flex gap-2">
-                          {contract.status === 'pending_contractor' && userRole === 'Contractor' && (
-                            <Button
-                              onClick={() => handleSignContract(contract.id)}
-                              variant="engineering"
-                              size="sm"
-                            >
-                              署名する
-                            </Button>
-                          )}
-                          {contract.status === 'pending_org' && userRole === 'OrgAdmin' && (
-                            <Button
-                              onClick={() => handleSignContract(contract.id)}
-                              variant="engineering"
-                              size="sm"
-                            >
-                              署名する
-                            </Button>
-                          )}
-                        </div>
-                      </div>
+                          <Card className="p-6 border-l-4 border-l-yellow-500">
+                            <div className="flex justify-between items-start mb-4">
+                              <div>
+                                <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                                  {contract.contract_title || contract.project_title}
+                                </h3>
+                                <p className="text-sm text-gray-600 mb-2">契約ID: {contract.id.slice(0, 8).toUpperCase()}</p>
+                                <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-300">
+                                  {contract.status === 'pending_contractor' ? '受注者署名待ち' : 
+                                   contract.status === 'pending_org' ? '発注者署名待ち' : '署名待ち'}
+                                </Badge>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-2xl font-bold text-engineering-blue">
+                                  ¥{contract.bid_amount.toLocaleString()}
+                                </p>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  作成日: {new Date(contract.created_at).toLocaleDateString('ja-JP')}
+                                </p>
+                              </div>
+                            </div>
 
-                      {/* 署名状況 */}
-                      <div className="border-t pt-4 mt-4">
-                        <div className="grid grid-cols-2 gap-4 text-sm">
-                          <div>
-                            <span className="text-gray-600">発注者署名:</span>
-                            <span className={`ml-2 ${contract.org_signed_at ? 'text-green-600' : 'text-gray-400'}`}>
-                              {contract.org_signed_at
-                                ? new Date(contract.org_signed_at).toLocaleString('ja-JP')
-                                : '未署名'
-                              }
-                            </span>
-                          </div>
-                          <div>
-                            <span className="text-gray-600">受注者署名:</span>
-                            <span className={`ml-2 ${contract.contractor_signed_at ? 'text-green-600' : 'text-gray-400'}`}>
-                              {contract.contractor_signed_at
-                                ? new Date(contract.contractor_signed_at).toLocaleString('ja-JP')
-                                : '未署名'
-                              }
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </Card>
-                  </motion.div>
+                            <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
+                              <div>
+                                <span className="text-gray-600">{userRole === 'OrgAdmin' ? '受注者' : '発注者'}:</span>
+                                <p className="font-medium text-gray-900">
+                                  {userRole === 'OrgAdmin' ? contract.contractor_name : contract.org_name}
+                                </p>
+                              </div>
+                              <div>
+                                <span className="text-gray-600">契約期間:</span>
+                                <p className="text-gray-900">
+                                  {new Date(contract.start_date).toLocaleDateString('ja-JP')} - {new Date(contract.end_date).toLocaleDateString('ja-JP')}
+                                </p>
+                              </div>
+                            </div>
+                            
+                            {/* 複数受注者対応の表示 */}
+                            {userRole === 'OrgAdmin' && (
+                              <div className="bg-orange-50 p-3 rounded-lg mb-4">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-sm text-orange-700">この受注者との契約金額:</span>
+                                  <span className="font-semibold text-orange-900">¥{contract.bid_amount.toLocaleString()}</span>
+                                </div>
+                                <p className="text-xs text-orange-600 mt-1">
+                                  受注者: {contract.contractor_name} 様
+                                </p>
+                              </div>
+                            )}
+
+                            {/* アクションボタン */}
+                            <div className="flex justify-between items-center">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => router.push(`/contracts/${contract.id}`)}
+                              >
+                                <Eye className="w-4 h-4 mr-2" />
+                                詳細表示
+                              </Button>
+                              <div className="flex gap-2">
+                                {contract.status === 'pending_contractor' && userRole === 'Contractor' && (
+                                  <Button
+                                    onClick={() => router.push(`/contracts/${contract.id}`)}
+                                    variant="engineering"
+                                    size="sm"
+                                  >
+                                    署名する
+                                  </Button>
+                                )}
+                                {contract.status === 'pending_org' && userRole === 'OrgAdmin' && (
+                                  <Button
+                                    onClick={() => router.push(`/contracts/${contract.id}`)}
+                                    variant="engineering"
+                                    size="sm"
+                                  >
+                                    署名する
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* 署名状況 */}
+                            <div className="border-t pt-4 mt-4">
+                              <div className="grid grid-cols-2 gap-4 text-sm">
+                                <div>
+                                  <span className="text-gray-600">発注者署名:</span>
+                                  <span className={`ml-2 ${contract.org_signed_at ? 'text-green-600' : 'text-gray-400'}`}>
+                                    {contract.org_signed_at
+                                      ? new Date(contract.org_signed_at).toLocaleString('ja-JP')
+                                      : '未署名'
+                                    }
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="text-gray-600">受注者署名:</span>
+                                  <span className={`ml-2 ${contract.contractor_signed_at ? 'text-green-600' : 'text-gray-400'}`}>
+                                    {contract.contractor_signed_at
+                                      ? new Date(contract.contractor_signed_at).toLocaleString('ja-JP')
+                                      : '未署名'
+                                    }
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          </Card>
+                        </motion.div>
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
             )
@@ -790,7 +754,7 @@ function ContractsPageContent() {
           {selectedTab === 'invoices' && (
             userRole === 'OrgAdmin' ? (
               // 業務完了届発行タブ（発注者用）
-              completedProjects.length === 0 ? (
+              completedProjects.filter(project => !invoicedProjects.has(project.id)).length === 0 ? (
                 <Card className="p-8 text-center">
                   <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                   <h3 className="text-xl font-semibold text-gray-900 mb-2">完了案件がありません</h3>
@@ -808,7 +772,7 @@ function ContractsPageContent() {
                   </div>
 
                   <div className="grid gap-4">
-                    {completedProjects.map((project: any) => (
+                    {completedProjects.filter(project => !invoicedProjects.has(project.id)).map((project: any) => (
                       <Card key={project.id} className="p-6">
                         <div className="flex justify-between items-start">
                           <div className="flex-1">
@@ -817,146 +781,26 @@ function ContractsPageContent() {
                             </h3>
                             <div className="grid grid-cols-2 gap-4 text-sm text-gray-600 mb-4">
                               <div>
-                                <span className="font-medium">受注者:</span> {project.contractor_name}
+                                <span className="font-medium">受注者:</span> {project.contractor_name || 'Unknown'}
                               </div>
                               <div>
-                                <span className="font-medium">完了日:</span> {new Date(project.end_date).toLocaleDateString('ja-JP')}
+                                <span className="font-medium">完了日:</span> {project.completed_at ? new Date(project.completed_at).toLocaleDateString('ja-JP') : '不明'}
                               </div>
                               <div>
-                                <span className="font-medium">契約金額:</span> ¥{project.budget.toLocaleString()}
-                              </div>
-                              <div>
-                                <span className="font-medium">カテゴリ:</span> {project.category}
+                                <span className="font-medium">カテゴリ:</span> {project.category || '未設定'}
                               </div>
                             </div>
-                            <Badge className="bg-green-100 text-green-800">
-                              完了済み
-                            </Badge>
                           </div>
                           <div className="flex gap-2 ml-4">
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => openEvaluationForm(project)}
-                              disabled={evaluatedProjects.has(project.id)}
-                              className={
-                                evaluatedProjects.has(project.id)
-                                  ? 'bg-green-50 border-green-200 text-green-800 opacity-75 cursor-not-allowed'
-                                  : 'bg-yellow-50 border-yellow-200 text-yellow-800 hover:bg-yellow-100'
-                              }
-                              title={evaluatedProjects.has(project.id) ? '評価済み' : '受注者を評価する'}
-                            >
-                              <Star className="w-4 h-4 mr-2" />
-                              {evaluatedProjects.has(project.id) ? '評価済み' : '受注者評価'}
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => generateInvoice(project.id)}
-                              disabled={!evaluatedProjects.has(project.id) || invoicedProjects.has(project.id)}
-                              className={
-                                invoicedProjects.has(project.id)
-                                  ? 'bg-green-50 border-green-200 text-green-800 opacity-75 cursor-not-allowed'
-                                  : !evaluatedProjects.has(project.id)
-                                  ? 'opacity-50 cursor-not-allowed'
-                                  : ''
-                              }
-                              title={
-                                invoicedProjects.has(project.id)
-                                  ? '業務完了届作成済み'
-                                  : !evaluatedProjects.has(project.id)
-                                  ? '受注者評価を完了してから業務完了届を作成してください'
-                                  : '業務完了届を作成する'
-                              }
+                              onClick={() => handleCreateInvoice(project.id)}
+                              disabled={isProjectInvoiced(project.id)}
                             >
                               <FileText className="w-4 h-4 mr-2" />
-                              {invoicedProjects.has(project.id) ? '作成済み' : '業務完了届作成'}
+                              {isProjectInvoiced(project.id) ? '作成済み' : '完了届作成'}
                             </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                // プロジェクトに対応する契約IDを取得
-                                const contract = contracts.find(c => c.project_id === project.id)
-                                if (contract) {
-                                  router.push(`/contracts/${contract.id}`)
-                                } else {
-                                  alert('この案件の契約情報が見つかりません')
-                                }
-                              }}
-                            >
-                              <Eye className="w-4 h-4 mr-2" />
-                              詳細
-                            </Button>
-                          </div>
-                        </div>
-                      </Card>
-                    ))}
-                  </div>
-                </div>
-              )
-            ) : (
-              // 請求書タブ（受注者用）
-              invoices.length === 0 ? (
-                <Card className="p-8 text-center">
-                  <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-xl font-semibold text-gray-900 mb-2">請求書がありません</h3>
-                  <p className="text-gray-600">
-                    まだ請求書が発行されていません。
-                  </p>
-                </Card>
-              ) : (
-                <div className="space-y-6">
-                  <div className="bg-green-50 p-4 rounded-lg">
-                    <h3 className="font-semibold text-green-900 mb-2">請求書について</h3>
-                    <p className="text-sm text-green-800">
-                      発注者から発行された請求書の一覧です。支払い状況を確認し、PDF形式でダウンロードできます。
-                    </p>
-                  </div>
-
-                  <div className="grid gap-4">
-                    {invoices.map((invoice) => (
-                      <Card key={invoice.id} className="p-6">
-                        <div className="flex justify-between items-start">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-2">
-                              <h3 className="text-lg font-semibold text-gray-900">
-                                請求書番号: {invoice.invoice_number}
-                              </h3>
-                              <Badge
-                                className={
-                                  invoice.status === 'paid' ? 'bg-green-100 text-green-800' :
-                                  invoice.status === 'overdue' ? 'bg-red-100 text-red-800' :
-                                  'bg-yellow-100 text-yellow-800'
-                                }
-                              >
-                                {invoice.status === 'paid' ? '支払済み' :
-                                 invoice.status === 'overdue' ? '支払期限超過' :
-                                 invoice.status === 'sent' ? '送信済み' : '発行済み'}
-                              </Badge>
-                            </div>
-                            <p className="text-gray-600 mb-4">{invoice.description}</p>
-                            <div className="grid grid-cols-2 gap-4 text-sm text-gray-600 mb-4">
-                              <div>
-                                <span className="font-medium">発行日:</span> {new Date(invoice.issue_date).toLocaleDateString('ja-JP')}
-                              </div>
-                              <div>
-                                <span className="font-medium">支払期限:</span> {new Date(invoice.due_date).toLocaleDateString('ja-JP')}
-                              </div>
-                              <div>
-                                <span className="font-medium">税抜金額:</span> ¥{invoice.amount.toLocaleString()}
-                              </div>
-                              <div>
-                                <span className="font-medium">税込金額:</span> ¥{invoice.total_amount.toLocaleString()}
-                              </div>
-                            </div>
-                            {invoice.paid_date && (
-                              <div className="text-sm text-green-600 mb-2">
-                                支払完了日: {new Date(invoice.paid_date).toLocaleDateString('ja-JP')}
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex gap-2 ml-4">
                             <Button
                               variant="outline"
                               size="sm"
@@ -973,6 +817,77 @@ function ContractsPageContent() {
                       </Card>
                     ))}
                   </div>
+                </div>
+              )
+            ) : (
+              // 請求書タブ（受注者用）
+              invoices.length === 0 ? (
+                <Card className="p-8 text-center">
+                  <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-xl font-semibold text-gray-900 mb-2">請求書がありません</h3>
+                  <p className="text-gray-600">
+                    発行された請求書がありません。
+                  </p>
+                </Card>
+              ) : (
+                <div className="grid gap-4">
+                  {invoices.map((invoice) => (
+                    <Card key={invoice.id} className="p-6">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between mb-2">
+                            <h3 className="text-lg font-semibold text-gray-900">
+                              請求書番号: {invoice.invoice_number}
+                            </h3>
+                            <Badge
+                              className={
+                                invoice.status === 'paid' ? 'bg-green-100 text-green-800' :
+                                invoice.status === 'overdue' ? 'bg-red-100 text-red-800' :
+                                'bg-yellow-100 text-yellow-800'
+                              }
+                            >
+                              {invoice.status === 'paid' ? '支払済み' :
+                               invoice.status === 'overdue' ? '支払期限超過' :
+                               invoice.status === 'sent' ? '送信済み' : '発行済み'}
+                            </Badge>
+                          </div>
+                          <p className="text-gray-600 mb-4">{invoice.description}</p>
+                          <div className="grid grid-cols-2 gap-4 text-sm text-gray-600 mb-4">
+                            <div>
+                              <span className="font-medium">発行日:</span> {new Date(invoice.issue_date).toLocaleDateString('ja-JP')}
+                            </div>
+                            <div>
+                              <span className="font-medium">支払期限:</span> {new Date(invoice.due_date).toLocaleDateString('ja-JP')}
+                            </div>
+                            <div>
+                              <span className="font-medium">税抜金額:</span> ¥{invoice.amount.toLocaleString()}
+                            </div>
+                            <div>
+                              <span className="font-medium">税込金額:</span> ¥{invoice.total_amount.toLocaleString()}
+                            </div>
+                          </div>
+                          {invoice.paid_date && (
+                            <div className="text-sm text-green-600 mb-2">
+                              支払完了日: {new Date(invoice.paid_date).toLocaleDateString('ja-JP')}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex gap-2 ml-4">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              // PDF生成機能（未実装）
+                              alert('PDF生成機能は準備中です')
+                            }}
+                          >
+                            <FileText className="w-4 h-4 mr-2" />
+                            PDF表示
+                          </Button>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
                 </div>
               )
             )

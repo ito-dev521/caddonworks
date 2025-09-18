@@ -23,17 +23,9 @@ export async function POST(request: NextRequest) {
     } = body
 
     // バリデーション
-    if (!project_id || !bid_amount || budget_approved === undefined) {
+    if (!project_id || !bid_amount) {
       return NextResponse.json(
         { message: '必須項目が入力されていません' },
-        { status: 400 }
-      )
-    }
-
-    // 予算承認チェック
-    if (!budget_approved) {
-      return NextResponse.json(
-        { message: '発注者側の予算に同意してください' },
         { status: 400 }
       )
     }
@@ -170,7 +162,7 @@ export async function POST(request: NextRequest) {
         contractor_id: userProfile.id,
         bid_amount: Number(bid_amount),
         proposal: proposal || '',
-        budget_approved: budget_approved,
+        budget_approved: true, // デフォルトでtrueに設定（後方互換性のため）
         estimated_duration: null, // 古いフィールドはnullに設定
         start_date: null, // 古いフィールドはnullに設定
         status: 'submitted'

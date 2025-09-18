@@ -53,6 +53,7 @@ interface JobData {
   contractor_id?: string
   required_level?: MemberLevel
   is_declined?: boolean
+  contract_amount?: number // 契約金額（落札案件の場合）
 }
 
 interface BidData {
@@ -272,13 +273,7 @@ function JobsPageContent() {
     }
 
     // バリデーション
-    if (!bidData.budget_approved) {
-      alert('発注者側の予算に同意してください')
-      return
-    }
-    
-    // 予算承認済みでない場合は入札金額をチェック
-    if (!bidData.budget_approved && (!bidData.bid_amount || parseBudget(bidData.bid_amount) <= 0)) {
+    if (!bidData.bid_amount || parseBudget(bidData.bid_amount) <= 0) {
       alert('有効な入札金額を入力してください')
       return
     }
@@ -300,9 +295,7 @@ function JobsPageContent() {
         },
         body: JSON.stringify({
           project_id: showBidModal,
-          bid_amount: bidData.budget_approved 
-            ? parseBudget(formatBudget(jobs.find(j => j.id === showBidModal)?.budget || 0))
-            : parseBudget(bidData.bid_amount),
+          bid_amount: parseBudget(bidData.bid_amount),
           proposal: bidData.proposal,
           budget_approved: bidData.budget_approved
         })
@@ -334,12 +327,12 @@ function JobsPageContent() {
 
   const openBidModal = (jobId: string) => {
     setShowBidModal(jobId)
-    setBidData({
-      project_id: jobId,
-      bid_amount: '',
-      proposal: '',
-      budget_approved: false
-    })
+      setBidData({
+        project_id: jobId,
+        bid_amount: '',
+        proposal: '',
+        budget_approved: false
+      })
   }
 
   // 添付資料を取得する関数
@@ -634,15 +627,21 @@ function JobsPageContent() {
                           </CardDescription>
                         </div>
                         <div className="flex flex-col gap-2">
-                          <Badge className={getStatusColor(job.status)}>
-                            {getStatusText(job.status)}
-                          </Badge>
+                          {job.contract_amount ? (
+                            <Badge className="bg-green-100 text-green-800">
+                              落札済み
+                            </Badge>
+                          ) : (
+                            <Badge className={getStatusColor(job.status)}>
+                              {getStatusText(job.status)}
+                            </Badge>
+                          )}
                           {job.is_declined && (
                             <Badge variant="outline" className="border-red-300 text-red-700 bg-red-100">
                               辞退済み
                             </Badge>
                           )}
-                          {job.is_full && !job.is_declined && (
+                          {job.is_full && !job.is_declined && !job.contract_amount && (
                             <Badge variant="outline" className="border-orange-300 text-orange-700 bg-orange-100">
                               募集完了
                             </Badge>
@@ -673,7 +672,13 @@ function JobsPageContent() {
                         )}
                         <div className="flex items-center gap-2 text-gray-600">
                           <DollarSign className="w-4 h-4" />
-                          {formatBudget(job.budget)}
+                          {job.contract_amount ? (
+                            <span className="text-green-600 font-semibold">
+                              {formatBudget(job.contract_amount)} (契約金額)
+                            </span>
+                          ) : (
+                            formatBudget(job.budget)
+                          )}
                         </div>
                         <div className="flex items-center gap-2 text-gray-600">
                           <Calendar className="w-4 h-4" />
@@ -1033,8 +1038,10 @@ function JobsPageContent() {
                                 <span className="font-medium">{job.category}</span>
                               </div>
                               <div className="flex justify-between">
-                                <span className="text-gray-600">予算:</span>
-                                <span className="font-medium text-engineering-blue">{formatCurrency(job.budget)}</span>
+                                <span className="text-gray-600">{job.contract_amount ? '契約金額:' : '予算:'}</span>
+                                <span className="font-medium text-engineering-blue">
+                                  {job.contract_amount ? formatCurrency(job.contract_amount) : formatCurrency(job.budget)}
+                                </span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-gray-600">納期:</span>

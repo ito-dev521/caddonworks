@@ -303,6 +303,57 @@ export async function GET(request: NextRequest) {
       }, {}) || {}
     }
 
+    // 契約情報を取得（複数受注者対応）
+    const projectIds = projectsData?.map(p => p.id) || []
+    let contractMap: any = {}
+    
+    if (projectIds.length > 0) {
+      const { data: contracts } = await supabaseAdmin
+        .from('contracts')
+        .select(`
+          project_id,
+          contractor_id,
+          bid_amount,
+          status
+        `)
+        .in('project_id', projectIds)
+        .eq('status', 'signed') // 署名済み契約のみ
+      
+      // 受注者情報を取得
+      const contractorIds = [...new Set(contracts?.map(c => c.contractor_id) || [])]
+      let contractorMap: any = {}
+      
+      if (contractorIds.length > 0) {
+        const { data: contractors } = await supabaseAdmin
+          .from('users')
+          .select('id, display_name, email')
+          .in('id', contractorIds)
+        
+        contractorMap = contractors?.reduce((acc: any, contractor: any) => {
+          acc[contractor.id] = contractor
+          return acc
+        }, {}) || {}
+      }
+      
+      // プロジェクトごとに契約をグループ化
+      contractMap = contracts?.reduce((acc: any, contract: any) => {
+        if (!acc[contract.project_id]) {
+          acc[contract.project_id] = []
+        }
+        acc[contract.project_id].push({
+          contractor_id: contract.contractor_id,
+          contract_amount: contract.bid_amount,
+          contractor_name: contractorMap[contract.contractor_id]?.display_name || '不明な受注者',
+          contractor_email: contractorMap[contract.contractor_id]?.email || ''
+        })
+        return acc
+      }, {}) || {}
+      
+      // デバッグログ
+      console.log('契約データ:', contracts)
+      console.log('契約マップ:', contractMap)
+    }
+
     const formattedProjects = projectsData?.map(project => {
       // 期限切れチェック
       const now = new Date()
@@ -315,7 +366,7 @@ export async function GET(request: NextRequest) {
         daysUntilDeadline = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
       }
 
-      return {
+      const result = {
         id: project.id,
         title: project.title,
         description: project.description,
@@ -333,8 +384,16 @@ export async function GET(request: NextRequest) {
         bidding_deadline: project.bidding_deadline,
         required_contractors: project.required_contractors || 1,
         is_expired: isExpired,
-        days_until_deadline: daysUntilDeadline
+        days_until_deadline: daysUntilDeadline,
+        contracts: contractMap[project.id] || [] // 複数受注者の契約情報
       }
+      
+      // デバッグログ
+      if (contractMap[project.id] && contractMap[project.id].length > 0) {
+        console.log(`プロジェクト ${project.title} の契約情報:`, contractMap[project.id])
+      }
+      
+      return result
     }) || []
 
     return NextResponse.json({

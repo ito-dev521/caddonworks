@@ -54,6 +54,12 @@ interface ProjectData {
   required_level?: MemberLevel
   is_expired?: boolean
   days_until_deadline?: number | null
+  contracts?: Array<{
+    contractor_id: string
+    contract_amount: number
+    contractor_name: string
+    contractor_email: string
+  }>
 }
 
 function ProjectsPageContent() {
@@ -893,7 +899,7 @@ function ProjectsPageContent() {
                   <Card className={`hover-lift cursor-pointer group ${
                     project.is_expired 
                       ? 'border-red-200 bg-red-50/50' 
-                      : project.days_until_deadline !== null && project.days_until_deadline <= 3 
+                      : project.days_until_deadline !== null && project.days_until_deadline !== undefined && project.days_until_deadline <= 3 
                         ? 'border-orange-200 bg-orange-50/50' 
                         : ''
                   }`}>
@@ -904,7 +910,10 @@ function ProjectsPageContent() {
                             {project.title}
                           </CardTitle>
                           <CardDescription className="mt-1">
-                            {project.contractor_name} • {project.category}
+                            {project.contracts && project.contracts.length > 0 
+                              ? `${project.contracts.length}名の受注者` 
+                              : project.contractor_name || '未割当'
+                            } • {project.category}
                           </CardDescription>
                         </div>
                         <div className="flex flex-col gap-1">
@@ -916,7 +925,7 @@ function ProjectsPageContent() {
                               期限切れ
                             </Badge>
                           )}
-                          {!project.is_expired && project.days_until_deadline !== null && project.days_until_deadline <= 3 && (
+                          {!project.is_expired && project.days_until_deadline !== null && project.days_until_deadline !== undefined && project.days_until_deadline <= 3 && (
                             <Badge className="bg-orange-100 text-orange-800 border-orange-200">
                               期限間近
                             </Badge>
@@ -932,13 +941,13 @@ function ProjectsPageContent() {
                           <div className={`flex items-center gap-2 font-medium ${
                             project.is_expired 
                               ? 'text-red-600' 
-                              : project.days_until_deadline !== null && project.days_until_deadline <= 3 
+                              : project.days_until_deadline !== null && project.days_until_deadline !== undefined && project.days_until_deadline <= 3 
                                 ? 'text-orange-600' 
                                 : 'text-gray-600'
                           }`}>
                             <Clock className="w-4 h-4" />
                             入札締切: {new Date(project.bidding_deadline).toLocaleDateString('ja-JP')}
-                            {project.days_until_deadline !== null && (
+                            {project.days_until_deadline !== null && project.days_until_deadline !== undefined && (
                               <span className="text-xs">
                                 ({project.days_until_deadline > 0 ? `あと${project.days_until_deadline}日` : '期限切れ'})
                               </span>
@@ -947,7 +956,29 @@ function ProjectsPageContent() {
                         )}
                         <div className="flex items-center gap-2 text-gray-600">
                           <DollarSign className="w-4 h-4" />
-                          {project.budget ? project.budget.toLocaleString('ja-JP') : '未設定'}円
+                          <div className="flex flex-col">
+                            {project.contracts && project.contracts.length > 0 ? (
+                              <div className="space-y-1">
+                                {project.contracts.map((contract, index) => (
+                                  <div key={contract.contractor_id} className="flex items-center gap-2">
+                                    <span className="text-green-600 font-semibold">
+                                      ¥{contract.contract_amount.toLocaleString('ja-JP')} ({contract.contractor_name})
+                                    </span>
+                                  </div>
+                                ))}
+                                <span className="text-xs text-gray-500">
+                                  合計: ¥{project.contracts.reduce((sum, contract) => sum + contract.contract_amount, 0).toLocaleString('ja-JP')}
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col">
+                                <span>予算: {project.budget ? project.budget.toLocaleString('ja-JP') : '未設定'}円</span>
+                                <span className="text-xs text-gray-400">
+                                  契約データ: {project.contracts ? `${project.contracts.length}件` : 'なし'}
+                                </span>
+                              </div>
+                            )}
+                          </div>
                         </div>
                         <div className="flex items-center gap-2 text-gray-600">
                           <Calendar className="w-4 h-4" />
@@ -987,8 +1018,25 @@ function ProjectsPageContent() {
                           </div>
                           <div className="flex-1">
                             <p className="text-xs text-gray-500">受注者</p>
-                            <p className="text-sm font-medium text-gray-900">{project.contractor_name}</p>
-                            <p className="text-xs text-gray-600">{project.contractor_email}</p>
+                            {project.contracts && project.contracts.length > 0 ? (
+                              <div className="space-y-1">
+                                {project.contracts.map((contract, index) => (
+                                  <div key={contract.contractor_id} className="border-l-2 border-blue-200 pl-2">
+                                    <p className="text-sm font-medium text-gray-900">
+                                      {contract.contractor_name}
+                                    </p>
+                                    <p className="text-xs text-gray-600">
+                                      ¥{contract.contract_amount.toLocaleString()}
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <>
+                                <p className="text-sm font-medium text-gray-900">{project.contractor_name || '未割当'}</p>
+                                <p className="text-xs text-gray-600">{project.contractor_email || ''}</p>
+                              </>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1720,6 +1768,229 @@ function ProjectsPageContent() {
                   </form>
                 </CardContent>
               </Card>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* 案件詳細モーダル */}
+        {showProjectDetail && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+            onClick={() => setShowProjectDetail(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {(() => {
+                const project = projects.find(p => p.id === showProjectDetail)
+                if (!project) return null
+
+                return (
+                  <>
+                    <div className="p-6 border-b border-gray-200">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <h2 className="text-xl font-semibold text-gray-900 mb-2">
+                            {project.title}
+                          </h2>
+                          <p className="text-gray-600 mb-4">
+                            {project.contracts && project.contracts.length > 0 
+                              ? `${project.contracts.length}名の受注者` 
+                              : project.contractor_name || '未割当'
+                            } • {project.category}
+                          </p>
+                          <div className="flex gap-2">
+                            <Badge className={getStatusColor(project.status)}>
+                              {getStatusText(project.status)}
+                            </Badge>
+                            {project.is_expired && (
+                              <Badge className="bg-red-100 text-red-800 border-red-200">
+                                期限切れ
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowProjectDetail(null)}
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="p-6 space-y-6">
+                      {/* 案件詳細 */}
+                      <div>
+                        <h3 className="text-lg font-medium text-gray-900 mb-3">案件詳細</h3>
+                        <div className="space-y-3">
+                          {project.contracts && project.contracts.length > 0 ? (
+                            <div className="space-y-2">
+                              {project.contracts.map((contract, index) => (
+                                <div key={contract.contractor_id} className="flex justify-between">
+                                  <span className="text-gray-600">契約金額 ({contract.contractor_name}):</span>
+                                  <span className="font-medium text-green-600">
+                                    ¥{contract.contract_amount.toLocaleString()}
+                                  </span>
+                                </div>
+                              ))}
+                              <div className="flex justify-between border-t border-gray-200 pt-2">
+                                <span className="text-gray-600 font-semibold">契約金額合計:</span>
+                                <span className="font-semibold text-green-600">
+                                  ¥{project.contracts.reduce((sum, contract) => sum + contract.contract_amount, 0).toLocaleString()}
+                                </span>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">予算:</span>
+                              <span className="font-medium text-engineering-blue">
+                                ¥{project.budget?.toLocaleString() || '未設定'}
+                              </span>
+                            </div>
+                          )}
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">入札締切:</span>
+                            <span className="font-medium">
+                              {new Date(project.bidding_deadline).toLocaleDateString('ja-JP')}
+                              {project.days_until_deadline !== null && project.days_until_deadline !== undefined && (
+                                <span className="text-sm text-gray-500 ml-2">
+                                  ({project.days_until_deadline > 0 ? `あと${project.days_until_deadline}日` : '期限切れ'})
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">納期:</span>
+                            <span className="font-medium">
+                              {new Date(project.end_date).toLocaleDateString('ja-JP')}
+                            </span>
+                          </div>
+                          {project.required_contractors && project.required_contractors > 1 && (
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">募集人数:</span>
+                              <span className="font-medium">{project.required_contractors}名</span>
+                            </div>
+                          )}
+                          {project.required_level && (
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">必要レベル:</span>
+                              <Badge className={MEMBER_LEVELS[project.required_level].color}>
+                                {MEMBER_LEVELS[project.required_level].label}
+                              </Badge>
+                            </div>
+                          )}
+                          {project.location && (
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">場所:</span>
+                              <span className="font-medium">{project.location}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* 案件説明 */}
+                      {project.description && (
+                        <div>
+                          <h3 className="text-lg font-medium text-gray-900 mb-3">案件説明</h3>
+                          <div className="bg-gray-50 p-4 rounded-lg">
+                            <p className="text-gray-700 whitespace-pre-wrap">{project.description}</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 要件 */}
+                      {project.requirements && (
+                        <div>
+                          <h3 className="text-lg font-medium text-gray-900 mb-3">要件</h3>
+                          <div className="bg-gray-50 p-4 rounded-lg">
+                            <p className="text-gray-700 whitespace-pre-wrap">{project.requirements}</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 受注者情報 */}
+                      {project.contracts && project.contracts.length > 0 && (
+                        <div>
+                          <h3 className="text-lg font-medium text-gray-900 mb-3">受注者情報</h3>
+                          <div className="space-y-3">
+                            {project.contracts.map((contract, index) => (
+                              <div key={contract.contractor_id} className="border border-gray-200 rounded-lg p-4">
+                                <div className="flex items-center gap-3 mb-2">
+                                  <div className="w-8 h-8 bg-engineering-blue/10 rounded-full flex items-center justify-center">
+                                    <User className="w-4 h-4 text-engineering-blue" />
+                                  </div>
+                                  <div className="flex-1">
+                                    <p className="font-medium text-gray-900">{contract.contractor_name}</p>
+                                    <p className="text-sm text-gray-600">{contract.contractor_email}</p>
+                                  </div>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-gray-600">契約金額:</span>
+                                  <span className="font-medium text-green-600">
+                                    ¥{contract.contract_amount.toLocaleString()}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 担当者情報 */}
+                      {project.assignee_name && (
+                        <div>
+                          <h3 className="text-lg font-medium text-gray-900 mb-3">担当者情報</h3>
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                              <User className="w-4 h-4 text-green-600" />
+                            </div>
+                            <div>
+                              <p className="font-medium text-gray-900">{project.assignee_name}</p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 案件ID */}
+                      <div className="pt-4 border-t border-gray-200">
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-600">案件ID:</span>
+                          <span className="font-mono text-sm text-gray-500">
+                            {project.id.slice(0, 8).toUpperCase()}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
+                      <Button
+                        variant="outline"
+                        onClick={() => setShowProjectDetail(null)}
+                      >
+                        閉じる
+                      </Button>
+                      <Button
+                        variant="engineering"
+                        onClick={() => {
+                          setShowProjectDetail(null)
+                          editProject(project.id)
+                        }}
+                      >
+                        編集
+                      </Button>
+                    </div>
+                  </>
+                )
+              })()}
             </motion.div>
           </motion.div>
         )}

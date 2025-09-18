@@ -88,17 +88,28 @@ export async function POST(request: NextRequest) {
     }
 
     // 契約データの存在確認
-    const { data: contract, error: contractError } = await supabaseAdmin
+    const { data: contracts, error: contractError } = await supabaseAdmin
       .from('contracts')
-      .select('id, status, bid_amount')
+      .select('id, status, bid_amount, contractor_id')
       .eq('project_id', project_id)
       .eq('contractor_id', project.contractor_id)
       .eq('status', 'signed')
-      .single()
+      .order('created_at', { ascending: false })
+      .limit(1)
 
-    if (contractError || !contract) {
-      return NextResponse.json({ message: '契約が見つかりません' }, { status: 404 })
+    if (contractError) {
+      console.error('契約検索エラー:', contractError)
+      return NextResponse.json({ 
+        message: '契約の検索に失敗しました',
+        error: contractError.message
+      }, { status: 500 })
     }
+
+    if (!contracts || contracts.length === 0) {
+      return NextResponse.json({ message: '署名済みの契約が見つかりません' }, { status: 404 })
+    }
+
+    const contract = contracts[0] // 最新の契約を使用
 
     // 既存の請求書の存在確認
     const { data: existingInvoices, error: existingError } = await supabaseAdmin
@@ -115,8 +126,9 @@ export async function POST(request: NextRequest) {
       // 既存の請求書がある場合は、最新のものを返す
       const latestInvoice = existingInvoices[0]
       return NextResponse.json({
-        message: '請求書は既に作成済みです',
-        invoice: latestInvoice
+        message: '業務完了届は既に作成済みです',
+        invoice: latestInvoice,
+        alreadyExists: true
       }, { status: 200 })
     }
 
@@ -125,17 +137,19 @@ export async function POST(request: NextRequest) {
 
     // 請求書データを作成（実際のテーブル構造に合わせて）
     const contractAmount = contract.bid_amount || project.budget || 0
-    const systemFee = 50000 // システム手数料（デフォルト値）
-    const totalAmount = contractAmount + systemFee
+    const systemFee = 50000 // システム手数料（発注者側の手数料）
+    
+    // 業務完了届（受注者向け）の場合は契約金額のみ、その他はシステム手数料込み
+    const totalAmount = type === 'completion' ? contractAmount : contractAmount + systemFee
     
     const invoiceData = {
       client_org_id: project.org_id,
       base_amount: contractAmount,
       fee_amount: 0, // 追加手数料（今回は0）
-      system_fee: systemFee,
+      system_fee: type === 'completion' ? 0 : systemFee, // 業務完了届の場合はシステム手数料を0に
       total_amount: totalAmount,
-      status: 'draft', // 下書き状態で作成
-      issue_date: null, // 発行時に設定
+      status: type === 'completion' ? 'issued' : 'draft', // 業務完了届の場合は発行済み、その他は下書き
+      issue_date: type === 'completion' ? new Date().toISOString().split('T')[0] : null, // 業務完了届の場合は発行日を設定
       due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30日後
       org_id: project.org_id,
       contractor_id: project.contractor_id,
@@ -164,11 +178,11 @@ export async function POST(request: NextRequest) {
       .insert({
         user_id: project.contractor_id,
         title: '業務完了届が作成されました',
-        message: `案件「${project.title}」の業務完了届が作成されました。請求書ページで確認できます。金額: ¥${totalAmount.toLocaleString()}`,
+        message: `案件「${project.title}」の業務完了届が作成されました。請求書ページで確認できます。`,
         type: 'completion_report_created',
         data: {
-          project_id: projectId,
-          invoice_id: invoiceData.id
+          project_id: project_id,
+          invoice_id: insertedInvoice.id
         }
       })
 
