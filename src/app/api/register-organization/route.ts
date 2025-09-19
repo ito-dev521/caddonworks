@@ -3,9 +3,7 @@ import { supabase } from '@/lib/supabase'
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('組織登録API開始')
     const body = await request.json()
-    console.log('リクエストボディ:', body)
     const {
       // Organization Info
       organizationName,
@@ -76,7 +74,6 @@ export async function POST(request: NextRequest) {
     }
 
     // 1. Supabase Authでユーザーを作成
-    console.log('Authユーザー作成開始:', { adminEmail, adminName })
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: adminEmail,
       password: adminPassword,
@@ -95,7 +92,6 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-    console.log('Authユーザー作成成功:', authData.user?.id)
 
     if (!authData.user) {
       return NextResponse.json(
@@ -105,7 +101,6 @@ export async function POST(request: NextRequest) {
     }
 
     // 2. 組織を作成
-    console.log('組織作成開始:', { organizationName, description, billingEmail })
     const { data: orgData, error: orgError } = await supabase
       .from('organizations')
       .insert({
@@ -127,10 +122,8 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-    console.log('組織作成成功:', orgData.id)
 
     // 3. ユーザープロフィールを作成
-    console.log('ユーザープロフィール作成開始:', { authUserId: authData.user.id, adminEmail, adminName })
     const { data: userData, error: userError } = await supabase
       .from('users')
       .insert({
@@ -153,10 +146,8 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-    console.log('ユーザープロフィール作成成功:', userData.id)
 
     // 4. メンバーシップを作成（OrgAdmin権限）
-    console.log('メンバーシップ作成開始:', { orgId: orgData.id, userId: userData.id, role: 'OrgAdmin' })
     const { error: membershipError } = await supabase
       .from('memberships')
       .insert({
@@ -176,10 +167,8 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-    console.log('メンバーシップ作成成功')
 
     // 成功レスポンス
-    console.log('組織登録完了:', { organizationId: orgData.id, userId: userData.id, authUserId: authData.user.id })
     return NextResponse.json({
       message: '組織登録が完了しました',
       data: {

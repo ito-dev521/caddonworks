@@ -15,7 +15,11 @@ import {
   Shield,
   Key,
   Search,
-  AlertCircle
+  AlertCircle,
+  CheckCircle,
+  XCircle,
+  ToggleLeft,
+  ToggleRight
 } from "lucide-react"
 import { Navigation } from "@/components/layouts/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -48,6 +52,17 @@ interface NewUserData {
   role: 'OrgAdmin' | 'Contractor'
 }
 
+interface OrganizationSettings {
+  id: string
+  name: string
+  description?: string
+  billing_email: string
+  system_fee: number
+  active: boolean
+  approval_required: boolean
+  created_at: string
+}
+
 export default function SettingsPage() {
   return (
     <AuthGuard requiredRole="OrgAdmin">
@@ -66,6 +81,8 @@ function SettingsPageContent() {
   const [editingUserId, setEditingUserId] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [organizationDomain, setOrganizationDomain] = useState('')
+  const [organizationSettings, setOrganizationSettings] = useState<OrganizationSettings | null>(null)
+  const [isLoadingSettings, setIsLoadingSettings] = useState(false)
 
   const [newUser, setNewUser] = useState<NewUserData>({
     email: '',
@@ -87,16 +104,12 @@ function SettingsPageContent() {
   // 発注者プロフィールをセットアップ
   const setupOrgAdminProfile = async () => {
     try {
-      console.log('プロフィールセットアップ開始')
       const { data: { session } } = await supabase.auth.getSession()
-      
-      console.log('セッション取得結果:', { session: !!session })
       
       if (!session) {
         throw new Error('セッションが見つかりません')
       }
 
-      console.log('プロフィールセットアップAPI呼び出し')
       const response = await fetch('/api/setup-orgadmin-profile', {
         method: 'POST',
         headers: {
@@ -105,14 +118,9 @@ function SettingsPageContent() {
         }
       })
 
-      console.log('プロフィールセットアップAPI応答:', { status: response.status, ok: response.ok })
-
       if (!response.ok) {
         const errorData = await response.json()
-        console.log('プロフィールセットアップエラー:', errorData.message)
-      } else {
-        const successData = await response.json()
-        console.log('プロフィールセットアップ成功:', successData.message)
+        console.error('プロフィールセットアップエラー:', errorData.message)
       }
     } catch (error) {
       console.error('プロフィールセットアップエラー:', error)
@@ -129,7 +137,6 @@ function SettingsPageContent() {
         return
       }
 
-      console.log('デバッグ: メンバーシップ情報を取得中...')
       const response = await fetch('/api/debug-memberships', {
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
@@ -146,32 +153,184 @@ function SettingsPageContent() {
     }
   }
 
-  // ユーザー一覧を取得
-  const fetchUsers = async () => {
+  // デバッグ: メールアドレス不一致を確認
+  const debugUserEmails = async () => {
     try {
-      setIsLoading(true)
-      console.log('ユーザー一覧取得開始')
-      
-      // まず発注者プロフィールをセットアップ
-      await setupOrgAdminProfile()
-      
       const { data: { session } } = await supabase.auth.getSession()
       
-      console.log('ユーザー一覧取得用セッション:', { session: !!session })
-      
       if (!session) {
-        throw new Error('セッションが見つかりません')
+        alert('セッションが見つかりません')
+        return
       }
 
-      console.log('ユーザー一覧API呼び出し')
-      const response = await fetch('/api/settings/users', {
+      const response = await fetch('/api/debug-user-emails', {
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json'
         }
       })
 
-      console.log('ユーザー一覧API応答:', { status: response.status, ok: response.ok })
+      const data = await response.json()
+      console.log('メールアドレス調査結果:', data)
+      alert('メールアドレス調査結果をコンソールに出力しました')
+    } catch (error) {
+      console.error('デバッグエラー:', error)
+      alert('デバッグに失敗しました')
+    }
+  }
+
+  // 認証ユーザーを修正
+  const fixAuthUser = async (userId: string) => {
+    if (!confirm('このユーザーの認証情報を修正しますか？新しいパスワードが生成されます。')) {
+      return
+    }
+
+    try {
+      setIsSaving(true)
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (!session) {
+        throw new Error('セッションが見つかりません')
+      }
+
+      const response = await fetch('/api/fix-auth-user', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ userId })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || '認証ユーザーの修正に失敗しました')
+      }
+
+      const data = await response.json()
+      fetchUsers()
+      alert(`認証ユーザーが修正されました。新しいパスワード: ${data.password}`)
+    } catch (error) {
+      console.error('認証ユーザー修正エラー:', error)
+      alert(error instanceof Error ? error.message : '認証ユーザーの修正に失敗しました')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  // 組織メールアドレスを調査
+  const debugOrganizationEmail = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (!session) {
+        alert('セッションが見つかりません')
+        return
+      }
+
+      const response = await fetch('/api/debug-organization-email', {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      const data = await response.json()
+      console.log('組織メールアドレス調査結果:', data)
+      alert('組織メールアドレス調査結果をコンソールに出力しました')
+    } catch (error) {
+      console.error('デバッグエラー:', error)
+      alert('デバッグに失敗しました')
+    }
+  }
+
+  // 組織設定を取得
+  const fetchOrganizationSettings = async () => {
+    try {
+      setIsLoadingSettings(true)
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (!session) {
+        throw new Error('セッションが見つかりません')
+      }
+
+      const response = await fetch('/api/settings/organization', {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || '組織設定の取得に失敗しました')
+      }
+
+      const data = await response.json()
+      setOrganizationSettings(data.organization)
+    } catch (error) {
+      console.error('組織設定取得エラー:', error)
+      alert(error instanceof Error ? error.message : '組織設定の取得に失敗しました')
+    } finally {
+      setIsLoadingSettings(false)
+    }
+  }
+
+  // 組織設定を更新
+  const updateOrganizationSettings = async (approval_required: boolean) => {
+    try {
+      setIsSaving(true)
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (!session) {
+        throw new Error('セッションが見つかりません')
+      }
+
+      const response = await fetch('/api/settings/organization', {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ approval_required })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || '組織設定の更新に失敗しました')
+      }
+
+      const data = await response.json()
+      setOrganizationSettings(prev => prev ? { ...prev, approval_required } : null)
+      alert('組織設定が更新されました')
+    } catch (error) {
+      console.error('組織設定更新エラー:', error)
+      alert(error instanceof Error ? error.message : '組織設定の更新に失敗しました')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  // ユーザー一覧を取得
+  const fetchUsers = async () => {
+    try {
+      setIsLoading(true)
+      
+      // まず発注者プロフィールをセットアップ
+      await setupOrgAdminProfile()
+      
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (!session) {
+        throw new Error('セッションが見つかりません')
+      }
+
+      const response = await fetch('/api/settings/users', {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      })
 
       if (!response.ok) {
         const errorData = await response.json()
@@ -180,22 +339,15 @@ function SettingsPageContent() {
       }
 
       const data = await response.json()
-      console.log('ユーザー一覧データ:', data)
       
       // 空のユーザー一覧でも正常として扱う
       setUsers(data.users || [])
       setFilteredUsers(data.users || [])
-      
-      // 初回登録時などでユーザーがいない場合はメッセージを表示
-      if (!data.users || data.users.length === 0) {
-        console.log('ユーザー一覧が空です - 初回登録の可能性があります')
-      }
     } catch (error) {
       console.error('ユーザー一覧取得エラー:', error)
       
       // メンバーシップ関連のエラーの場合は空のリストを設定
       if (error instanceof Error && error.message.includes('メンバーシップ')) {
-        console.log('メンバーシップが見つからないため、空のユーザー一覧を設定します')
         setUsers([])
         setFilteredUsers([])
       } else {
@@ -353,6 +505,7 @@ function SettingsPageContent() {
 
   useEffect(() => {
     fetchUsers()
+    fetchOrganizationSettings()
   }, [])
 
   if (loading || isLoading) {
@@ -410,6 +563,73 @@ function SettingsPageContent() {
             </CardContent>
           </Card>
 
+          {/* 組織設定セクション */}
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Settings className="w-5 h-5" />
+                組織設定
+              </CardTitle>
+              <CardDescription>
+                組織の動作設定を管理します
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoadingSettings ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* 案件承認設定 */}
+                  <div className="flex items-center justify-between p-4 border rounded-lg">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Shield className="w-4 h-4 text-blue-600" />
+                        <h3 className="font-medium text-gray-900">案件承認機能</h3>
+                      </div>
+                      <p className="text-sm text-gray-600">
+                        新規案件登録時に管理者の承認が必要になります
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {organizationSettings?.approval_required ? (
+                        <Badge variant="default" className="bg-green-100 text-green-800">
+                          <CheckCircle className="w-3 h-3 mr-1" />
+                          有効
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary" className="bg-gray-100 text-gray-600">
+                          <XCircle className="w-3 h-3 mr-1" />
+                          無効
+                        </Badge>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => updateOrganizationSettings(!organizationSettings?.approval_required)}
+                        disabled={isSaving}
+                        className="ml-2"
+                      >
+                        {organizationSettings?.approval_required ? (
+                          <>
+                            <ToggleLeft className="w-4 h-4 mr-1" />
+                            無効にする
+                          </>
+                        ) : (
+                          <>
+                            <ToggleRight className="w-4 h-4 mr-1" />
+                            有効にする
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           {/* ユーザー管理セクション */}
           <Card className="mb-6">
             <CardHeader>
@@ -437,6 +657,20 @@ function SettingsPageContent() {
                     size="sm"
                   >
                     デバッグ
+                  </Button>
+                  <Button
+                    onClick={debugUserEmails}
+                    variant="outline"
+                    size="sm"
+                  >
+                    メール調査
+                  </Button>
+                  <Button
+                    onClick={debugOrganizationEmail}
+                    variant="outline"
+                    size="sm"
+                  >
+                    組織調査
                   </Button>
                 </div>
               </div>
@@ -527,15 +761,27 @@ function SettingsPageContent() {
                               <Edit className="w-4 h-4" />
                             </Button>
                             {user.id !== userProfile?.id && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => deleteUser(user.id)}
-                                className="text-red-600 hover:text-red-700"
-                                disabled={isSaving}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => deleteUser(user.id)}
+                                  className="text-red-600 hover:text-red-700"
+                                  disabled={isSaving}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => fixAuthUser(user.id)}
+                                  className="text-blue-600 hover:text-blue-700"
+                                  disabled={isSaving}
+                                  title="認証ユーザーを修正"
+                                >
+                                  🔧
+                                </Button>
+                              </>
                             )}
                           </div>
                         </div>

@@ -172,12 +172,21 @@ export function NotificationBell() {
       case 'contract_created':
         return <FileText className="w-4 h-4 text-green-600" />
       case 'contract_signed':
+      case 'contract_signed_by_org':
         return <Check className="w-4 h-4 text-green-600" />
+      case 'contract_declined':
+        return <X className="w-4 h-4 text-red-600" />
       case 'evaluation_received':
         return <Star className="w-4 h-4 text-yellow-600" />
       case 'invoice_created':
       case 'invoice':
         return <FileText className="w-4 h-4 text-purple-600" />
+      case 'project_approval_requested':
+        return <AlertCircle className="w-4 h-4 text-orange-600" />
+      case 'project_approved':
+        return <Check className="w-4 h-4 text-green-600" />
+      case 'project_rejected':
+        return <X className="w-4 h-4 text-red-600" />
       default:
         return <AlertCircle className="w-4 h-4 text-gray-600" />
     }
@@ -219,7 +228,6 @@ export function NotificationBell() {
       const centerX = (window.innerWidth - modalWidth) / 2
       const centerY = (window.innerHeight - modalHeight) / 2
       
-      console.log('Setting position:', { x: centerX, y: centerY })
       setPosition({ x: centerX, y: centerY })
     }
   }, [isOpen, position.x])
@@ -240,17 +248,29 @@ export function NotificationBell() {
         router.push('/projects')
       }
     } else if (notification.type === 'contract_created') {
-      // 契約作成通知の場合は契約一覧ページへ
-      router.push('/contracts')
-    } else if (notification.type === 'contract_signed') {
-      // 契約署名通知の場合は契約一覧ページへ
-      router.push('/contracts')
+      // 契約作成通知の場合は契約一覧ページの署名待ちタブへ
+      router.push('/contracts?tab=pending')
+    } else if (notification.type === 'contract_signed' || notification.type === 'contract_signed_by_org') {
+      // 契約署名通知の場合は契約一覧ページの署名済みタブへ
+      router.push('/contracts?tab=signature')
+    } else if (notification.type === 'contract_declined') {
+      // 契約辞退通知の場合は契約一覧ページの署名待ちタブへ
+      router.push('/contracts?tab=pending')
     } else if (notification.type === 'evaluation_received') {
       // 評価受信通知の場合は評価ページへ
       router.push('/evaluations')
     } else if (notification.type === 'invoice' || notification.type === 'invoice_created') {
-      // 請求書通知の場合は契約一覧ページへ
-      router.push('/contracts')
+      // 請求書通知の場合は契約一覧ページの請求書タブへ
+      router.push('/contracts?tab=invoice')
+    } else if (notification.type === 'project_approval_requested') {
+      // 案件承認依頼通知の場合は案件ページへ
+      router.push('/projects')
+    } else if (notification.type === 'project_approved') {
+      // 案件承認完了通知の場合は案件ページへ
+      router.push('/projects')
+    } else if (notification.type === 'project_rejected') {
+      // 案件承認却下通知の場合は案件ページへ
+      router.push('/projects')
     }
 
     // 通知モーダルを閉じる

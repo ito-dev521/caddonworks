@@ -175,23 +175,10 @@ export async function POST(
       const remainingBidCount = remainingBids?.length || 0
       const isStillFull = remainingBidCount >= project.required_contractors
 
-      console.log('案件ステータス更新:', {
-        projectId: contract.project_id,
-        remainingParticipants: remainingCount,
-        remainingBids: remainingBidCount,
-        requiredContractors: project.required_contractors,
-        isStillFull: isStillFull,
-        newStatus: 'bidding'
-      })
     }
 
     // 発注者に辞退通知を送信
     try {
-      console.log('通知送信開始:', {
-        contractOrgId: contract.org_id,
-        contractTitle: contract.contract_title,
-        declineComment: comment
-      })
 
       const { data: orgAdmins, error: orgAdminsError } = await supabaseAdmin
         .from('memberships')
@@ -199,19 +186,10 @@ export async function POST(
         .eq('org_id', contract.org_id)
         .eq('role', 'OrgAdmin')
 
-      console.log('発注者情報取得結果:', {
-        orgId: contract.org_id,
-        orgAdmins: orgAdmins,
-        orgAdminsCount: orgAdmins?.length || 0,
-        orgAdminsError: orgAdminsError
-      })
 
       if (!orgAdminsError && orgAdmins && orgAdmins.length > 0) {
         for (const admin of orgAdmins) {
           try {
-            console.log('通知送信試行:', {
-              adminUserId: admin.user_id
-            })
 
             const notificationData = {
               user_id: admin.user_id,
@@ -226,7 +204,6 @@ export async function POST(
               }
             }
 
-            console.log('通知データ:', notificationData)
 
             const { data: insertedNotification, error: notificationError } = await supabaseAdmin
               .from('notifications')
@@ -242,10 +219,6 @@ export async function POST(
                 errorHint: notificationError.hint
               })
             } else {
-              console.log('通知送信成功:', {
-                adminUserId: admin.user_id,
-                notificationId: insertedNotification?.[0]?.id
-              })
             }
           } catch (notificationErr) {
             console.error('通知送信例外:', {

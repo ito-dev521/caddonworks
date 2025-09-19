@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/contexts/auth-context"
 import { AuthGuard } from "@/components/auth/auth-guard"
 import { Navigation } from "@/components/layouts/navigation"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { ContractorEvaluationForm } from "@/components/evaluations/contractor-evaluation-form"
 
@@ -56,13 +56,14 @@ interface Invoice {
 function ContractsPageContent() {
   const { userProfile, userRole } = useAuth()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [contracts, setContracts] = useState<Contract[]>([])
   const [pendingContracts, setPendingContracts] = useState<Contract[]>([])
   const [completedProjects, setCompletedProjects] = useState<any[]>([])
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [selectedTab, setSelectedTab] = useState<'signed' | 'pending' | 'invoices'>('signed')
+  const [selectedTab, setSelectedTab] = useState<'signature' | 'pending' | 'invoice'>('signature')
   const lastFetchKeyRef = useRef<string | null>(null)
   
   // 評価フォームの状態管理
@@ -98,7 +99,6 @@ function ContractsPageContent() {
 
       if (response.ok) {
         const result = await response.json()
-        console.log('契約データ:', result)
         
         const allContracts = result.contracts || []
         
@@ -387,6 +387,14 @@ function ContractsPageContent() {
     }
   }
 
+  // URLパラメータからタブを設定
+  useEffect(() => {
+    const tab = searchParams.get('tab')
+    if (tab && ['signature', 'pending', 'invoice'].includes(tab)) {
+      setSelectedTab(tab as 'signature' | 'pending' | 'invoice')
+    }
+  }, [searchParams])
+
   useEffect(() => {
     if (userProfile && userRole) {
       fetchContracts()
@@ -448,9 +456,9 @@ function ContractsPageContent() {
             <div className="p-6">
               <nav className="flex space-x-8">
                 <button
-                  onClick={() => setSelectedTab('signed')}
+                  onClick={() => setSelectedTab('signature')}
                   className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                    selectedTab === 'signed'
+                    selectedTab === 'signature'
                       ? 'border-engineering-blue text-engineering-blue'
                       : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                   }`}
@@ -478,9 +486,9 @@ function ContractsPageContent() {
                   )}
                 </button>
                 <button
-                  onClick={() => setSelectedTab('invoices')}
+                  onClick={() => setSelectedTab('invoice')}
                   className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                    selectedTab === 'invoices'
+                    selectedTab === 'invoice'
                       ? 'border-engineering-blue text-engineering-blue'
                       : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                   }`}
@@ -502,7 +510,7 @@ function ContractsPageContent() {
           </div>
 
           {/* 契約一覧 */}
-          {selectedTab === 'signed' && (
+          {selectedTab === 'signature' && (
             contracts.length === 0 ? (
               <Card className="p-8 text-center">
                 <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
@@ -751,7 +759,7 @@ function ContractsPageContent() {
             )
           )}
 
-          {selectedTab === 'invoices' && (
+          {selectedTab === 'invoice' && (
             userRole === 'OrgAdmin' ? (
               // 業務完了届発行タブ（発注者用）
               completedProjects.filter(project => !invoicedProjects.has(project.id)).length === 0 ? (

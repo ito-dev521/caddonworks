@@ -332,23 +332,14 @@ function ContractDetailPageContent() {
   const isAmountAdjusted = () => {
     if (!contract) return false
     
-    // デバッグ情報をコンソールに出力
-    console.log('契約データ:', {
-      amount_adjusted: contract.amount_adjusted,
-      contract_content: contract.contract_content,
-      bid_amount: contract.bid_amount,
-      original_bid_amount: contract.original_bid_amount
-    })
     
     // データベースのamount_adjustedフィールドが明示的にtrueの場合
     if (contract.amount_adjusted === true) {
-      console.log('amount_adjustedフィールドを使用:', contract.amount_adjusted)
       return true
     }
     
     // フォールバック: 契約内容の文字列検索
     const hasAdjustmentText = contract.contract_content.includes('入札金額') && contract.contract_content.includes('から調整')
-    console.log('文字列検索結果:', hasAdjustmentText)
     return hasAdjustmentText
   }
 
@@ -532,11 +523,6 @@ function ContractDetailPageContent() {
                     {/* 金額調整が行われた場合のみ辞退ボタンを表示 */}
                     {(() => {
                       const adjusted = isAmountAdjusted()
-                      console.log('辞退ボタン表示判定:', {
-                        isAmountAdjusted: adjusted,
-                        userRole,
-                        contractStatus: contract?.status
-                      })
                       return adjusted
                     })() && (
                       <Button

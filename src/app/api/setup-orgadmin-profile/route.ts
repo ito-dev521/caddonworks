@@ -8,25 +8,20 @@ const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('プロフィールセットアップAPI開始')
     
     // リクエストヘッダーから認証トークンを取得
     const authHeader = request.headers.get('authorization')
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      console.log('認証ヘッダーが見つかりません')
       return NextResponse.json({ message: '認証トークンが見つかりません' }, { status: 401 })
     }
 
     const token = authHeader.replace('Bearer ', '')
-    console.log('認証トークン取得:', { token: token.substring(0, 20) + '...' })
 
     // トークンからユーザー情報を取得
     const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
 
-    console.log('認証ユーザー取得結果:', { user: user?.id, authError })
 
     if (authError || !user) {
-      console.log('認証失敗:', authError)
       return NextResponse.json({ message: '認証に失敗しました' }, { status: 401 })
     }
 
@@ -37,10 +32,8 @@ export async function POST(request: NextRequest) {
       .eq('auth_user_id', user.id)
       .single()
 
-    console.log('既存プロフィールチェック結果:', { existingProfile, profileError })
 
     if (existingProfile) {
-      console.log('プロフィールは既に存在します')
       return NextResponse.json({ message: 'プロフィールは既に存在します' }, { status: 200 })
     }
 
@@ -51,10 +44,8 @@ export async function POST(request: NextRequest) {
       .eq('user_id', user.id)
       .single()
 
-    console.log('メンバーシップチェック結果:', { membership, membershipError })
 
     if (membershipError || !membership) {
-      console.log('メンバーシップが見つかりません - 作成を試行します')
       
       // メンバーシップが存在しない場合は作成を試行
       // まず組織を取得または作成
@@ -66,7 +57,6 @@ export async function POST(request: NextRequest) {
       let orgId: string
       if (organizations && organizations.length > 0) {
         orgId = organizations[0].id
-        console.log('既存の組織を使用:', orgId)
       } else {
         // 組織が存在しない場合は作成
         const { data: newOrg, error: createOrgError } = await supabaseAdmin
@@ -79,11 +69,9 @@ export async function POST(request: NextRequest) {
           .single()
 
         if (createOrgError || !newOrg) {
-          console.log('組織作成エラー:', createOrgError)
           return NextResponse.json({ message: '組織の作成に失敗しました' }, { status: 500 })
         }
         orgId = newOrg.id
-        console.log('新しい組織を作成:', orgId)
       }
 
       // メンバーシップを作成
@@ -98,11 +86,8 @@ export async function POST(request: NextRequest) {
         .single()
 
       if (createMembershipError || !newMembership) {
-        console.log('メンバーシップ作成エラー:', createMembershipError)
         return NextResponse.json({ message: 'メンバーシップの作成に失敗しました' }, { status: 500 })
       }
-
-      console.log('メンバーシップを作成しました:', newMembership)
     }
 
     // プロフィールを作成
@@ -117,14 +102,12 @@ export async function POST(request: NextRequest) {
       .select()
       .single()
 
-    console.log('プロフィール作成結果:', { newProfile, createError })
 
     if (createError) {
       console.error('プロフィール作成エラー:', createError)
       return NextResponse.json({ message: 'プロフィールの作成に失敗しました' }, { status: 500 })
     }
 
-    console.log('プロフィールが正常に作成されました')
     return NextResponse.json({ 
       message: 'プロフィールが正常に作成されました',
       profile: newProfile

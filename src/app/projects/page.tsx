@@ -22,7 +22,8 @@ import {
   CheckCircle,
   PlayCircle,
   StopCircle,
-  Settings
+  Settings,
+  XCircle
 } from "lucide-react"
 import { Navigation } from "@/components/layouts/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -83,7 +84,8 @@ function ProjectsPageContent() {
     contractor_id: '',
     assignee_name: '',
     required_contractors: 1,
-    required_level: 'beginner' as MemberLevel
+    required_level: 'beginner' as MemberLevel,
+    approver_id: ''
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [chatMessages, setChatMessages] = useState<any[]>([])
@@ -101,6 +103,8 @@ function ProjectsPageContent() {
   const [favoriteMembers, setFavoriteMembers] = useState<any[]>([])
   const [selectedFavoriteMembers, setSelectedFavoriteMembers] = useState<string[]>([])
   const [showFavoriteMembersModal, setShowFavoriteMembersModal] = useState(false)
+  const [orgAdmins, setOrgAdmins] = useState<any[]>([])
+  const [approvalRequired, setApprovalRequired] = useState(false)
   const [showReopenModal, setShowReopenModal] = useState<string | null>(null)
   const [reopenProject, setReopenProject] = useState<ProjectData | null>(null)
   const [reopenData, setReopenData] = useState({
@@ -153,6 +157,42 @@ function ProjectsPageContent() {
       console.error('お気に入り会員取得エラー:', error)
     }
   }, [])
+
+  // 組織設定とOrgAdmin一覧を取得
+  const fetchOrganizationSettings = useCallback(async () => {
+    if (!userProfile || userRole !== 'OrgAdmin') return
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
+      // 組織設定を取得
+      const settingsResponse = await fetch('/api/settings/organization', {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`
+        }
+      })
+
+      if (settingsResponse.ok) {
+        const settingsData = await settingsResponse.json()
+        setApprovalRequired(settingsData.organization.approval_required || false)
+      }
+
+      // OrgAdmin一覧を取得
+      const adminsResponse = await fetch('/api/settings/orgadmins', {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`
+        }
+      })
+
+      if (adminsResponse.ok) {
+        const adminsData = await adminsResponse.json()
+        setOrgAdmins(adminsData.orgAdmins || [])
+      }
+    } catch (error) {
+      console.error('組織設定取得エラー:', error)
+    }
+  }, [userProfile, userRole])
 
   // 案件データを取得する関数
   const fetchProjects = useCallback(async () => {
@@ -213,7 +253,8 @@ function ProjectsPageContent() {
 
     fetchProjects()
     fetchFavoriteMembers()
-  }, [userProfile, userRole, fetchProjects, fetchFavoriteMembers])
+    fetchOrganizationSettings()
+  }, [userProfile, userRole, fetchProjects, fetchFavoriteMembers, fetchOrganizationSettings])
 
   // フィルタリング
   useEffect(() => {
@@ -308,7 +349,8 @@ function ProjectsPageContent() {
           contractor_id: '',
           assignee_name: '',
           required_contractors: 1,
-          required_level: 'beginner'
+          required_level: 'beginner',
+          approver_id: ''
         })
         setSelectedFavoriteMembers([])
         // 案件一覧を再読み込み
@@ -560,6 +602,39 @@ function ProjectsPageContent() {
       }
     } catch (error) {
       console.error('ステータス変更エラー:', error)
+      alert('ネットワークエラーが発生しました')
+    }
+  }
+
+  // 案件承認処理
+  const handleProjectApproval = async (projectId: string, action: 'approve' | 'reject', comment?: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
+      const response = await fetch(`/api/projects/${projectId}/approve`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          action,
+          comment
+        })
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        alert(result.message)
+        // 案件一覧を再読み込み
+        await fetchProjects()
+      } else {
+        alert('承認処理に失敗しました: ' + result.message)
+      }
+    } catch (error) {
+      console.error('承認処理エラー:', error)
       alert('ネットワークエラーが発生しました')
     }
   }
@@ -1116,7 +1191,7 @@ function ProjectsPageContent() {
                                 : 'text-gray-600'
                           }`}>
                             <Clock className="w-4 h-4" />
-                            入札締切: {new Date(project.bidding_deadline).toLocaleDateString('ja-JP')}
+                            入札締切: {project.bidding_deadline ? new Date(project.bidding_deadline).toLocaleDateString('ja-JP') : '未設定'}
                             {project.days_until_deadline !== null && project.days_until_deadline !== undefined && (
                               <span className="text-xs">
                                 ({project.days_until_deadline > 0 ? `あと${project.days_until_deadline}日` : '期限切れ'})
@@ -1152,7 +1227,7 @@ function ProjectsPageContent() {
                         </div>
                         <div className="flex items-center gap-2 text-gray-600">
                           <Calendar className="w-4 h-4" />
-                          納期: {new Date(project.end_date).toLocaleDateString('ja-JP')}
+                          納期: {project.end_date ? new Date(project.end_date).toLocaleDateString('ja-JP') : '未設定'}
                         </div>
                         {project.required_contractors && project.required_contractors > 1 && (
                           <div className="flex items-center gap-2 text-blue-600">
@@ -1210,6 +1285,40 @@ function ProjectsPageContent() {
                           </div>
                         </div>
                       </div>
+
+                      {/* 承認待ち案件の承認ボタン */}
+                      {project.status === 'pending_approval' && (
+                        <div className="pt-3 border-t border-gray-100">
+                          <div className="flex gap-2 justify-center">
+                            <Button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleProjectApproval(project.id, 'approve')
+                              }}
+                              className="bg-green-600 hover:bg-green-700 text-white"
+                              size="sm"
+                            >
+                              <CheckCircle className="w-4 h-4 mr-1" />
+                              承認
+                            </Button>
+                            <Button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                const comment = prompt('却下理由を入力してください（任意）:')
+                                if (comment !== null) {
+                                  handleProjectApproval(project.id, 'reject', comment)
+                                }
+                              }}
+                              variant="outline"
+                              className="border-red-300 text-red-600 hover:bg-red-50"
+                              size="sm"
+                            >
+                              <XCircle className="w-4 h-4 mr-1" />
+                              却下
+                            </Button>
+                          </div>
+                        </div>
+                      )}
 
                       {/* アクションボタン */}
                       <div className="flex justify-between items-center pt-3 border-t border-gray-100">
@@ -1433,6 +1542,31 @@ function ProjectsPageContent() {
                         ))}
                       </select>
                     </div>
+
+                    {/* 承認者選択（承認機能が有効な場合のみ表示） */}
+                    {approvalRequired && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          承認者 *
+                        </label>
+                        <select
+                          value={newProject.approver_id}
+                          onChange={(e) => setNewProject({ ...newProject, approver_id: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
+                          required
+                        >
+                          <option value="">承認者を選択してください</option>
+                          {orgAdmins.map(admin => (
+                            <option key={admin.id} value={admin.id}>
+                              {admin.display_name} ({admin.email})
+                            </option>
+                          ))}
+                        </select>
+                        <p className="text-sm text-gray-500 mt-1">
+                          選択した承認者に案件承認の通知が送信されます
+                        </p>
+                      </div>
+                    )}
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
@@ -2019,7 +2153,7 @@ function ProjectsPageContent() {
                           <div className="flex justify-between">
                             <span className="text-gray-600">入札締切:</span>
                             <span className="font-medium">
-                              {new Date(project.bidding_deadline).toLocaleDateString('ja-JP')}
+                              {project.bidding_deadline ? new Date(project.bidding_deadline).toLocaleDateString('ja-JP') : '未設定'}
                               {project.days_until_deadline !== null && project.days_until_deadline !== undefined && (
                                 <span className="text-sm text-gray-500 ml-2">
                                   ({project.days_until_deadline > 0 ? `あと${project.days_until_deadline}日` : '期限切れ'})
@@ -2030,7 +2164,7 @@ function ProjectsPageContent() {
                           <div className="flex justify-between">
                             <span className="text-gray-600">納期:</span>
                             <span className="font-medium">
-                              {new Date(project.end_date).toLocaleDateString('ja-JP')}
+                              {project.end_date ? new Date(project.end_date).toLocaleDateString('ja-JP') : '未設定'}
                             </span>
                           </div>
                           {project.required_contractors && project.required_contractors > 1 && (
@@ -2047,12 +2181,6 @@ function ProjectsPageContent() {
                               </Badge>
                             </div>
                           )}
-                          {project.location && (
-                            <div className="flex justify-between">
-                              <span className="text-gray-600">場所:</span>
-                              <span className="font-medium">{project.location}</span>
-                            </div>
-                          )}
                         </div>
                       </div>
 
@@ -2067,14 +2195,6 @@ function ProjectsPageContent() {
                       )}
 
                       {/* 要件 */}
-                      {project.requirements && (
-                        <div>
-                          <h3 className="text-lg font-medium text-gray-900 mb-3">要件</h3>
-                          <div className="bg-gray-50 p-4 rounded-lg">
-                            <p className="text-gray-700 whitespace-pre-wrap">{project.requirements}</p>
-                          </div>
-                        </div>
-                      )}
 
                       {/* 受注者情報 */}
                       {project.contracts && project.contracts.length > 0 && (
@@ -2186,9 +2306,9 @@ function ProjectsPageContent() {
                         <span className="text-sm font-medium text-orange-800">現在の情報</span>
                       </div>
                       <div className="text-sm text-orange-700 space-y-1">
-                        <p>入札締切: {new Date(reopenProject.bidding_deadline).toLocaleDateString('ja-JP')} (期限切れ)</p>
+                        <p>入札締切: {reopenProject.bidding_deadline ? new Date(reopenProject.bidding_deadline).toLocaleDateString('ja-JP') : '未設定'} (期限切れ)</p>
                         <p>予算: ¥{reopenProject.budget?.toLocaleString('ja-JP') || '未設定'}</p>
-                        <p>納期: {new Date(reopenProject.end_date).toLocaleDateString('ja-JP')}</p>
+                        <p>納期: {reopenProject.end_date ? new Date(reopenProject.end_date).toLocaleDateString('ja-JP') : '未設定'}</p>
                       </div>
                     </div>
 

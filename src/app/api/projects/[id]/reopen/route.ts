@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-// 環境変数の確認
-console.log('環境変数チェック:', {
-  supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL ? '設定済み' : '未設定',
-  serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ? '設定済み' : '未設定'
-})
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -22,11 +17,8 @@ export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  console.log('案件再登録API開始:', { projectId: params.id })
-  
   try {
     const projectId = params.id
-    console.log('プロジェクトID:', projectId)
     
     const { 
       new_bidding_deadline, 
@@ -36,15 +28,6 @@ export async function POST(
       new_required_contractors,
       new_required_level
     } = await request.json()
-    
-    console.log('リクエストデータ:', {
-      new_bidding_deadline,
-      new_budget,
-      new_start_date,
-      new_end_date,
-      new_required_contractors,
-      new_required_level
-    })
 
     const authHeader = request.headers.get('authorization')
     if (!authHeader) {
@@ -204,15 +187,6 @@ export async function POST(
       .delete()
       .eq('project_id', projectId)
 
-    console.log('案件再登録完了:', {
-      projectId,
-      newBiddingDeadline: new_bidding_deadline,
-      newBudget: new_budget,
-      newStartDate: new_start_date,
-      newEndDate: new_end_date,
-      newRequiredContractors: new_required_contractors,
-      newRequiredLevel: new_required_level
-    })
 
     return NextResponse.json({
       message: '案件を再登録しました',

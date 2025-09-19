@@ -28,7 +28,8 @@ export async function POST(request: NextRequest) {
       contractor_id,
       assignee_name,
       required_contractors = 1,
-      required_level = 'beginner'
+      required_level = 'beginner',
+      approver_id
     } = body
 
     // バリデーション
@@ -84,7 +85,8 @@ export async function POST(request: NextRequest) {
         role,
         organizations (
           id,
-          name
+          name,
+          approval_required
         )
       `)
       .eq('user_id', userProfile.id)
@@ -108,6 +110,15 @@ export async function POST(request: NextRequest) {
     }
 
     const company = membership.organizations as any
+    const approvalRequired = company.approval_required
+
+    // 承認が必要でapprover_idが指定されていない場合のバリデーション
+    if (approvalRequired && !approver_id) {
+      return NextResponse.json(
+        { message: '承認が必要な組織では承認者を選択してください' },
+        { status: 400 }
+      )
+    }
 
     // 挿入するデータを準備してログ出力
     const insertData: any = {
@@ -121,7 +132,8 @@ export async function POST(request: NextRequest) {
       contractor_id: contractor_id || null,
       assignee_name: assignee_name || null,
       org_id: company.id,
-      status: 'bidding' // デフォルトは入札中
+      approver_id: approver_id || null,
+      status: approvalRequired ? 'pending_approval' : 'bidding' // 承認が必要な場合は承認待ち
     }
 
     // required_contractorsカラムが存在する場合のみ追加
@@ -164,9 +176,48 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // 承認が必要な場合、承認者に通知を送信
+    if (approvalRequired && approver_id) {
+      try {
+        // 承認者のメンバーシップを取得
+        const { data: approverMembership, error: approverMembershipError } = await supabaseAdmin
+          .from('memberships')
+          .select('user_id')
+          .eq('user_id', approver_id)
+          .eq('org_id', company.id)
+          .single()
+
+        if (approverMembership && !approverMembershipError) {
+          // 承認通知を作成
+          const { error: notificationError } = await supabaseAdmin
+            .from('notifications')
+            .insert({
+              user_id: approver_id,
+              type: 'project_approval_requested',
+              title: '案件承認依頼',
+              message: `案件「${title}」の承認をお願いします。`,
+              data: {
+                project_id: projectData.id,
+                project_title: title,
+                requester_id: userProfile.id,
+                requester_name: userProfile.display_name
+              }
+            })
+
+          if (notificationError) {
+            console.error('承認通知の送信に失敗:', notificationError)
+          }
+        }
+      } catch (notificationError) {
+        console.error('承認通知処理エラー:', notificationError)
+        // 通知エラーは案件作成を妨げない
+      }
+    }
+
     return NextResponse.json({
-      message: '案件が正常に作成されました',
-      project: projectData
+      message: approvalRequired ? '案件が作成されました。承認待ちです。' : '案件が正常に作成されました',
+      project: projectData,
+      requires_approval: approvalRequired
     }, { status: 201 })
 
   } catch (error) {
@@ -231,14 +282,12 @@ export async function GET(request: NextRequest) {
       .eq('user_id', userProfile.id)
 
     if (membershipError || !memberships || memberships.length === 0) {
-      console.log('メンバーシップが見つからない - 空のプロジェクト一覧を返す')
       return NextResponse.json({ projects: [] }, { status: 200 })
     }
 
     // OrgAdminのメンバーシップを探す
     const membership = memberships.find(m => m.role === 'OrgAdmin')
     if (!membership) {
-      console.log('OrgAdmin権限がない - 空のプロジェクト一覧を返す')
       return NextResponse.json({ projects: [] }, { status: 200 })
     }
 
@@ -345,9 +394,6 @@ export async function GET(request: NextRequest) {
         return acc
       }, {}) || {}
       
-      // デバッグログ
-      console.log('契約データ:', contracts)
-      console.log('契約マップ:', contractMap)
     }
 
     const formattedProjects = projectsData?.map(project => {
@@ -384,10 +430,6 @@ export async function GET(request: NextRequest) {
         contracts: contractMap[project.id] || [] // 複数受注者の契約情報
       }
       
-      // デバッグログ
-      if (contractMap[project.id] && contractMap[project.id].length > 0) {
-        console.log(`プロジェクト ${project.title} の契約情報:`, contractMap[project.id])
-      }
       
       return result
     }) || []

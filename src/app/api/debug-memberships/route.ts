@@ -21,14 +21,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ message: '認証に失敗しました' }, { status: 401 })
     }
 
-    console.log('デバッグ: 認証ユーザーID:', user.id)
 
     // 全メンバーシップを取得
     const { data: allMemberships, error: allMembershipsError } = await supabaseAdmin
       .from('memberships')
       .select('*')
 
-    console.log('デバッグ: 全メンバーシップ:', allMemberships)
 
     // 特定ユーザーのメンバーシップを取得
     const { data: userMemberships, error: userMembershipsError } = await supabaseAdmin
@@ -36,7 +34,6 @@ export async function GET(request: NextRequest) {
       .select('*')
       .eq('user_id', user.id)
 
-    console.log('デバッグ: ユーザーメンバーシップ:', userMemberships)
 
     // 認証ユーザー一覧を取得
     const { data: authUsers } = await supabaseAdmin.auth.admin.listUsers()

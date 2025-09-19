@@ -30,35 +30,35 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ message: '認証に失敗しました' }, { status: 401 })
     }
 
-    console.log('認証ユーザーID:', user.id)
+    // まずユーザープロフィールを取得
+    const { data: userProfile, error: userError } = await supabaseAdmin
+      .from('users')
+      .select('id, email')
+      .eq('auth_user_id', user.id)
+      .single()
+
+    if (userError || !userProfile) {
+      return NextResponse.json({ users: [] }, { status: 200 })
+    }
 
     // メンバーシップから直接情報を取得（発注者の場合）
     const { data: userMemberships, error: membershipError } = await supabaseAdmin
       .from('memberships')
       .select('role, org_id, user_id')
-      .eq('user_id', user.id)
-
-    console.log('メンバーシップ取得結果:', { 
-      userMemberships, 
-      membershipError,
-      queryUserId: user.id,
-      membershipsCount: userMemberships?.length || 0
-    })
+      .eq('user_id', userProfile.id)
 
     if (membershipError) {
-      console.log('メンバーシップ取得エラー:', membershipError)
+      console.error('メンバーシップ取得エラー:', membershipError)
       return NextResponse.json({ message: 'メンバーシップの取得に失敗しました' }, { status: 500 })
     }
 
     if (!userMemberships || userMemberships.length === 0) {
-      console.log('メンバーシップが見つからない - 空のユーザー一覧を返す')
       return NextResponse.json({ users: [] }, { status: 200 })
     }
 
     // OrgAdmin権限をチェック
     const orgMembership = userMemberships.find(m => m.role === 'OrgAdmin')
     if (!orgMembership) {
-      console.log('OrgAdmin権限がない - 空のユーザー一覧を返す')
       return NextResponse.json({ users: [] }, { status: 200 })
     }
 
@@ -95,27 +95,11 @@ export async function GET(request: NextRequest) {
         .select('id, email, display_name, formal_name, created_at, updated_at')
         .in('id', userIds)
 
-      // 認証ユーザー情報を取得（発注者用）
-      const { data: authUsers } = await supabaseAdmin.auth.admin.listUsers()
-      
       userDetailsMap = userIds.reduce((acc: any, userId: string) => {
         // 一般ユーザーのプロフィールがあるかチェック
         const contractorProfile = contractorProfiles?.find(p => p.id === userId)
         if (contractorProfile) {
           acc[userId] = contractorProfile
-        } else {
-          // 発注者の場合は認証ユーザー情報を使用
-          const authUser = authUsers?.users?.find(u => u.id === userId)
-          if (authUser) {
-            acc[userId] = {
-              id: userId,
-              email: authUser.email || '',
-              display_name: authUser.email?.split('@')[0] || '管理者',
-              formal_name: null,
-              created_at: authUser.created_at,
-              updated_at: authUser.updated_at
-            }
-          }
         }
         return acc
       }, {})
@@ -126,14 +110,31 @@ export async function GET(request: NextRequest) {
       const userDetails = userDetailsMap[membership.user_id]
       return {
         id: membership.user_id,
-        email: userDetails?.email || '',
-        display_name: userDetails?.display_name || '未設定',
-        formal_name: userDetails?.formal_name,
+        email: userDetails?.email || 'メールアドレス未設定',
+        display_name: userDetails?.display_name || '表示名未設定',
+        formal_name: userDetails?.formal_name || null,
         role: membership.role,
         created_at: membership.created_at,
         updated_at: userDetails?.updated_at || membership.created_at,
         is_active: true
       }
+    }).filter(user => {
+      // メールアドレス未設定のユーザーを除外
+      if (user.email === 'メールアドレス未設定') {
+        return false
+      }
+      
+      // 監督員デモを非表示にする
+      if (user.email === 'reviewer@demo.com') {
+        return false
+      }
+      
+      // 組織の請求書用メールアドレスを非表示にする
+      if (user.email === 'info@demo-construction.co.jp') {
+        return false
+      }
+      
+      return true
     }) || []
 
     return NextResponse.json({ users: formattedUsers }, { status: 200 })
@@ -150,9 +151,7 @@ export async function GET(request: NextRequest) {
 // 新規ユーザー作成
 export async function POST(request: NextRequest) {
   try {
-    console.log('新規ユーザー作成API開始')
     const body = await request.json()
-    console.log('リクエストボディ:', body)
     const { email, display_name, formal_name, role } = body
 
     if (!email || !display_name) {
@@ -176,7 +175,7 @@ export async function POST(request: NextRequest) {
     // ユーザープロフィールを取得
     const { data: userProfile, error: userError } = await supabaseAdmin
       .from('users')
-      .select('id, email, org_id')
+      .select('id, email')
       .eq('auth_user_id', user.id)
       .single()
 
@@ -207,7 +206,6 @@ export async function POST(request: NextRequest) {
     const password = generatePassword()
 
     // Supabase Authでユーザー作成
-    console.log('Authユーザー作成開始:', { email, role })
     const { data: authUser, error: authCreateError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
@@ -218,10 +216,8 @@ export async function POST(request: NextRequest) {
       console.error('認証ユーザー作成エラー:', authCreateError)
       return NextResponse.json({ message: 'ユーザー作成に失敗しました' }, { status: 500 })
     }
-    console.log('Authユーザー作成成功:', authUser.user?.id)
 
     // ユーザープロフィール作成（全ユーザー）
-    console.log('ユーザープロフィール作成開始:', { authUserId: authUser.user.id, email, display_name })
     const { data: userData, error: profileError } = await supabaseAdmin
       .from('users')
       .insert({
@@ -239,10 +235,8 @@ export async function POST(request: NextRequest) {
       await supabaseAdmin.auth.admin.deleteUser(authUser.user.id)
       return NextResponse.json({ message: 'ユーザープロフィールの作成に失敗しました' }, { status: 500 })
     }
-    console.log('ユーザープロフィール作成成功:', userData.id)
 
     // メンバーシップ作成
-    console.log('メンバーシップ作成開始:', { userId: userData.id, orgId, role })
     const { error: membershipCreateError } = await supabaseAdmin
       .from('memberships')
       .insert({
@@ -258,9 +252,7 @@ export async function POST(request: NextRequest) {
       await supabaseAdmin.auth.admin.deleteUser(authUser.user.id)
       return NextResponse.json({ message: 'メンバーシップの作成に失敗しました' }, { status: 500 })
     }
-    console.log('メンバーシップ作成成功')
 
-    console.log('新規ユーザー作成完了:', { userId: userData.id, authUserId: authUser.user.id, role })
     return NextResponse.json({ 
       message: 'ユーザーが正常に作成されました',
       password: password
@@ -302,7 +294,7 @@ export async function PUT(request: NextRequest) {
     // ユーザープロフィールを取得
     const { data: userProfile, error: userError } = await supabaseAdmin
       .from('users')
-      .select('id, org_id')
+      .select('id, email')
       .eq('auth_user_id', user.id)
       .single()
 
@@ -374,7 +366,7 @@ export async function DELETE(request: NextRequest) {
     // ユーザープロフィールを取得
     const { data: userProfile, error: userError } = await supabaseAdmin
       .from('users')
-      .select('id, org_id')
+      .select('id, email')
       .eq('auth_user_id', user.id)
       .single()
 
@@ -432,12 +424,14 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ message: 'ユーザープロフィールの削除に失敗しました' }, { status: 500 })
     }
 
-    // 認証ユーザーを削除
-    const { error: authDeleteError } = await supabaseAdmin.auth.admin.deleteUser(authUserId)
+    // 認証ユーザーが存在する場合のみ削除
+    if (authUserId) {
+      const { error: authDeleteError } = await supabaseAdmin.auth.admin.deleteUser(authUserId)
 
-    if (authDeleteError) {
-      console.error('認証ユーザー削除エラー:', authDeleteError)
-      return NextResponse.json({ message: '認証ユーザーの削除に失敗しました' }, { status: 500 })
+      if (authDeleteError) {
+        console.error('認証ユーザー削除エラー:', authDeleteError)
+        return NextResponse.json({ message: '認証ユーザーの削除に失敗しました' }, { status: 500 })
+      }
     }
 
     return NextResponse.json({ message: 'ユーザーが正常に削除されました' }, { status: 200 })

@@ -1,11 +1,13 @@
 {
   "/api/notifications/route": "app/api/notifications/route.js",
-  "/api/projects/route": "app/api/projects/route.js",
   "/api/chat/rooms/route": "app/api/chat/rooms/route.js",
   "/api/contracts/route": "app/api/contracts/route.js",
-  "/settings/page": "app/settings/page.js",
+  "/auth/login/page": "app/auth/login/page.js",
+  "/projects/page": "app/projects/page.js",
+  "/api/jobs/route": "app/api/jobs/route.js",
   "/not-found": "app/not-found.js",
-  "/api/setup-orgadmin-profile/route": "app/api/setup-orgadmin-profile/route.js",
-  "/api/organization/profile/route": "app/api/organization/profile/route.js",
-  "/api/settings/users/route": "app/api/settings/users/route.js"
+  "/jobs/page": "app/jobs/page.js",
+  "/contracts/create/page": "app/contracts/create/page.js",
+  "/contracts/page": "app/contracts/page.js",
+  "/api/invoices/route": "app/api/invoices/route.js"
 }
