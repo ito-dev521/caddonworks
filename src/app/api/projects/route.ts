@@ -231,19 +231,15 @@ export async function GET(request: NextRequest) {
       .eq('user_id', userProfile.id)
 
     if (membershipError || !memberships || memberships.length === 0) {
-      return NextResponse.json(
-        { message: '組織情報の取得に失敗しました' },
-        { status: 403 }
-      )
+      console.log('メンバーシップが見つからない - 空のプロジェクト一覧を返す')
+      return NextResponse.json({ projects: [] }, { status: 200 })
     }
 
     // OrgAdminのメンバーシップを探す
     const membership = memberships.find(m => m.role === 'OrgAdmin')
     if (!membership) {
-      return NextResponse.json(
-        { message: 'この操作を実行する権限がありません（OrgAdmin権限が必要です）' },
-        { status: 403 }
-      )
+      console.log('OrgAdmin権限がない - 空のプロジェクト一覧を返す')
+      return NextResponse.json({ projects: [] }, { status: 200 })
     }
 
     const company = membership.organizations as any

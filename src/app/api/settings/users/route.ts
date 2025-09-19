@@ -51,15 +51,15 @@ export async function GET(request: NextRequest) {
     }
 
     if (!userMemberships || userMemberships.length === 0) {
-      console.log('メンバーシップが見つからない - 空の結果')
-      return NextResponse.json({ message: 'メンバーシップが見つかりません' }, { status: 403 })
+      console.log('メンバーシップが見つからない - 空のユーザー一覧を返す')
+      return NextResponse.json({ users: [] }, { status: 200 })
     }
 
     // OrgAdmin権限をチェック
     const orgMembership = userMemberships.find(m => m.role === 'OrgAdmin')
     if (!orgMembership) {
-      console.log('OrgAdmin権限がない')
-      return NextResponse.json({ message: 'この操作を実行する権限がありません（発注者権限が必要です）' }, { status: 403 })
+      console.log('OrgAdmin権限がない - 空のユーザー一覧を返す')
+      return NextResponse.json({ users: [] }, { status: 200 })
     }
 
     const orgId = orgMembership.org_id
@@ -150,7 +150,9 @@ export async function GET(request: NextRequest) {
 // 新規ユーザー作成
 export async function POST(request: NextRequest) {
   try {
+    console.log('新規ユーザー作成API開始')
     const body = await request.json()
+    console.log('リクエストボディ:', body)
     const { email, display_name, formal_name, role } = body
 
     if (!email || !display_name) {
@@ -205,6 +207,7 @@ export async function POST(request: NextRequest) {
     const password = generatePassword()
 
     // Supabase Authでユーザー作成
+    console.log('Authユーザー作成開始:', { email, role })
     const { data: authUser, error: authCreateError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
@@ -215,9 +218,11 @@ export async function POST(request: NextRequest) {
       console.error('認証ユーザー作成エラー:', authCreateError)
       return NextResponse.json({ message: 'ユーザー作成に失敗しました' }, { status: 500 })
     }
+    console.log('Authユーザー作成成功:', authUser.user?.id)
 
     // ユーザープロフィール作成（全ユーザー）
-    const { error: profileError } = await supabaseAdmin
+    console.log('ユーザープロフィール作成開始:', { authUserId: authUser.user.id, email, display_name })
+    const { data: userData, error: profileError } = await supabaseAdmin
       .from('users')
       .insert({
         auth_user_id: authUser.user.id,
@@ -225,6 +230,8 @@ export async function POST(request: NextRequest) {
         display_name,
         formal_name
       })
+      .select()
+      .single()
 
     if (profileError) {
       console.error('プロフィール作成エラー:', profileError)
@@ -232,12 +239,14 @@ export async function POST(request: NextRequest) {
       await supabaseAdmin.auth.admin.deleteUser(authUser.user.id)
       return NextResponse.json({ message: 'ユーザープロフィールの作成に失敗しました' }, { status: 500 })
     }
+    console.log('ユーザープロフィール作成成功:', userData.id)
 
     // メンバーシップ作成
+    console.log('メンバーシップ作成開始:', { userId: userData.id, orgId, role })
     const { error: membershipCreateError } = await supabaseAdmin
       .from('memberships')
       .insert({
-        user_id: authUser.user.id,
+        user_id: userData.id,
         org_id: orgId,
         role
       })
@@ -249,7 +258,9 @@ export async function POST(request: NextRequest) {
       await supabaseAdmin.auth.admin.deleteUser(authUser.user.id)
       return NextResponse.json({ message: 'メンバーシップの作成に失敗しました' }, { status: 500 })
     }
+    console.log('メンバーシップ作成成功')
 
+    console.log('新規ユーザー作成完了:', { userId: userData.id, authUserId: authUser.user.id, role })
     return NextResponse.json({ 
       message: 'ユーザーが正常に作成されました',
       password: password
@@ -258,7 +269,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('ユーザー作成APIエラー:', error)
     return NextResponse.json(
-      { message: 'サーバーエラーが発生しました', error: error instanceof Error ? error.message : '不明なエラー' },
+      { message: 'サーバーエラーが発生しました: ' + (error as Error).message },
       { status: 500 }
     )
   }

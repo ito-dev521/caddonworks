@@ -181,11 +181,26 @@ function SettingsPageContent() {
 
       const data = await response.json()
       console.log('ユーザー一覧データ:', data)
+      
+      // 空のユーザー一覧でも正常として扱う
       setUsers(data.users || [])
       setFilteredUsers(data.users || [])
+      
+      // 初回登録時などでユーザーがいない場合はメッセージを表示
+      if (!data.users || data.users.length === 0) {
+        console.log('ユーザー一覧が空です - 初回登録の可能性があります')
+      }
     } catch (error) {
       console.error('ユーザー一覧取得エラー:', error)
-      alert('ユーザー一覧の取得に失敗しました')
+      
+      // メンバーシップ関連のエラーの場合は空のリストを設定
+      if (error instanceof Error && error.message.includes('メンバーシップ')) {
+        console.log('メンバーシップが見つからないため、空のユーザー一覧を設定します')
+        setUsers([])
+        setFilteredUsers([])
+      } else {
+        alert('ユーザー一覧の取得に失敗しました')
+      }
     } finally {
       setIsLoading(false)
     }
