@@ -451,7 +451,7 @@ export function ChatParticipantsPanel({
                             {participant.email}
                           </p>
                           <Badge
-                            variant="secondary"
+                            variant={participant.role === 'Contractor' ? 'contractor' : 'secondary'}
                             className="mt-1 text-xs"
                           >
                             {getRoleLabel(participant.role)}
@@ -492,7 +492,7 @@ export function ChatParticipantsPanel({
                             {participant.email}
                           </p>
                           <Badge
-                            variant="secondary"
+                            variant={participant.role === 'Contractor' ? 'contractor' : 'secondary'}
                             className="mt-1 text-xs"
                           >
                             {getRoleLabel(participant.role)}

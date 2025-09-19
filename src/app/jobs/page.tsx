@@ -111,14 +111,30 @@ function JobsPageContent() {
     return parseInt(stringValue.replace(/[^\d]/g, ''), 10) || 0
   }
 
-  // 入札締切日までの残り日数を計算
+  // 入札締切日までの残り日数を計算（その日の終わり23:59:59まで有効）
   const getDaysUntilDeadline = (deadline: string) => {
     if (!deadline) return null
     
     const now = new Date()
     const deadlineDate = new Date(deadline)
-    const diffTime = deadlineDate.getTime() - now.getTime()
+    // 締切日の終わり（23:59:59）まで有効とする
+    const endOfDeadlineDay = new Date(deadlineDate)
+    endOfDeadlineDay.setHours(23, 59, 59, 999)
+    
+    const diffTime = endOfDeadlineDay.getTime() - now.getTime()
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    
+    // デバッグ用ログ（当日の案件の場合）
+    if (diffDays === 0 || diffDays === 1) {
+      console.log('締切日チェック:', {
+        deadline: deadline,
+        now: now.toISOString(),
+        endOfDeadlineDay: endOfDeadlineDay.toISOString(),
+        diffTime: diffTime,
+        diffDays: diffDays,
+        isValid: diffTime > 0
+      })
+    }
     
     return diffDays
   }
@@ -161,6 +177,16 @@ function JobsPageContent() {
       const result = await response.json()
 
       if (response.ok) {
+        console.log('jobs page: 受信したデータ', {
+          totalJobs: result.jobs?.length || 0,
+          jobs: result.jobs?.map((job: any) => ({
+            id: job.id,
+            title: job.title,
+            status: job.status,
+            is_declined: job.is_declined,
+            contract_amount: job.contract_amount
+          }))
+        })
         setJobs(result.jobs)
         setFilteredJobs(result.jobs)
       } else {
@@ -226,14 +252,8 @@ function JobsPageContent() {
       // 入札可能な案件（入札中の案件のみ）
       filtered = filtered.filter(j => j.status === 'bidding')
       
-      // 入札締切日フィルタ（締切切れの案件を除外）
-      const now = new Date()
-      filtered = filtered.filter(job => {
-        if (!job.bidding_deadline) return true // 締切日が設定されていない場合は表示
-        
-        const deadline = new Date(job.bidding_deadline)
-        return deadline > now // 締切日が現在時刻より後のみ表示
-      })
+      // 期限切れの案件を除外（APIで計算済みのis_expiredフラグを使用）
+      filtered = filtered.filter(job => !job.is_expired)
     } else if (selectedTab === 'awarded') {
       // 落札した案件（署名済み契約の案件）
       // APIから取得したデータで、入札中でない案件は全て落札した案件

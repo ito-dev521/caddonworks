@@ -65,6 +65,8 @@ function ContractsPageContent() {
   const [error, setError] = useState<string | null>(null)
   const [selectedTab, setSelectedTab] = useState<'signature' | 'pending' | 'invoice'>('signature')
   const lastFetchKeyRef = useRef<string | null>(null)
+  // プロジェクトID -> 契約一覧（完了タブで評価ボタン用）
+  const [projectContracts, setProjectContracts] = useState<Record<string, Contract[]>>({})
   
   // 評価フォームの状態管理
   const [showEvaluationForm, setShowEvaluationForm] = useState(false)
@@ -158,12 +160,20 @@ function ContractsPageContent() {
         ])
         
         const projects = projectsResult.projects || []
-        const allContracts = contractsResult.contracts || []
+        const allContracts: Contract[] = contractsResult.contracts || []
         
         setCompletedProjects(projects)
         
         // 評価済みと請求書作成済みの状態を確認（契約データも渡す）
         await checkProjectStatuses(projects, allContracts)
+
+        // プロジェクトごとの契約を保持（評価ボタンで使用）
+        const grouped: Record<string, Contract[]> = allContracts.reduce((acc: Record<string, Contract[]>, c: Contract) => {
+          if (!acc[c.project_id]) acc[c.project_id] = []
+          acc[c.project_id].push(c)
+          return acc
+        }, {})
+        setProjectContracts(grouped)
       }
     } catch (err: any) {
       console.error('完了案件取得エラー:', err)
@@ -572,6 +582,17 @@ function ContractsPageContent() {
                                   {new Date(contract.start_date).toLocaleDateString('ja-JP')} - {new Date(contract.end_date).toLocaleDateString('ja-JP')}
                                 </p>
                               </div>
+                              {userRole === 'OrgAdmin' && (
+                                <div className="col-span-2 flex justify-end">
+                                  <Button
+                                    className="bg-green-500 hover:bg-green-600 text-white"
+                                    size="sm"
+                                    onClick={() => handleEvaluateContractor({ id: contract.project_id }, contract)}
+                                  >
+                                    受注者評価
+                                  </Button>
+                                </div>
+                              )}
                             </div>
                             
                             {/* 複数受注者対応の表示 */}
@@ -800,21 +821,36 @@ function ContractsPageContent() {
                             </div>
                           </div>
                           <div className="flex gap-2 ml-4">
+                            {/* 評価ボタン（発注者のみ） */}
+                            {userRole === 'OrgAdmin' && projectContracts[project.id] && projectContracts[project.id][0] && (
+                              <Button
+                                className="bg-green-500 hover:bg-green-600 text-white"
+                                size="sm"
+                                onClick={() => handleEvaluateContractor({ id: project.id }, projectContracts[project.id][0])}
+                              >
+                                受注者評価
+                              </Button>
+                            )}
                             <Button
                               variant="outline"
                               size="sm"
                               onClick={() => handleCreateInvoice(project.id)}
-                              disabled={isProjectInvoiced(project.id)}
+                              disabled={!evaluatedProjects.has(project.id) || isProjectInvoiced(project.id)}
+                              title={!evaluatedProjects.has(project.id) ? '受注者評価が未完了のため完了届は作成できません' : (isProjectInvoiced(project.id) ? '既に作成済みです' : '')}
                             >
                               <FileText className="w-4 h-4 mr-2" />
-                              {isProjectInvoiced(project.id) ? '作成済み' : '完了届作成'}
+                              {isProjectInvoiced(project.id) ? '作成済み' : (!evaluatedProjects.has(project.id) ? '評価待ち' : '完了届作成')}
                             </Button>
                             <Button
                               variant="outline"
                               size="sm"
                               onClick={() => {
-                                // PDF生成機能（未実装）
-                                alert('PDF生成機能は準備中です')
+                                const inv = invoiceStatuses.get(project.id)
+                                if (!inv?.id) {
+                                  alert('PDFを表示できる請求書が見つかりません')
+                                  return
+                                }
+                                window.open(`/api/invoices?id=${inv.id}`, '_blank')
                               }}
                             >
                               <FileText className="w-4 h-4 mr-2" />
@@ -884,10 +920,7 @@ function ContractsPageContent() {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => {
-                              // PDF生成機能（未実装）
-                              alert('PDF生成機能は準備中です')
-                            }}
+                            onClick={() => window.open(`/api/invoices?id=${invoice.id}`, '_blank')}
                           >
                             <FileText className="w-4 h-4 mr-2" />
                             PDF表示

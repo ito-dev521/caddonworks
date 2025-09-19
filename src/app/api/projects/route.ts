@@ -40,6 +40,43 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // 日付の整合性チェック（入札締切 <= 開始日 <= 納期）
+    try {
+      const bd = new Date(bidding_deadline)
+      const st = new Date(start_date)
+      const ed = new Date(end_date)
+
+      if (isNaN(bd.getTime()) || isNaN(st.getTime()) || isNaN(ed.getTime())) {
+        return NextResponse.json(
+          { message: '日付の形式が正しくありません' },
+          { status: 400 }
+        )
+      }
+
+      // 締切日はその日の終わりまで有効
+      const bdEndOfDay = new Date(bd)
+      bdEndOfDay.setHours(23, 59, 59, 999)
+
+      if (st < bdEndOfDay) {
+        return NextResponse.json(
+          { message: '開始日は入札締切日以降の日付にしてください' },
+          { status: 400 }
+        )
+      }
+
+      if (ed < st) {
+        return NextResponse.json(
+          { message: '納期は開始日以降の日付にしてください' },
+          { status: 400 }
+        )
+      }
+    } catch (e) {
+      return NextResponse.json(
+        { message: '日付の検証中にエラーが発生しました' },
+        { status: 400 }
+      )
+    }
+
     // Authorizationヘッダーからユーザー情報を取得
     const authHeader = request.headers.get('authorization')
     if (!authHeader) {
@@ -360,7 +397,9 @@ export async function GET(request: NextRequest) {
           project_id,
           contractor_id,
           bid_amount,
-          status
+          status,
+          created_at,
+          updated_at
         `)
         .in('project_id', projectIds)
         .eq('status', 'signed') // 署名済み契約のみ
@@ -381,19 +420,37 @@ export async function GET(request: NextRequest) {
         }, {}) || {}
       }
       
-      // プロジェクトごとに契約をグループ化
-      contractMap = contracts?.reduce((acc: any, contract: any) => {
+      // プロジェクトごとに契約をグループ化（受注者IDで重複排除。最新の契約のみ残す）
+      contractMap = (contracts || []).reduce((acc: any, contract: any) => {
         if (!acc[contract.project_id]) {
-          acc[contract.project_id] = []
+          acc[contract.project_id] = new Map<string, any>()
         }
-        acc[contract.project_id].push({
-          contractor_id: contract.contractor_id,
-          contract_amount: contract.bid_amount,
-          contractor_name: contractorMap[contract.contractor_id]?.display_name || '不明な受注者',
-          contractor_email: contractorMap[contract.contractor_id]?.email || ''
-        })
+        const map: Map<string, any> = acc[contract.project_id]
+
+        const existing = map.get(String(contract.contractor_id))
+        const existingTime = existing ? new Date(existing.updated_at || existing.created_at).getTime() : -1
+        const currentTime = new Date(contract.updated_at || contract.created_at).getTime()
+
+        if (!existing || currentTime >= existingTime) {
+          map.set(String(contract.contractor_id), {
+            contractor_id: contract.contractor_id,
+            contract_amount: contract.bid_amount,
+            contractor_name: contractorMap[contract.contractor_id]?.display_name || '不明な受注者',
+            contractor_email: contractorMap[contract.contractor_id]?.email || '',
+            created_at: contract.created_at,
+            updated_at: contract.updated_at
+          })
+        }
         return acc
-      }, {}) || {}
+      }, {} as Record<string, Map<string, any>>)
+      
+      // Mapを配列に変換
+      Object.keys(contractMap).forEach((projectId) => {
+        const values = Array.from(contractMap[projectId].values())
+        // 表示の安定化のため更新日時の降順で並べる
+        values.sort((a: any, b: any) => new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime())
+        contractMap[projectId] = values
+      })
       
     }
 

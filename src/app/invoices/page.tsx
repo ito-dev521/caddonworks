@@ -81,7 +81,7 @@ function InvoicesPageContent() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
 
-      const response = await fetch(`/api/invoices/contractor/${userProfile.id}`, {
+      const response = await fetch(`/api/invoices`, {
         headers: {
           'Authorization': `Bearer ${session.access_token}`
         }

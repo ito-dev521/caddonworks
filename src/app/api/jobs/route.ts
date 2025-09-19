@@ -123,13 +123,15 @@ export async function GET(request: NextRequest) {
       .eq('status', 'bidding') // 入札中の案件のみ
       .order('created_at', { ascending: false })
 
-    // 2. 署名済み契約の案件を取得（落札した案件）
-    const { data: contracts, error: contractsError } = await supabaseAdmin
+    // 2. 現在のユーザーの全契約を取得（プロジェクトごとの最新ステータス確認）
+    const { data: allUserContracts, error: contractsError } = await supabaseAdmin
       .from('contracts')
       .select(`
         project_id,
         status,
         bid_amount,
+        created_at,
+        updated_at,
         projects (
           id,
           title,
@@ -150,8 +152,8 @@ export async function GET(request: NextRequest) {
           required_level
         )
       `)
-      .eq('status', 'signed')
-      .eq('contractor_id', userProfile.id) // 自分が受注者として署名した契約
+      .eq('contractor_id', userProfile.id)
+      .order('created_at', { ascending: false }) // 最新の契約を優先
 
     if (biddingError || contractsError) {
       console.error('jobs API: 案件データ取得エラー:', { biddingError, contractsError })
@@ -161,30 +163,66 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // 署名済み契約の案件を抽出（契約金額を含める）
-    const awardedJobs = contracts?.map(contract => ({
-      ...contract.projects,
-      contract_amount: contract.bid_amount, // 契約金額を追加
-      status: 'awarded' // 落札案件として明確にステータスを設定
-    })).filter(Boolean) || []
+    // プロジェクトごとの契約をグループ化し、最新の契約を特定
+    const projectContractsMap = new Map()
+    allUserContracts?.forEach(contract => {
+      if (!projectContractsMap.has(contract.project_id)) {
+        projectContractsMap.set(contract.project_id, [])
+      }
+      projectContractsMap.get(contract.project_id).push(contract)
+    })
+
+    // 各プロジェクトの最新契約を取得（created_atで最新を判定）
+    const awardedJobs = []
+    const declinedProjectIds = []
     
-    // 4. 現在のユーザーが契約辞退した案件を取得
-    const { data: declinedContracts, error: declinedContractsError } = await supabaseAdmin
-      .from('contracts')
-      .select('project_id')
-      .eq('contractor_id', userProfile.id)
-      .eq('status', 'declined')
-    
-    if (declinedContractsError) {
-      console.error('jobs API: 契約辞退案件取得エラー:', declinedContractsError)
+    for (const [projectId, contracts] of projectContractsMap) {
+      // 契約を作成日時でソートして最新を取得
+      const sortedContracts = contracts.sort((a, b) => {
+        const aTime = new Date(a.updated_at || a.created_at).getTime()
+        const bTime = new Date(b.updated_at || b.created_at).getTime()
+        return bTime - aTime
+      }
+      )
+      const latestContract = sortedContracts[0]
+      
+      console.log(`プロジェクト ${projectId} の契約履歴:`, {
+        projectId,
+        projectTitle: latestContract.projects?.title,
+        contractsCount: contracts.length,
+        contracts: contracts.map(c => ({
+          status: c.status,
+          created_at: c.created_at,
+          updated_at: c.updated_at,
+          bid_amount: c.bid_amount
+        })),
+        latestStatus: latestContract.status,
+        latestUpdatedAt: latestContract.updated_at || latestContract.created_at
+      })
+      
+      if (latestContract.status === 'signed' && latestContract.projects) {
+        awardedJobs.push({
+          ...latestContract.projects,
+          contract_amount: latestContract.bid_amount,
+          status: 'awarded'
+        })
+      } else if (latestContract.status === 'declined') {
+        declinedProjectIds.push(projectId)
+      }
     }
     
-    const declinedProjectIds = declinedContracts?.map(c => c.project_id) || []
+    console.log('jobs API: 契約ステータス確認（最終結果）', {
+      userId: userProfile.id,
+      userEmail: userProfile.email,
+      totalContracts: allUserContracts?.length || 0,
+      uniqueProjects: projectContractsMap.size,
+      awardedJobsCount: awardedJobs.length,
+      declinedProjectsCount: declinedProjectIds.length,
+      awardedJobTitles: awardedJobs.map(job => job.title),
+      declinedProjectIds: declinedProjectIds
+    })
     
-    // 契約辞退された案件を落札案件から除外
-    const filteredAwardedJobs = awardedJobs.filter(job => 
-      !declinedProjectIds.includes(job.id)
-    )
+    const filteredAwardedJobs = awardedJobs
     
     // 3. お気に入り会員が断った案件を取得（優先依頼で辞退された案件）
     const { data: declinedInvitations, error: declinedError } = await supabaseAdmin
@@ -221,19 +259,41 @@ export async function GET(request: NextRequest) {
     const declinedJobs = declinedInvitations?.map(invitation => invitation.projects).filter(Boolean) || []
     
     // 入札可能な案件を会員レベルでフィルタリング
-    const filteredBiddingJobs = biddingJobs?.filter(job => {
+    const levelFilteredBiddingJobs = biddingJobs?.filter(job => {
       const requiredLevel = (job.required_level as MemberLevel) || 'beginner'
       return canAccessProject(userLevel as MemberLevel, requiredLevel)
     }) || []
     
-    // 辞退した案件は表示しない（受注者案件一覧から除外）
-    // const filteredDeclinedJobs = declinedJobs?.filter((job: any) => {
-    //   const requiredLevel = (job.required_level as MemberLevel) || 'beginner'
-    //   return canAccessProject(userLevel as MemberLevel, requiredLevel)
-    // }) || []
+    // 辞退した案件のIDを収集
+    const allDeclinedProjectIds = [
+      ...declinedProjectIds.map((id: any) => String(id)), // 契約辞退した案件（最新ステータスベース）
+      ...declinedJobs.map(job => String(job.id)) // 優先依頼で辞退した案件
+    ]
+    
+    console.log('jobs API: 辞退案件除外処理', {
+      userId: userProfile.id,
+      contractDeclinedCount: declinedProjectIds.length,
+      priorityDeclinedCount: declinedJobs.length,
+      totalDeclinedCount: allDeclinedProjectIds.length,
+      declinedProjectIds: allDeclinedProjectIds,
+      beforeFilterCount: levelFilteredBiddingJobs.length
+    })
+    
+    // 入札可能な案件から辞退した案件を除外
+    const filteredBiddingJobs = levelFilteredBiddingJobs.filter(job => 
+      !allDeclinedProjectIds.includes(String(job.id))
+    )
+    
+    console.log('jobs API: 辞退案件除外後', {
+      afterFilterCount: filteredBiddingJobs.length,
+      excludedCount: levelFilteredBiddingJobs.length - filteredBiddingJobs.length
+    })
     
     // フィルタリングされた入札可能な案件と落札した案件のみを結合（辞退した案件は除外）
-    const jobsData = [...filteredBiddingJobs, ...filteredAwardedJobs]
+    let jobsData = [...filteredBiddingJobs, ...filteredAwardedJobs]
+
+    // 念のため、結合後にも辞退案件を全体から除外（型の違い等の取りこぼし対策）
+    jobsData = jobsData.filter((job: any) => !allDeclinedProjectIds.includes(String(job.id)))
 
 
     // 組織名を取得

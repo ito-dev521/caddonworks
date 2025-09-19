@@ -314,7 +314,7 @@ function ContractDetailPageContent() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'pending_contractor':
-        return <Badge variant="outline" className="bg-yellow-100 text-yellow-800">受注者署名待ち</Badge>
+        return <Badge variant="contractor" className="bg-yellow-100 text-yellow-800">受注者署名待ち</Badge>
       case 'pending_org':
         return <Badge variant="outline" className="bg-orange-100 text-orange-800">発注者署名待ち</Badge>
       case 'signed':

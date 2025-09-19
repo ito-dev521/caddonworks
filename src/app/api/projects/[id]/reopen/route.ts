@@ -126,6 +126,36 @@ export async function POST(
       )
     }
 
+    // 入力された新しい日付の整合性チェック（指定がある場合）
+    if (new_bidding_deadline || new_start_date || new_end_date) {
+      try {
+        const bd = new_bidding_deadline ? new Date(new_bidding_deadline) : new Date(project.bidding_deadline)
+        const st = new_start_date ? new Date(new_start_date) : new Date(project.start_date)
+        const ed = new_end_date ? new Date(new_end_date) : new Date(project.end_date)
+
+        const bdEndOfDay = new Date(bd)
+        bdEndOfDay.setHours(23, 59, 59, 999)
+
+        if (st < bdEndOfDay) {
+          return NextResponse.json(
+            { message: '開始日は入札締切日以降の日付にしてください' },
+            { status: 400 }
+          )
+        }
+        if (ed < st) {
+          return NextResponse.json(
+            { message: '納期は開始日以降の日付にしてください' },
+            { status: 400 }
+          )
+        }
+      } catch (e) {
+        return NextResponse.json(
+          { message: '日付の検証中にエラーが発生しました' },
+          { status: 400 }
+        )
+      }
+    }
+
     // 案件の再登録処理
     const updateData: any = {
       status: 'bidding',

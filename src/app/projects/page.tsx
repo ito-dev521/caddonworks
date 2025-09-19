@@ -640,10 +640,7 @@ function ProjectsPageContent() {
         alert(`案件のステータスが「${statusLabels[newStatus]}」に変更されました`)
         await fetchProjects()
 
-        // ステータスが完了になった場合、請求書関連の処理を呼び出し
-        if (newStatus === 'completed') {
-          await createInvoiceForCompletedProject(projectId)
-        }
+        // ステータスが完了になっても自動発行はしない（手動ボタンで実行）
       } else {
         alert('ステータスの変更に失敗しました: ' + result.message)
       }
@@ -1335,9 +1332,14 @@ function ProjectsPageContent() {
                               <div className="space-y-1">
                                 {project.contracts.map((contract, index) => (
                                   <div key={contract.contractor_id} className="border-l-2 border-blue-200 pl-2">
-                                    <p className="text-sm font-medium text-gray-900">
-                                      {contract.contractor_name}
-                                    </p>
+                                    <div className="flex items-center gap-2">
+                                      <p className="text-sm font-medium text-gray-900">
+                                        {contract.contractor_name}
+                                      </p>
+                                      <Badge variant="contractor" className="text-xs">
+                                        受注者
+                                      </Badge>
+                                    </div>
                                     <p className="text-xs text-gray-600">
                                       ¥{contract.contract_amount.toLocaleString()}
                                     </p>
@@ -2292,7 +2294,12 @@ function ProjectsPageContent() {
                                     <User className="w-4 h-4 text-engineering-blue" />
                                   </div>
                                   <div className="flex-1">
-                                    <p className="font-medium text-gray-900">{contract.contractor_name}</p>
+                                    <div className="flex items-center gap-2">
+                                      <p className="font-medium text-gray-900">{contract.contractor_name}</p>
+                                      <Badge variant="contractor" className="text-xs">
+                                        受注者
+                                      </Badge>
+                                    </div>
                                     <p className="text-sm text-gray-600">{contract.contractor_email}</p>
                                   </div>
                                 </div>
