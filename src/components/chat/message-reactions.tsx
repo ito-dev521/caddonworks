@@ -74,6 +74,7 @@ export function MessageReactions({ messageId, className }: MessageReactionsProps
   const { user, loading: authLoading } = useAuth()
   const [reactions, setReactions] = useState<Record<string, Reaction[]>>({})
   const [showPicker, setShowPicker] = useState(false)
+  const [showDetails, setShowDetails] = useState(false)
   
   // showPickerの状態変化をデバッグ
   useEffect(() => {
@@ -111,6 +112,24 @@ export function MessageReactions({ messageId, className }: MessageReactionsProps
       fetchReactions()
     }
   }, [messageId, user, authLoading])
+
+  // 外側クリックで詳細とピッカーを閉じる
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element
+      if (showDetails && !target.closest('.reaction-details-container')) {
+        setShowDetails(false)
+      }
+      if (showPicker && !target.closest('.reaction-picker-container')) {
+        setShowPicker(false)
+      }
+    }
+
+    if (showDetails || showPicker) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showDetails, showPicker])
 
   // リアクションを追加/削除
   const toggleReaction = async (reactionType: string) => {
@@ -215,13 +234,17 @@ export function MessageReactions({ messageId, className }: MessageReactionsProps
       
       {/* 統合されたリアクション詳細ポップアップ */}
       {totalReactions > 0 && (
-        <div className="relative group">
-          <div className="h-7 px-2 flex items-center text-xs text-gray-500 cursor-pointer hover:text-gray-700">
+        <div className="relative reaction-details-container">
+          <div 
+            className="h-7 px-2 flex items-center text-xs text-gray-500 cursor-pointer hover:text-gray-700"
+            onClick={() => setShowDetails(!showDetails)}
+          >
             詳細
           </div>
           
           {/* 全リアクションの統合ポップアップ */}
-          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 bg-white border border-gray-200 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 min-w-64 max-w-80">
+          {showDetails && (
+            <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-64 max-w-80">
             {/* ヘッダー */}
             <div className="px-4 py-3 border-b border-gray-100">
               <h3 className="text-sm font-semibold text-gray-900">リアクション詳細</h3>
@@ -269,16 +292,18 @@ export function MessageReactions({ messageId, className }: MessageReactionsProps
               ))}
             </div>
             
-            {/* 矢印 */}
-            <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-white"></div>
-            <div className="absolute top-full left-1/2 transform -translate-x-1/2 -mt-px w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-200"></div>
-          </div>
+              {/* 矢印 */}
+              <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-white"></div>
+              <div className="absolute top-full left-1/2 transform -translate-x-1/2 -mt-px w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-200"></div>
+            </div>
+          )}
         </div>
       )}
 
       {/* リアクションピッカー */}
       {showPicker && (
         <div 
+          className="reaction-picker-container"
           style={{ 
             position: 'fixed', 
             top: '50%', 
@@ -357,7 +382,7 @@ export function MessageReactions({ messageId, className }: MessageReactionsProps
         onClick={() => {
           setShowPicker(!showPicker)
         }}
-        className="h-6 px-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+        className="h-6 px-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 reaction-picker-container"
       >
         <Smile className="h-3 w-3" />
       </Button>

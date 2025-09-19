@@ -715,24 +715,8 @@ export function ChatMessageInterface({
           </div>
         )}
         
-        <div className="flex items-end gap-2">
-          <div className="flex-1">
-            <textarea
-              ref={textareaRef}
-              value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
-              placeholder="メッセージを入力... (Shift + Enterキーで改行)"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-engineering-blue focus:border-transparent min-h-[60px]"
-              rows={3}
-              onKeyDown={(e) => {
-                // Enterキーでの送信を無効化（Shift+Enterで改行のみ可能）
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault()
-                  // 送信はしない
-                }
-              }}
-            />
-          </div>
+        {/* Toolbar above message input */}
+        <div className="flex items-center justify-between mb-3">
           <div className="flex gap-2">
             {/* 絵文字ピッカー */}
             <EmojiPicker
@@ -767,6 +751,7 @@ export function ChatMessageInterface({
               projectId={roomId?.replace('project_', '')}
             />
             
+            {/* ファイル添付ボタン */}
             <input
               type="file"
               ref={fileInputRef}
@@ -789,24 +774,45 @@ export function ChatMessageInterface({
             >
               <Paperclip className="w-4 h-4" />
             </Button>
-            <Button
-              type="button"
-              onClick={(e) => {
-                e.preventDefault()
-                if (newMessage.trim() && !sending) {
-                  sendMessage(e)
-                }
-              }}
-              disabled={!newMessage.trim() || sending}
-              className="px-4"
-            >
-              {sending ? (
-                <Clock className="w-4 h-4 animate-spin" />
-              ) : (
-                <Send className="w-4 h-4" />
-              )}
-            </Button>
           </div>
+          
+          {/* 送信ボタン */}
+          <Button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault()
+              if (newMessage.trim() && !sending) {
+                sendMessage(e)
+              }
+            }}
+            disabled={!newMessage.trim() || sending}
+            className="px-4"
+          >
+            {sending ? (
+              <Clock className="w-4 h-4 animate-spin" />
+            ) : (
+              <Send className="w-4 h-4" />
+            )}
+          </Button>
+        </div>
+
+        {/* Message input */}
+        <div className="flex-1">
+          <textarea
+            ref={textareaRef}
+            value={newMessage}
+            onChange={(e) => setNewMessage(e.target.value)}
+            placeholder="メッセージを入力... (Shift + Enterキーで改行)"
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-engineering-blue focus:border-transparent min-h-[60px]"
+            rows={3}
+            onKeyDown={(e) => {
+              // Enterキーでの送信を無効化（Shift+Enterで改行のみ可能）
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                // 送信はしない
+              }
+            }}
+          />
         </div>
       </div>
 

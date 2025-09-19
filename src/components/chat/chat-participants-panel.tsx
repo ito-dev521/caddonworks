@@ -25,10 +25,9 @@ interface Participant {
   id: string
   email: string
   display_name?: string
-  role: 'client' | 'contractor'
-  org_role?: string
+  role: string
   joined_at: string
-  is_active: boolean
+  is_basic?: boolean
 }
 
 interface InviteResult {
@@ -61,11 +60,14 @@ export function ChatParticipantsPanel({
   const [inviteResults, setInviteResults] = useState<InviteResult[]>([])
   const [showInviteForm, setShowInviteForm] = useState(false)
   const [canInvite, setCanInvite] = useState(false)
+  const [organizationUsers, setOrganizationUsers] = useState<any[]>([])
+  const [selectedUsers, setSelectedUsers] = useState<string[]>([])
 
   useEffect(() => {
     if (isVisible && roomId) {
       fetchParticipants()
       checkInvitePermission()
+      fetchOrganizationUsers()
     }
   }, [isVisible, roomId])
 
@@ -89,7 +91,13 @@ export function ChatParticipantsPanel({
       if (response.ok) {
         setParticipants(result.participants)
       } else {
-        console.error('参加者取得エラー:', result.message)
+        console.error('参加者取得エラー:', {
+          status: response.status,
+          message: result.message,
+          debug: result.debug,
+          roomId: roomId,
+          projectId: projectId
+        })
         setParticipants([])
       }
     } catch (error) {
@@ -140,8 +148,32 @@ export function ChatParticipantsPanel({
     }
   }
 
+  const fetchOrganizationUsers = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
+      const response = await fetch('/api/settings/users', {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`
+        }
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        // 既に参加しているユーザー（基本参加者+招待済み）を除外
+        const availableUsers = (data.users || []).filter((user: any) => 
+          !participants.some(p => p.email === user.email)
+        )
+        setOrganizationUsers(availableUsers)
+      }
+    } catch (error) {
+      console.error('組織ユーザー取得エラー:', error)
+    }
+  }
+
   const handleInviteUsers = async () => {
-    if (!inviteEmails.trim()) return
+    if (selectedUsers.length === 0) return
 
     setInviting(true)
     setInviteResults([])
@@ -153,10 +185,8 @@ export function ChatParticipantsPanel({
         return
       }
 
-      const emails = inviteEmails
-        .split(/[,\n]/)
-        .map(email => email.trim())
-        .filter(email => email)
+      // 選択されたユーザーのメールアドレスを取得
+      const emails = selectedUsers
 
       const response = await fetch('/api/chat/participants/invite', {
         method: 'POST',
@@ -174,8 +204,9 @@ export function ChatParticipantsPanel({
 
       if (response.ok) {
         setInviteResults(result.results)
-        setInviteEmails("")
+        setSelectedUsers([])
         fetchParticipants() // 参加者リストを更新
+        fetchOrganizationUsers() // 利用可能ユーザーリストを更新
       } else {
         console.error('招待エラー:', result.message)
         setInviteResults([{
@@ -196,28 +227,28 @@ export function ChatParticipantsPanel({
     }
   }
 
-  const getRoleIcon = (role: string, orgRole?: string) => {
-    if (role === 'contractor') {
+  const getRoleIcon = (role: string) => {
+    if (role === 'Contractor') {
       return <User className="w-4 h-4 text-blue-600" />
     }
 
-    if (orgRole === 'OrgAdmin') {
+    if (role === 'OrgAdmin') {
       return <Crown className="w-4 h-4 text-yellow-600" />
-    } else if (orgRole === 'Staff') {
+    } else if (role === 'Staff') {
       return <Shield className="w-4 h-4 text-green-600" />
     }
 
     return <User className="w-4 h-4 text-gray-600" />
   }
 
-  const getRoleLabel = (role: string, orgRole?: string) => {
-    if (role === 'contractor') {
+  const getRoleLabel = (role: string) => {
+    if (role === 'Contractor') {
       return '受注者'
     }
 
-    if (orgRole === 'OrgAdmin') {
+    if (role === 'OrgAdmin') {
       return '組織管理者'
-    } else if (orgRole === 'Staff') {
+    } else if (role === 'Staff') {
       return 'スタッフ'
     }
 
@@ -288,21 +319,54 @@ export function ChatParticipantsPanel({
                       className="space-y-3"
                     >
                       <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">
-                          メールアドレス（複数の場合は改行またはカンマで区切り）
+                        <label className="block text-xs font-medium text-gray-700 mb-2">
+                          招待するユーザーを選択
                         </label>
-                        <textarea
-                          value={inviteEmails}
-                          onChange={(e) => setInviteEmails(e.target.value)}
-                          placeholder="user@example.com"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
-                          rows={3}
-                        />
+                        <div className="space-y-2 max-h-40 overflow-y-auto border border-gray-300 rounded-lg p-2">
+                          {organizationUsers.length === 0 ? (
+                            <p className="text-sm text-gray-500 text-center py-4">
+                              招待可能なユーザーがいません
+                            </p>
+                          ) : (
+                            organizationUsers.map((user) => (
+                              <label
+                                key={user.id}
+                                className="flex items-center space-x-2 p-2 hover:bg-gray-50 rounded cursor-pointer"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={selectedUsers.includes(user.email)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setSelectedUsers([...selectedUsers, user.email])
+                                    } else {
+                                      setSelectedUsers(selectedUsers.filter(email => email !== user.email))
+                                    }
+                                  }}
+                                  className="rounded border-gray-300 text-engineering-blue focus:ring-engineering-blue"
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-gray-900 truncate">
+                                    {user.display_name}
+                                  </p>
+                                  <p className="text-xs text-gray-500 truncate">
+                                    {user.email}
+                                  </p>
+                                </div>
+                              </label>
+                            ))
+                          )}
+                        </div>
+                        {selectedUsers.length > 0 && (
+                          <p className="text-xs text-gray-600 mt-1">
+                            {selectedUsers.length}名のユーザーを選択中
+                          </p>
+                        )}
                       </div>
                       <div className="flex gap-2">
                         <Button
                           onClick={handleInviteUsers}
-                          disabled={!inviteEmails.trim() || inviting}
+                          disabled={selectedUsers.length === 0 || inviting}
                           size="sm"
                           className="flex-1"
                         >
@@ -313,7 +377,7 @@ export function ChatParticipantsPanel({
                           size="sm"
                           onClick={() => {
                             setShowInviteForm(false)
-                            setInviteEmails("")
+                            setSelectedUsers([])
                             setInviteResults([])
                           }}
                         >
@@ -358,41 +422,95 @@ export function ChatParticipantsPanel({
 
             {/* Participants List */}
             <div className="space-y-3">
-              <h4 className="text-sm font-medium text-gray-700">現在の参加者</h4>
-              <div className="space-y-2">
-                {participants.map((participant) => (
-                  <motion.div
-                    key={participant.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg"
-                  >
-                    {/* Avatar */}
-                    <div className="w-8 h-8 rounded-full bg-engineering-blue flex items-center justify-center text-white text-sm font-medium flex-shrink-0">
-                      {participant.display_name?.charAt(0) || participant.email.charAt(0)}
-                    </div>
-
-                    {/* Info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium text-gray-900 truncate">
-                          {participant.display_name || '名前未設定'}
-                        </p>
-                        {getRoleIcon(participant.role, participant.org_role)}
-                      </div>
-                      <p className="text-xs text-gray-500 truncate">
-                        {participant.email}
-                      </p>
-                      <Badge
-                        variant="secondary"
-                        className="mt-1 text-xs"
+              {/* 基本参加者 */}
+              {participants.filter(p => p.is_basic).length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium text-gray-700 mb-2">プロジェクト関係者</h4>
+                  <div className="space-y-2">
+                    {participants.filter(p => p.is_basic).map((participant) => (
+                      <motion.div
+                        key={participant.id}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg border border-blue-200"
                       >
-                        {getRoleLabel(participant.role, participant.org_role)}
-                      </Badge>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
+                        {/* Avatar */}
+                        <div className="w-8 h-8 rounded-full bg-engineering-blue flex items-center justify-center text-white text-sm font-medium flex-shrink-0">
+                          {participant.display_name?.charAt(0) || participant.email.charAt(0)}
+                        </div>
+
+                        {/* Info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-medium text-gray-900 truncate">
+                              {participant.display_name || '名前未設定'}
+                            </p>
+                            {getRoleIcon(participant.role)}
+                          </div>
+                          <p className="text-xs text-gray-500 truncate">
+                            {participant.email}
+                          </p>
+                          <Badge
+                            variant="secondary"
+                            className="mt-1 text-xs"
+                          >
+                            {getRoleLabel(participant.role)}
+                          </Badge>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 招待参加者 */}
+              {participants.filter(p => !p.is_basic).length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium text-gray-700 mb-2">招待参加者</h4>
+                  <div className="space-y-2">
+                    {participants.filter(p => !p.is_basic).map((participant) => (
+                      <motion.div
+                        key={participant.id}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg"
+                      >
+                        {/* Avatar */}
+                        <div className="w-8 h-8 rounded-full bg-gray-500 flex items-center justify-center text-white text-sm font-medium flex-shrink-0">
+                          {participant.display_name?.charAt(0) || participant.email.charAt(0)}
+                        </div>
+
+                        {/* Info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-medium text-gray-900 truncate">
+                              {participant.display_name || '名前未設定'}
+                            </p>
+                            {getRoleIcon(participant.role)}
+                          </div>
+                          <p className="text-xs text-gray-500 truncate">
+                            {participant.email}
+                          </p>
+                          <Badge
+                            variant="secondary"
+                            className="mt-1 text-xs"
+                          >
+                            {getRoleLabel(participant.role)}
+                          </Badge>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 参加者がいない場合 */}
+              {participants.length === 0 && (
+                <div className="text-center py-8">
+                  <Users className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-sm text-gray-500">参加者がいません</p>
+                </div>
+              )}
             </div>
           </div>
         )}

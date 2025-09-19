@@ -133,6 +133,7 @@ export async function POST(request: NextRequest) {
       assignee_name: assignee_name || null,
       org_id: company.id,
       approver_id: approver_id || null,
+      created_by: userProfile.id, // プロジェクト作成者を記録
       status: approvalRequired ? 'pending_approval' : 'bidding' // 承認が必要な場合は承認待ち
     }
 

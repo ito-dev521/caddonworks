@@ -67,7 +67,11 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({ onEmojiSelect, classNa
               initial={{ opacity: 0, scale: 0.95, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className="absolute bottom-full right-0 mb-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-50"
+              className="absolute bottom-full left-0 mb-2 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50"
+              style={{ 
+                transform: 'translateX(50px)',
+                maxWidth: 'calc(100vw - 100px)'
+              }}
               onKeyDown={handleKeyDown}
             >
               {/* カテゴリタブ */}

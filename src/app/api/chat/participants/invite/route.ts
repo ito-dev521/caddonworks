@@ -120,6 +120,42 @@ export async function POST(request: NextRequest) {
         )
       }
       chatRoom = newRoom
+
+      // チャットルーム作成者を自動的に参加者として追加
+      const { error: creatorParticipantError } = await supabaseAdmin
+        .from('chat_participants')
+        .insert({
+          room_id: chatRoom.id,
+          user_id: userProfile.id,
+          role: 'owner'
+        })
+
+      if (creatorParticipantError) {
+        console.error('作成者の参加者追加エラー:', creatorParticipantError)
+      }
+    } else {
+      // 既存のチャットルームの場合、現在のユーザーが参加者として登録されているかチェック
+      const { data: currentUserParticipant } = await supabaseAdmin
+        .from('chat_participants')
+        .select('id')
+        .eq('room_id', chatRoom.id)
+        .eq('user_id', userProfile.id)
+        .single()
+
+      if (!currentUserParticipant) {
+        // 現在のユーザーを参加者として追加
+        const { error: userParticipantError } = await supabaseAdmin
+          .from('chat_participants')
+          .insert({
+            room_id: chatRoom.id,
+            user_id: userProfile.id,
+            role: 'owner'
+          })
+
+        if (userParticipantError) {
+          console.error('現在ユーザーの参加者追加エラー:', userParticipantError)
+        }
+      }
     }
 
     // 招待するユーザーを検索
