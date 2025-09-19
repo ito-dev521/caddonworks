@@ -21,7 +21,8 @@ import {
   Clock,
   CheckCircle,
   PlayCircle,
-  StopCircle
+  StopCircle,
+  Settings
 } from "lucide-react"
 import { Navigation } from "@/components/layouts/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -100,6 +101,21 @@ function ProjectsPageContent() {
   const [favoriteMembers, setFavoriteMembers] = useState<any[]>([])
   const [selectedFavoriteMembers, setSelectedFavoriteMembers] = useState<string[]>([])
   const [showFavoriteMembersModal, setShowFavoriteMembersModal] = useState(false)
+  const [showReopenModal, setShowReopenModal] = useState<string | null>(null)
+  const [reopenProject, setReopenProject] = useState<ProjectData | null>(null)
+  const [reopenData, setReopenData] = useState({
+    new_bidding_deadline: '',
+    new_budget: '',
+    new_start_date: '',
+    new_end_date: '',
+    new_required_contractors: 1,
+    new_required_level: 'beginner' as MemberLevel
+  })
+  const [isReopening, setIsReopening] = useState(false)
+  const [showSuspendModal, setShowSuspendModal] = useState<string | null>(null)
+  const [suspendReason, setSuspendReason] = useState('')
+  const [isSuspending, setIsSuspending] = useState(false)
+  const [showProjectActionsModal, setShowProjectActionsModal] = useState<string | null>(null)
   const lastFetchKeyRef = useRef<string | null>(null)
 
   // 予算のフォーマット処理
@@ -207,7 +223,7 @@ function ProjectsPageContent() {
     if (selectedTab === 'active') {
       filtered = filtered.filter(p => p.status === 'in_progress' || p.status === 'bidding')
     } else if (selectedTab === 'completed') {
-      filtered = filtered.filter(p => p.status === 'completed' || p.status === 'cancelled')
+      filtered = filtered.filter(p => p.status === 'completed' || p.status === 'suspended')
     }
 
     // 検索フィルタ
@@ -486,7 +502,13 @@ function ProjectsPageContent() {
       'bidding': '入札受付中',
       'in_progress': '進行中',
       'completed': '完了',
-      'cancelled': 'キャンセル'
+      'suspended': '中止'
+    }
+
+    // 中止の場合は理由入力モーダルを開く
+    if (newStatus === 'suspended') {
+      openSuspendModal(projectId)
+      return
     }
 
     if (!confirm(`この案件のステータスを「${statusLabels[newStatus]}」に変更してもよろしいですか？`)) return
@@ -710,6 +732,154 @@ function ProjectsPageContent() {
     loadAttachments(projectId)
   }
 
+  // 期限切れ案件の再登録機能
+  const openReopenModal = (projectId: string) => {
+    const project = projects.find(p => p.id === projectId)
+    if (project) {
+      setReopenProject(project)
+      setReopenData({
+        new_bidding_deadline: '',
+        new_budget: project.budget?.toString() || '',
+        new_start_date: project.start_date,
+        new_end_date: project.end_date,
+        new_required_contractors: project.required_contractors || 1,
+        new_required_level: project.required_level || 'beginner'
+      })
+      setShowReopenModal(projectId)
+    }
+  }
+
+  const handleReopenProject = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!reopenProject) return
+
+    setIsReopening(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        alert('ログインが必要です')
+        return
+      }
+
+      const response = await fetch(`/api/projects/${reopenProject.id}/reopen`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          new_bidding_deadline: reopenData.new_bidding_deadline,
+          new_budget: parseBudget(reopenData.new_budget),
+          new_start_date: reopenData.new_start_date,
+          new_end_date: reopenData.new_end_date,
+          new_required_contractors: reopenData.new_required_contractors,
+          new_required_level: reopenData.new_required_level
+        })
+      })
+
+      // レスポンスのContent-Typeをチェック
+      const contentType = response.headers.get('content-type')
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text()
+        console.error('APIレスポンスがJSONではありません:', text)
+        alert('サーバーエラーが発生しました。APIが正しく応答していません。')
+        return
+      }
+
+      const result = await response.json()
+
+      if (response.ok) {
+        alert('案件を再登録しました。新しい入札を受け付けることができます。')
+        setShowReopenModal(null)
+        setReopenProject(null)
+        await fetchProjects()
+      } else {
+        alert('案件の再登録に失敗しました: ' + result.message)
+      }
+    } catch (error) {
+      console.error('案件再登録エラー:', error)
+      alert('ネットワークエラーが発生しました')
+    } finally {
+      setIsReopening(false)
+    }
+  }
+
+  // 案件中止機能
+  const openSuspendModal = (projectId: string) => {
+    setShowSuspendModal(projectId)
+    setSuspendReason('')
+  }
+
+  const handleSuspendProject = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!showSuspendModal || !suspendReason.trim()) {
+      alert('中止理由を入力してください')
+      return
+    }
+
+    setIsSuspending(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        alert('ログインが必要です')
+        return
+      }
+
+      const response = await fetch(`/api/projects/${showSuspendModal}/suspend`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          reason: suspendReason
+        })
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        alert('案件を中止しました。関係者に通知が送信されます。')
+        setShowSuspendModal(null)
+        setSuspendReason('')
+        await fetchProjects()
+      } else {
+        alert('案件の中止に失敗しました: ' + result.message)
+      }
+    } catch (error) {
+      console.error('案件中止エラー:', error)
+      alert('ネットワークエラーが発生しました')
+    } finally {
+      setIsSuspending(false)
+    }
+  }
+
+  // プロジェクトアクションモーダル
+  const openProjectActionsModal = (projectId: string) => {
+    setShowProjectActionsModal(projectId)
+  }
+
+  const handleProjectAction = async (action: string, projectId: string) => {
+    setShowProjectActionsModal(null)
+    
+    switch (action) {
+      case 'start':
+        await updateProjectStatus(projectId, 'in_progress')
+        break
+      case 'complete':
+        await updateProjectStatus(projectId, 'completed')
+        break
+      case 'suspend':
+        openSuspendModal(projectId)
+        break
+      case 'delete':
+        await deleteProject(projectId)
+        break
+      default:
+        break
+    }
+  }
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'bidding':
@@ -718,7 +888,7 @@ function ProjectsPageContent() {
         return 'text-green-600 bg-green-100'
       case 'completed':
         return 'text-gray-600 bg-gray-100'
-      case 'cancelled':
+      case 'suspended':
         return 'text-red-600 bg-red-100'
       default:
         return 'text-gray-600 bg-gray-100'
@@ -733,8 +903,8 @@ function ProjectsPageContent() {
         return '進行中'
       case 'completed':
         return '完了'
-      case 'cancelled':
-        return 'キャンセル'
+      case 'suspended':
+        return '中止'
       default:
         return status
     }
@@ -845,7 +1015,7 @@ function ProjectsPageContent() {
               <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg">
                 {[
                   { id: 'active', label: '進行中', count: projects.filter(p => p.status === 'in_progress' || p.status === 'bidding').length },
-                  { id: 'completed', label: '完了済み', count: projects.filter(p => p.status === 'completed' || p.status === 'cancelled').length },
+                  { id: 'completed', label: '完了済み', count: projects.filter(p => p.status === 'completed' || p.status === 'suspended').length },
                   { id: 'all', label: 'すべて', count: projects.length }
                 ].map((tab) => (
                   <button
@@ -902,7 +1072,7 @@ function ProjectsPageContent() {
                       : project.days_until_deadline !== null && project.days_until_deadline !== undefined && project.days_until_deadline <= 3 
                         ? 'border-orange-200 bg-orange-50/50' 
                         : ''
-                  }`}>
+                  }`} onClick={() => openProjectActionsModal(project.id)}>
                     <CardHeader className="pb-3">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
@@ -1050,71 +1220,60 @@ function ProjectsPageContent() {
                           <Button 
                             variant="outline" 
                             size="sm"
-                            onClick={() => openProjectDetail(project.id)}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              openProjectDetail(project.id)
+                            }}
                           >
                             <Eye className="w-4 h-4" />
                           </Button>
                           <Button 
                             variant="outline" 
                             size="sm"
-                            onClick={() => editProject(project.id)}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              editProject(project.id)
+                            }}
                           >
                             <Edit className="w-4 h-4" />
-                          </Button>
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => deleteProject(project.id)}
-                            className="text-red-600 hover:text-red-700"
-                          >
-                            <Trash2 className="w-4 h-4" />
                           </Button>
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => openAttachmentsModal(project.id)}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              openAttachmentsModal(project.id)
+                            }}
                           >
                             <Paperclip className="w-4 h-4" />
                           </Button>
-                          {/* ステータス変更ボタン */}
-                          {project.status === 'bidding' && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => updateProjectStatus(project.id, 'in_progress')}
-                              className="text-blue-600 hover:text-blue-700"
-                            >
-                              <PlayCircle className="w-4 h-4" />
-                            </Button>
-                          )}
-                          {project.status === 'in_progress' && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => updateProjectStatus(project.id, 'completed')}
-                              className="text-green-600 hover:text-green-700"
-                            >
-                              <CheckCircle className="w-4 h-4" />
-                            </Button>
-                          )}
-                          {(project.status === 'bidding' || project.status === 'in_progress') && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => updateProjectStatus(project.id, 'cancelled')}
-                              className="text-red-600 hover:text-red-700"
-                            >
-                              <StopCircle className="w-4 h-4" />
-                            </Button>
-                          )}
-                          {(project.status === 'in_progress' || project.status === 'bidding') && (
+                          {/* チャットボタン - 受注者が割り当てられている場合のみ表示 */}
+                          {project.status === 'in_progress' && (project.contracts && project.contracts.length > 0 || project.contractor_id) && (
                             <Button
                               variant="engineering"
                               size="sm"
-                              onClick={() => openChatModal(project.id)}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                openChatModal(project.id)
+                              }}
                             >
                               <MessageSquare className="w-4 h-4 mr-1" />
                               チャット
+                            </Button>
+                          )}
+                          {/* 期限切れ案件の再登録ボタン */}
+                          {project.is_expired && project.status === 'bidding' && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                openReopenModal(project.id)
+                              }}
+                              className="text-orange-600 border-orange-200 hover:bg-orange-50"
+                            >
+                              <Clock className="w-4 h-4 mr-1" />
+                              再登録
                             </Button>
                           )}
                         </div>
@@ -1991,6 +2150,345 @@ function ProjectsPageContent() {
                   </>
                 )
               })()}
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* 再登録モーダル */}
+        {showReopenModal && reopenProject && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+            >
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Clock className="w-5 h-5 text-orange-600" />
+                    期限切れ案件の再登録
+                  </CardTitle>
+                  <CardDescription>
+                    「{reopenProject.title}」の入札期限と金額を変更して再登録します
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <form onSubmit={handleReopenProject} className="space-y-4">
+                    <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Clock className="w-4 h-4 text-orange-600" />
+                        <span className="text-sm font-medium text-orange-800">現在の情報</span>
+                      </div>
+                      <div className="text-sm text-orange-700 space-y-1">
+                        <p>入札締切: {new Date(reopenProject.bidding_deadline).toLocaleDateString('ja-JP')} (期限切れ)</p>
+                        <p>予算: ¥{reopenProject.budget?.toLocaleString('ja-JP') || '未設定'}</p>
+                        <p>納期: {new Date(reopenProject.end_date).toLocaleDateString('ja-JP')}</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          新しい入札締切日 *
+                        </label>
+                        <input
+                          type="date"
+                          value={reopenData.new_bidding_deadline}
+                          onChange={(e) => setReopenData({ ...reopenData, new_bidding_deadline: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          新しい予算 * (円)
+                        </label>
+                        <input
+                          type="text"
+                          value={reopenData.new_budget}
+                          onChange={(e) => {
+                            const formatted = formatBudget(e.target.value)
+                            setReopenData({ ...reopenData, new_budget: formatted })
+                          }}
+                          placeholder="例: 100,000"
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          新しい開始日 *
+                        </label>
+                        <input
+                          type="date"
+                          value={reopenData.new_start_date}
+                          onChange={(e) => setReopenData({ ...reopenData, new_start_date: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          新しい納期 *
+                        </label>
+                        <input
+                          type="date"
+                          value={reopenData.new_end_date}
+                          onChange={(e) => setReopenData({ ...reopenData, new_end_date: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          募集人数 *
+                        </label>
+                        <select
+                          value={reopenData.new_required_contractors}
+                          onChange={(e) => setReopenData({ ...reopenData, new_required_contractors: Number(e.target.value) })}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                          required
+                        >
+                          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(num => (
+                            <option key={num} value={num}>{num}名</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          必要な会員レベル *
+                        </label>
+                        <select
+                          value={reopenData.new_required_level}
+                          onChange={(e) => setReopenData({ ...reopenData, new_required_level: e.target.value as MemberLevel })}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                          required
+                        >
+                          {Object.values(MEMBER_LEVELS).map(level => (
+                            <option key={level.level} value={level.level}>
+                              {level.label} - {level.description}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Clock className="w-4 h-4 text-yellow-600" />
+                        <span className="text-sm font-medium text-yellow-800">注意事項</span>
+                      </div>
+                      <ul className="text-sm text-yellow-700 space-y-1">
+                        <li>• 再登録後、既存の入札データと契約データは削除されます</li>
+                        <li>• 案件は「入札受付中」の状態に戻ります</li>
+                        <li>• 新しい入札締切日は今日以降の日付を設定してください</li>
+                      </ul>
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-4">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setShowReopenModal(null)}
+                        disabled={isReopening}
+                      >
+                        キャンセル
+                      </Button>
+                      <Button 
+                        type="submit" 
+                        variant="outline"
+                        className="bg-orange-600 text-white border-orange-600 hover:bg-orange-700"
+                        disabled={isReopening}
+                      >
+                        {isReopening ? '再登録中...' : '案件を再登録'}
+                      </Button>
+                    </div>
+                  </form>
+                </CardContent>
+              </Card>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* 中止理由入力モーダル */}
+        {showSuspendModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-lg w-full max-w-md"
+            >
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <StopCircle className="w-5 h-5 text-red-600" />
+                    案件の中止
+                  </CardTitle>
+                  <CardDescription>
+                    案件を中止する理由を入力してください
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <form onSubmit={handleSuspendProject} className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        中止理由 *
+                      </label>
+                      <textarea
+                        value={suspendReason}
+                        onChange={(e) => setSuspendReason(e.target.value)}
+                        rows={4}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                        placeholder="例: 予算の都合により案件を中止します"
+                        required
+                      />
+                    </div>
+
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <StopCircle className="w-4 h-4 text-red-600" />
+                        <span className="text-sm font-medium text-red-800">注意事項</span>
+                      </div>
+                      <ul className="text-sm text-red-700 space-y-1">
+                        <li>• 案件を中止すると、入札者と受注者に通知が送信されます</li>
+                        <li>• 中止された案件は「完了済み」タブに表示されます</li>
+                        <li>• この操作は取り消すことができません</li>
+                      </ul>
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-4">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setShowSuspendModal(null)}
+                        disabled={isSuspending}
+                      >
+                        キャンセル
+                      </Button>
+                      <Button 
+                        type="submit" 
+                        variant="outline"
+                        className="bg-red-600 text-white border-red-600 hover:bg-red-700"
+                        disabled={isSuspending}
+                      >
+                        {isSuspending ? '中止中...' : '案件を中止'}
+                      </Button>
+                    </div>
+                  </form>
+                </CardContent>
+              </Card>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* プロジェクトアクションモーダル */}
+        {showProjectActionsModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-lg w-full max-w-md"
+            >
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Settings className="w-5 h-5 text-engineering-blue" />
+                    案件の操作
+                  </CardTitle>
+                  <CardDescription>
+                    案件に対して実行したい操作を選択してください
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {(() => {
+                      const project = projects.find(p => p.id === showProjectActionsModal)
+                      if (!project) return null
+
+                      return (
+                        <>
+                          {/* ステータス変更オプション */}
+                          {project.status === 'bidding' && (
+                            <Button
+                              variant="outline"
+                              className="w-full justify-start text-blue-600 border-blue-200 hover:bg-blue-50"
+                              onClick={() => handleProjectAction('start', project.id)}
+                            >
+                              <PlayCircle className="w-4 h-4 mr-2" />
+                              案件を開始する
+                            </Button>
+                          )}
+                          
+                          {project.status === 'in_progress' && (
+                            <Button
+                              variant="outline"
+                              className="w-full justify-start text-green-600 border-green-200 hover:bg-green-50"
+                              onClick={() => handleProjectAction('complete', project.id)}
+                            >
+                              <CheckCircle className="w-4 h-4 mr-2" />
+                              案件を完了する
+                            </Button>
+                          )}
+
+                          {(project.status === 'bidding' || project.status === 'in_progress') && (
+                            <Button
+                              variant="outline"
+                              className="w-full justify-start text-red-600 border-red-200 hover:bg-red-50"
+                              onClick={() => handleProjectAction('suspend', project.id)}
+                            >
+                              <StopCircle className="w-4 h-4 mr-2" />
+                              案件を中止する
+                            </Button>
+                          )}
+
+                          {/* 案件削除オプション */}
+                          <Button
+                            variant="outline"
+                            className="w-full justify-start text-red-600 border-red-200 hover:bg-red-50"
+                            onClick={() => handleProjectAction('delete', project.id)}
+                          >
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            案件を削除する
+                          </Button>
+                        </>
+                      )
+                    })()}
+                  </div>
+
+                  <div className="flex justify-end pt-4">
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowProjectActionsModal(null)}
+                    >
+                      キャンセル
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
             </motion.div>
           </motion.div>
         )}

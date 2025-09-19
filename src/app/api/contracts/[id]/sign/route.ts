@@ -95,13 +95,12 @@ export async function POST(
       )
     }
 
-    // 契約に署名
+    // 契約に署名（受注者側）
     const { data: updatedContract, error: updateError } = await supabaseAdmin
       .from('contracts')
       .update({
-        status: 'signed',
-        contractor_signed_at: new Date().toISOString(),
-        signed_at: new Date().toISOString()
+        status: 'pending_org', // 発注者側の署名待ちに変更
+        contractor_signed_at: new Date().toISOString()
       })
       .eq('id', contractId)
       .select()
@@ -115,11 +114,10 @@ export async function POST(
       )
     }
 
-    // 案件のステータスとcontractor_idを更新
+    // 案件のcontractor_idを更新（ステータスは発注者署名後に更新）
     await supabaseAdmin
       .from('projects')
       .update({ 
-        status: 'in_progress',
         contractor_id: userProfile.id
       })
       .eq('id', contract.project_id)

@@ -84,14 +84,25 @@ export async function GET(request: NextRequest) {
       .eq('user_id', userProfile.id)
       .single()
 
-    // ユーザーがアクセス可能な署名済み契約のプロジェクトをフィルタリング
+    // 複数受注者対応：プロジェクト参加者としてのアクセス権限をチェック
+    const { data: projectParticipants } = await supabaseAdmin
+      .from('project_participants')
+      .select('project_id, role, status')
+      .eq('user_id', userProfile.id)
+      .eq('status', 'active')
+
+    const userParticipantProjectIds = projectParticipants?.map(pp => pp.project_id) || []
+
+    // ユーザーがアクセス可能な契約のプロジェクトをフィルタリング
     const accessibleProjects = contracts?.filter(contract => {
       const project = contract.projects as any
       return project && (
         membership?.org_id === project.org_id || 
-        project.contractor_id === userProfile.id
+        project.contractor_id === userProfile.id ||
+        userParticipantProjectIds.includes(project.id)
       )
     }).map(contract => contract.projects as any) || []
+
 
     // プロジェクトIDで重複を除去（同じプロジェクトの複数契約を統合）
     const uniqueProjects = accessibleProjects.reduce((acc, project) => {
@@ -123,8 +134,14 @@ export async function GET(request: NextRequest) {
         // 未読メッセージ数を計算
         const unreadCount = 0 // TODO: 実装
 
-        // プロジェクトの参加者数を計算（発注者 + 受注者）
-        const participantCount = 2 // 基本的に発注者と受注者
+        // プロジェクトの参加者数を計算（複数受注者対応）
+        const { data: projectParticipants } = await supabaseAdmin
+          .from('project_participants')
+          .select('id')
+          .eq('project_id', project.id)
+          .eq('status', 'active')
+        
+        const participantCount = (projectParticipants?.length || 0) + 1 // 参加者 + 発注者組織
 
         return {
           id: `project_${project.id}`,

@@ -582,8 +582,8 @@ function JobsPageContent() {
                   className="px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
                 >
                   <option value="">すべてのカテゴリ</option>
-                  {getCategoryOptions().map(category => (
-                    <option key={category} value={category}>{category}</option>
+                  {getCategoryOptions().map((category, index) => (
+                    <option key={`${category}-${index}`} value={category}>{category}</option>
                   ))}
                 </select>
                 <Button variant="outline">
@@ -596,10 +596,10 @@ function JobsPageContent() {
 
           {/* 案件カード一覧 */}
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-            <AnimatePresence>
+            <AnimatePresence mode="wait">
               {filteredJobs.map((job, index) => (
                 <motion.div
-                  key={job.id}
+                  key={`${job.id}-${selectedTab}-${index}`}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -20 }}
@@ -755,17 +755,32 @@ function JobsPageContent() {
                             <Eye className="w-4 h-4" />
                           </Button>
                           {job.status === 'bidding' && (
-                            <Button
-                              variant="engineering"
-                              size="sm"
-                              onClick={() => openBidModal(job.id)}
-                              disabled={!job.can_bid}
-                              className={!job.can_bid ? 'opacity-50 cursor-not-allowed' : ''}
-                              title={job.is_full ? '募集人数に達しました' : '入札する'}
-                            >
-                              <Hand className="w-4 h-4 mr-1" />
-                              {job.is_full ? '募集終了' : '入札'}
-                            </Button>
+                            <>
+                              {job.is_declined ? (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  disabled
+                                  className="opacity-50 cursor-not-allowed text-red-600 border-red-200"
+                                  title="この案件で過去に契約を辞退しているため、再度入札することはできません"
+                                >
+                                  <X className="w-4 h-4 mr-1" />
+                                  辞退済み
+                                </Button>
+                              ) : (
+                                <Button
+                                  variant="engineering"
+                                  size="sm"
+                                  onClick={() => openBidModal(job.id)}
+                                  disabled={!job.can_bid}
+                                  className={!job.can_bid ? 'opacity-50 cursor-not-allowed' : ''}
+                                  title={job.is_full ? '募集人数に達しました' : '入札する'}
+                                >
+                                  <Hand className="w-4 h-4 mr-1" />
+                                  {job.is_full ? '募集終了' : '入札'}
+                                </Button>
+                              )}
+                            </>
                           )}
                           {job.status !== 'bidding' && (
                             <Badge variant="secondary" className="bg-green-100 text-green-800">
@@ -776,14 +791,23 @@ function JobsPageContent() {
                       </div>
 
                       {/* アドバイス表示 */}
-                      {job.advice && (
+                      {job.is_declined ? (
+                        <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                          <div className="flex items-start gap-2">
+                            <X className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+                            <p className="text-sm text-red-800">
+                              この案件で過去に契約を辞退しているため、再度入札することはできません。
+                            </p>
+                          </div>
+                        </div>
+                      ) : job.advice ? (
                         <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                           <div className="flex items-start gap-2">
                             <AlertCircle className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
                             <p className="text-sm text-blue-800">{job.advice}</p>
                           </div>
                         </div>
-                      )}
+                      ) : null}
                     </CardContent>
                   </Card>
                 </motion.div>
@@ -851,6 +875,19 @@ function JobsPageContent() {
           {/* 募集状況表示 */}
           {(() => {
             const job = jobs.find(j => j.id === showBidModal)
+            if (job && job.is_declined) {
+              return (
+                <div className="bg-red-50 p-4 rounded-lg border border-red-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <X className="w-5 h-5 text-red-600" />
+                    <span className="font-medium text-red-900">入札不可</span>
+                  </div>
+                  <div className="text-sm text-red-700">
+                    この案件で過去に契約を辞退しているため、再度入札することはできません。
+                  </div>
+                </div>
+              )
+            }
             if (job && job.is_full) {
               return (
                 <div className="bg-red-50 p-4 rounded-lg border border-red-200">
@@ -962,11 +999,12 @@ function JobsPageContent() {
                         variant="engineering"
                         disabled={isSubmittingBid || (() => {
                           const job = jobs.find(j => j.id === showBidModal)
-                          return job ? !job.can_bid : false
+                          return job ? (!job.can_bid || job.is_declined) : false
                         })()}
                       >
                         {(() => {
                           const job = jobs.find(j => j.id === showBidModal)
+                          if (job && job.is_declined) return '入札不可'
                           if (job && !job.can_bid) return '募集終了'
                           if (isSubmittingBid) return '送信中...'
                           return '入札を送信'
@@ -1123,8 +1161,8 @@ function JobsPageContent() {
                             </div>
                           ) : attachments.length > 0 ? (
                             <div className="space-y-2">
-                              {attachments.map((attachment) => (
-                                <div key={attachment.id} className="bg-gray-50 p-3 rounded-lg border">
+                              {attachments.map((attachment, index) => (
+                                <div key={`${attachment.id}-${index}`} className="bg-gray-50 p-3 rounded-lg border">
                                   <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-3">
                                       <span className="text-lg">{getFileIcon(attachment.file_type)}</span>

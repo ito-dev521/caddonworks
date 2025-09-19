@@ -118,7 +118,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 既に入札済みかチェック
+    // 既に入札済みかチェック（現在の入札）
     const { data: existingBid, error: bidCheckError } = await supabaseAdmin
       .from('bids')
       .select('id')
@@ -129,6 +129,22 @@ export async function POST(request: NextRequest) {
     if (existingBid) {
       return NextResponse.json(
         { message: '既にこの案件に入札済みです' },
+        { status: 400 }
+      )
+    }
+
+    // 過去にこの案件で契約辞退したことがあるかチェック
+    const { data: declinedContract, error: declinedCheckError } = await supabaseAdmin
+      .from('contracts')
+      .select('id')
+      .eq('project_id', project_id)
+      .eq('contractor_id', userProfile.id)
+      .eq('status', 'declined')
+      .single()
+
+    if (declinedContract) {
+      return NextResponse.json(
+        { message: 'この案件で過去に契約を辞退しているため、再度入札することはできません' },
         { status: 400 }
       )
     }

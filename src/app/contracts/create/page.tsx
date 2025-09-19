@@ -47,6 +47,20 @@ function CreateContractPageContent() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isCreating, setIsCreating] = useState(false)
+  const [adjustedAmount, setAdjustedAmount] = useState<number>(0)
+  const [isAmountAdjusted, setIsAmountAdjusted] = useState(false)
+  const [adjustmentComment, setAdjustmentComment] = useState<string>('')
+
+  // 金額のフォーマット関数
+  const formatAmount = (value: number | string): string => {
+    const numValue = typeof value === 'string' ? parseInt(value.replace(/,/g, '')) || 0 : value
+    return numValue.toLocaleString('ja-JP')
+  }
+
+  // 金額のパース関数
+  const parseAmount = (value: string): number => {
+    return parseInt(value.replace(/,/g, '')) || 0
+  }
 
   // 案件と入札情報を取得
   const fetchProjectAndBid = async () => {
@@ -98,6 +112,8 @@ function CreateContractPageContent() {
       if (bidResponse.ok) {
         const bidResult = await bidResponse.json()
         setBid(bidResult.bid)
+        // 調整金額を入札金額で初期化
+        setAdjustedAmount(bidResult.bid.bid_amount)
       } else {
         const bidError = await bidResponse.json()
         console.error('契約作成ページ: 入札取得エラー', { status: bidResponse.status, error: bidError })
@@ -126,6 +142,12 @@ function CreateContractPageContent() {
       return
     }
 
+    // 金額調整時のコメント必須チェック
+    if (isAmountAdjusted && !adjustmentComment.trim()) {
+      setError('金額を調整した場合は、調整理由・コメントの入力が必須です')
+      return
+    }
+
     try {
       setIsCreating(true)
       const { data: { session }, error: sessionError } = await supabase.auth.getSession()
@@ -145,7 +167,10 @@ function CreateContractPageContent() {
         body: JSON.stringify({
           project_id: project.id,
           bid_id: bid.id,
-          contract_amount: bid.bid_amount,
+          contract_amount: adjustedAmount,
+          original_bid_amount: bid.bid_amount,
+          amount_adjusted: isAmountAdjusted,
+          adjustment_comment: adjustmentComment,
           start_date: project.start_date,
           end_date: project.end_date,
           contractor_id: bid.contractor_id,
@@ -335,8 +360,8 @@ function CreateContractPageContent() {
                   <h3 className="font-semibold text-blue-900 mb-2">契約条件</h3>
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
-                      <span className="text-blue-700">契約金額:</span>
-                      <span className="font-medium text-blue-900">¥{bid.bid_amount.toLocaleString()}</span>
+                      <span className="text-blue-700">入札金額:</span>
+                      <span className="text-blue-900">¥{bid.bid_amount.toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-blue-700">契約期間:</span>
@@ -351,12 +376,114 @@ function CreateContractPageContent() {
                   </div>
                 </div>
 
+                {/* 金額調整セクション - 金額を変更した場合のみ表示 */}
+                {isAmountAdjusted && (
+                  <div className="bg-green-50 p-4 rounded-lg">
+                    <h3 className="font-semibold text-green-900 mb-3">契約金額の調整</h3>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-sm font-medium text-green-700 mb-2">
+                          契約金額 (円)
+                        </label>
+                        <input
+                          type="text"
+                          value={formatAmount(adjustedAmount)}
+                          onChange={(e) => {
+                            const newAmount = parseAmount(e.target.value)
+                            setAdjustedAmount(newAmount)
+                            setIsAmountAdjusted(newAmount !== bid.bid_amount)
+                          }}
+                          className="w-full px-3 py-2 border border-green-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                          placeholder="契約金額を入力（例：100,000）"
+                        />
+                        <p className="mt-1 text-sm text-green-600">
+                          入札金額から {adjustedAmount > bid.bid_amount ? '+' : ''}{formatAmount(adjustedAmount - bid.bid_amount)}円 調整されています
+                        </p>
+                      </div>
+                      
+                      {/* 金額調整時のコメント入力 */}
+                      <div>
+                        <label className="block text-sm font-medium text-green-700 mb-2">
+                          金額調整の理由・コメント <span className="text-red-500">*</span>
+                        </label>
+                        <textarea
+                          value={adjustmentComment}
+                          onChange={(e) => setAdjustmentComment(e.target.value)}
+                          className="w-full px-3 py-2 border border-green-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                          placeholder="金額を調整した理由やコメントを入力してください"
+                          rows={3}
+                          required
+                        />
+                        <p className="mt-1 text-sm text-green-600">
+                          このコメントは受注者に通知されます
+                        </p>
+                      </div>
+                      
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setAdjustedAmount(bid.bid_amount)
+                            setIsAmountAdjusted(false)
+                            setAdjustmentComment('')
+                          }}
+                          className="text-green-700 border-green-300 hover:bg-green-100"
+                        >
+                          入札金額に戻す
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setAdjustedAmount(project.budget)
+                            setIsAmountAdjusted(project.budget !== bid.bid_amount)
+                          }}
+                          className="text-green-700 border-green-300 hover:bg-green-100"
+                        >
+                          予算金額にする
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 金額変更ボタン - 入札金額で同意の場合のみ表示 */}
+                {!isAmountAdjusted && (
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <h3 className="font-semibold text-gray-900 mb-3">契約金額</h3>
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-700">入札金額で契約します</span>
+                        <span className="font-medium text-gray-900">¥{bid.bid_amount.toLocaleString()}</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setAdjustedAmount(project.budget)
+                            setIsAmountAdjusted(project.budget !== bid.bid_amount)
+                          }}
+                          className="text-gray-700 border-gray-300 hover:bg-gray-100"
+                        >
+                          金額を調整する
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="bg-yellow-50 p-4 rounded-lg">
                   <h3 className="font-semibold text-yellow-900 mb-2">注意事項</h3>
                   <ul className="text-sm text-yellow-800 space-y-1">
                     <li>• 契約書を作成すると、受注者に通知が送信されます</li>
                     <li>• 受注者が署名すると契約が有効になります</li>
-                    <li>• 契約金額は入札金額と同じになります</li>
+                    <li>• 契約金額は上記で設定した金額になります</li>
+                    <li>• 金額を調整した場合は、受注者に変更内容が通知されます</li>
                   </ul>
                 </div>
               </div>

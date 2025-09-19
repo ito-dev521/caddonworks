@@ -19,12 +19,17 @@ interface Contract {
   contract_title: string
   contract_content: string
   bid_amount: number
+  original_bid_amount?: number
+  amount_adjusted?: boolean
+  adjustment_comment?: string
   start_date: string
   end_date: string
   status: string
   contractor_signed_at?: string
   org_signed_at?: string
   signed_at?: string
+  decline_reason?: string
+  declined_at?: string
   created_at: string
   project_title?: string
   org_name?: string
@@ -43,6 +48,9 @@ function ContractDetailPageContent() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isSigning, setIsSigning] = useState(false)
+  const [showDeclineModal, setShowDeclineModal] = useState(false)
+  const [declineComment, setDeclineComment] = useState('')
+  const [isDeclining, setIsDeclining] = useState(false)
 
   // 契約情報を取得
   const fetchContract = async () => {
@@ -91,7 +99,7 @@ function ContractDetailPageContent() {
     }
   }, [userProfile, userRole, contractId])
 
-  // 契約に署名
+  // 契約に署名（受注者側）
   const handleSignContract = async () => {
     if (!contract) {
       setError('契約情報が見つかりません')
@@ -121,7 +129,7 @@ function ContractDetailPageContent() {
       if (response.ok) {
         // 契約情報を再取得
         await fetchContract()
-        alert('契約に署名しました')
+        alert('契約に署名しました。発注者の署名待ちです。')
       } else {
         setError(result.message || '署名に失敗しました')
       }
@@ -130,6 +138,100 @@ function ContractDetailPageContent() {
       setError('サーバーエラーが発生しました')
     } finally {
       setIsSigning(false)
+    }
+  }
+
+  // 契約に署名（発注者側）
+  const handleSignContractAsOrg = async () => {
+    if (!contract) {
+      setError('契約情報が見つかりません')
+      return
+    }
+
+    try {
+      setIsSigning(true)
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      
+      if (sessionError || !session) {
+        console.error('セッション取得エラー:', sessionError)
+        setError('認証が必要です')
+        return
+      }
+
+      const response = await fetch(`/api/contracts/${contractId}/sign-org`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        // 契約情報を再取得
+        await fetchContract()
+        alert('契約に署名しました。チャットルームでやりとりを開始できます。')
+      } else {
+        setError(result.message || '署名に失敗しました')
+      }
+    } catch (err: any) {
+      console.error('署名エラー:', err)
+      setError('サーバーエラーが発生しました')
+    } finally {
+      setIsSigning(false)
+    }
+  }
+
+  // 契約を辞退
+  const handleDeclineContract = async () => {
+    if (!contract) {
+      setError('契約情報が見つかりません')
+      return
+    }
+
+    if (!declineComment.trim()) {
+      setError('辞退理由の入力が必須です')
+      return
+    }
+
+    try {
+      setIsDeclining(true)
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      
+      if (sessionError || !session) {
+        console.error('セッション取得エラー:', sessionError)
+        setError('認証が必要です')
+        return
+      }
+
+      const response = await fetch(`/api/contracts/${contractId}/decline`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          comment: declineComment
+        })
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        setShowDeclineModal(false)
+        setDeclineComment('')
+        alert('契約を辞退しました。発注者に通知が送信されます。')
+        // 契約一覧ページにリダイレクト
+        router.push('/contracts')
+      } else {
+        setError(result.message || '辞退に失敗しました')
+      }
+    } catch (err: any) {
+      console.error('辞退エラー:', err)
+      setError('サーバーエラーが発生しました')
+    } finally {
+      setIsDeclining(false)
     }
   }
 
@@ -211,15 +313,43 @@ function ContractDetailPageContent() {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'pending':
-        return <Badge variant="outline" className="bg-yellow-100 text-yellow-800">署名待ち</Badge>
+      case 'pending_contractor':
+        return <Badge variant="outline" className="bg-yellow-100 text-yellow-800">受注者署名待ち</Badge>
+      case 'pending_org':
+        return <Badge variant="outline" className="bg-orange-100 text-orange-800">発注者署名待ち</Badge>
       case 'signed':
         return <Badge variant="default" className="bg-green-100 text-green-800">署名済み</Badge>
       case 'completed':
         return <Badge variant="default" className="bg-blue-100 text-blue-800">完了</Badge>
+      case 'declined':
+        return <Badge variant="destructive" className="bg-red-100 text-red-800">辞退済み</Badge>
       default:
         return <Badge variant="outline">{status}</Badge>
     }
+  }
+
+  // 金額調整が行われたかどうかを判定
+  const isAmountAdjusted = () => {
+    if (!contract) return false
+    
+    // デバッグ情報をコンソールに出力
+    console.log('契約データ:', {
+      amount_adjusted: contract.amount_adjusted,
+      contract_content: contract.contract_content,
+      bid_amount: contract.bid_amount,
+      original_bid_amount: contract.original_bid_amount
+    })
+    
+    // データベースのamount_adjustedフィールドが明示的にtrueの場合
+    if (contract.amount_adjusted === true) {
+      console.log('amount_adjustedフィールドを使用:', contract.amount_adjusted)
+      return true
+    }
+    
+    // フォールバック: 契約内容の文字列検索
+    const hasAdjustmentText = contract.contract_content.includes('入札金額') && contract.contract_content.includes('から調整')
+    console.log('文字列検索結果:', hasAdjustmentText)
+    return hasAdjustmentText
   }
 
   return (
@@ -313,6 +443,12 @@ function ContractDetailPageContent() {
                       <span className="text-blue-700">契約金額:</span>
                       <span className="font-medium text-blue-900">¥{contract.bid_amount.toLocaleString()}</span>
                     </div>
+                    {isAmountAdjusted() && contract.original_bid_amount && (
+                      <div className="flex justify-between">
+                        <span className="text-blue-700">入札金額:</span>
+                        <span className="text-blue-900">¥{contract.original_bid_amount.toLocaleString()}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between">
                       <span className="text-blue-700">契約期間:</span>
                       <span className="text-blue-900">
@@ -321,6 +457,38 @@ function ContractDetailPageContent() {
                     </div>
                   </div>
                 </div>
+
+                {/* 金額調整情報 */}
+                {isAmountAdjusted() && contract.adjustment_comment && (
+                  <div className="bg-orange-50 p-4 rounded-lg">
+                    <h3 className="font-semibold text-orange-900 mb-2">金額調整について</h3>
+                    <div className="text-sm text-orange-800">
+                      <p className="mb-2">
+                        <span className="font-medium">調整理由:</span> {contract.adjustment_comment}
+                      </p>
+                      <p className="text-xs text-orange-600">
+                        この契約は入札金額から調整されています。
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* 辞退情報 */}
+                {contract.status === 'declined' && contract.decline_reason && (
+                  <div className="bg-red-50 p-4 rounded-lg">
+                    <h3 className="font-semibold text-red-900 mb-2">契約辞退について</h3>
+                    <div className="text-sm text-red-800">
+                      <p className="mb-2">
+                        <span className="font-medium">辞退理由:</span> {contract.decline_reason}
+                      </p>
+                      {contract.declined_at && (
+                        <p className="text-xs text-red-600">
+                          辞退日時: {new Date(contract.declined_at).toLocaleString('ja-JP')}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <h3 className="font-semibold text-gray-900 mb-2">契約書内容</h3>
@@ -360,9 +528,65 @@ function ContractDetailPageContent() {
                       <li>• 署名後はチャットルームでやりとりが可能になります</li>
                     </ul>
                   </div>
-                  <div className="flex justify-end">
+                  <div className="flex justify-between">
+                    {/* 金額調整が行われた場合のみ辞退ボタンを表示 */}
+                    {(() => {
+                      const adjusted = isAmountAdjusted()
+                      console.log('辞退ボタン表示判定:', {
+                        isAmountAdjusted: adjusted,
+                        userRole,
+                        contractStatus: contract?.status
+                      })
+                      return adjusted
+                    })() && (
+                      <Button
+                        onClick={() => setShowDeclineModal(true)}
+                        variant="outline"
+                        className="text-red-600 border-red-300 hover:bg-red-50"
+                      >
+                        契約を辞退
+                      </Button>
+                    )}
                     <Button
                       onClick={handleSignContract}
+                      disabled={isSigning}
+                      variant="engineering"
+                      className="min-w-[120px] ml-auto"
+                    >
+                      {isSigning ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                          署名中...
+                        </>
+                      ) : (
+                        <>
+                          <PenTool className="w-4 h-4 mr-2" />
+                          契約に署名
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            )}
+
+            {/* 発注者側の署名ボタン */}
+            {userRole === 'OrgAdmin' && contract.status === 'pending_org' && (
+              <Card className="p-6">
+                <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+                  <PenTool className="w-5 h-5 mr-2" />
+                  発注者署名
+                </h2>
+                <div className="space-y-4">
+                  <div className="bg-blue-50 p-4 rounded-lg">
+                    <h3 className="font-semibold text-blue-900 mb-2">受注者署名済み</h3>
+                    <p className="text-sm text-blue-800">
+                      受注者が契約に署名しました。発注者として署名を完了してください。
+                    </p>
+                  </div>
+                  <div className="flex justify-end">
+                    <Button
+                      onClick={handleSignContractAsOrg}
                       disabled={isSigning}
                       variant="engineering"
                       className="min-w-[120px]"
@@ -375,7 +599,7 @@ function ContractDetailPageContent() {
                       ) : (
                         <>
                           <PenTool className="w-4 h-4 mr-2" />
-                          契約に署名
+                          発注者として署名
                         </>
                       )}
                     </Button>
@@ -398,6 +622,56 @@ function ContractDetailPageContent() {
                   </Button>
                 </div>
               </Card>
+            )}
+
+            {/* 辞退モーダル */}
+            {showDeclineModal && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">契約の辞退</h3>
+                  <p className="text-gray-600 mb-4">
+                    契約を辞退する理由を入力してください。この内容は発注者に通知されます。
+                  </p>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      辞退理由 <span className="text-red-500">*</span>
+                    </label>
+                    <textarea
+                      value={declineComment}
+                      onChange={(e) => setDeclineComment(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                      placeholder="辞退理由を入力してください"
+                      rows={4}
+                      required
+                    />
+                  </div>
+                  <div className="flex justify-end gap-3">
+                    <Button
+                      onClick={() => {
+                        setShowDeclineModal(false)
+                        setDeclineComment('')
+                      }}
+                      variant="outline"
+                    >
+                      キャンセル
+                    </Button>
+                    <Button
+                      onClick={handleDeclineContract}
+                      disabled={isDeclining || !declineComment.trim()}
+                      variant="destructive"
+                    >
+                      {isDeclining ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                          辞退中...
+                        </>
+                      ) : (
+                        '契約を辞退'
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </div>
             )}
           </div>
         </motion.div>

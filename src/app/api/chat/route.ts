@@ -80,8 +80,18 @@ export async function POST(request: NextRequest) {
       .eq('user_id', userProfile.id)
       .single()
 
-    // アクセス権限をチェック（組織のメンバーまたは受注者）
-    const hasAccess = membership?.org_id === project.org_id || project.contractor_id === userProfile.id
+    // 複数受注者対応：プロジェクト参加者としてのアクセス権限をチェック
+    const { data: projectParticipant } = await supabaseAdmin
+      .from('project_participants')
+      .select('id, role, status')
+      .eq('project_id', project_id)
+      .eq('user_id', userProfile.id)
+      .single()
+
+    // アクセス権限をチェック（組織のメンバー、単一受注者、または複数受注者の参加者）
+    const hasAccess = membership?.org_id === project.org_id || 
+                     project.contractor_id === userProfile.id || 
+                     (projectParticipant && projectParticipant.status === 'active')
 
     if (!hasAccess) {
       return NextResponse.json(
@@ -191,8 +201,18 @@ export async function GET(request: NextRequest) {
       .eq('user_id', userProfile.id)
       .single()
 
-    // アクセス権限をチェック（組織のメンバーまたは受注者）
-    const hasAccess = membership?.org_id === project.org_id || project.contractor_id === userProfile.id
+    // 複数受注者対応：プロジェクト参加者としてのアクセス権限をチェック
+    const { data: projectParticipant } = await supabaseAdmin
+      .from('project_participants')
+      .select('id, role, status')
+      .eq('project_id', project_id)
+      .eq('user_id', userProfile.id)
+      .single()
+
+    // アクセス権限をチェック（組織のメンバー、単一受注者、または複数受注者の参加者）
+    const hasAccess = membership?.org_id === project.org_id || 
+                     project.contractor_id === userProfile.id || 
+                     (projectParticipant && projectParticipant.status === 'active')
 
     if (!hasAccess) {
       return NextResponse.json(

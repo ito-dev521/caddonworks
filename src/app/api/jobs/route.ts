@@ -168,6 +168,24 @@ export async function GET(request: NextRequest) {
       status: 'awarded' // 落札案件として明確にステータスを設定
     })).filter(Boolean) || []
     
+    // 4. 現在のユーザーが契約辞退した案件を取得
+    const { data: declinedContracts, error: declinedContractsError } = await supabaseAdmin
+      .from('contracts')
+      .select('project_id')
+      .eq('contractor_id', userProfile.id)
+      .eq('status', 'declined')
+    
+    if (declinedContractsError) {
+      console.error('jobs API: 契約辞退案件取得エラー:', declinedContractsError)
+    }
+    
+    const declinedProjectIds = declinedContracts?.map(c => c.project_id) || []
+    
+    // 契約辞退された案件を落札案件から除外
+    const filteredAwardedJobs = awardedJobs.filter(job => 
+      !declinedProjectIds.includes(job.id)
+    )
+    
     // 3. お気に入り会員が断った案件を取得（優先依頼で辞退された案件）
     const { data: declinedInvitations, error: declinedError } = await supabaseAdmin
       .from('priority_invitations')
@@ -208,14 +226,14 @@ export async function GET(request: NextRequest) {
       return canAccessProject(userLevel as MemberLevel, requiredLevel)
     }) || []
     
-    // 辞退した案件も会員レベルでフィルタリング
-    const filteredDeclinedJobs = declinedJobs?.filter((job: any) => {
-      const requiredLevel = (job.required_level as MemberLevel) || 'beginner'
-      return canAccessProject(userLevel as MemberLevel, requiredLevel)
-    }) || []
+    // 辞退した案件は表示しない（受注者案件一覧から除外）
+    // const filteredDeclinedJobs = declinedJobs?.filter((job: any) => {
+    //   const requiredLevel = (job.required_level as MemberLevel) || 'beginner'
+    //   return canAccessProject(userLevel as MemberLevel, requiredLevel)
+    // }) || []
     
-    // フィルタリングされた入札可能な案件、落札した案件、辞退した案件を結合
-    const jobsData = [...filteredBiddingJobs, ...awardedJobs, ...filteredDeclinedJobs]
+    // フィルタリングされた入札可能な案件と落札した案件のみを結合（辞退した案件は除外）
+    const jobsData = [...filteredBiddingJobs, ...filteredAwardedJobs]
 
 
     // 組織名を取得
@@ -230,31 +248,61 @@ export async function GET(request: NextRequest) {
       return acc
     }, {}) || {}
 
-    // 各案件の入札数を取得
+    // 各案件の入札数を取得（契約辞退された受注者の入札は除外）
     const jobIds = jobsData?.map((job: any) => job.id) || []
-    const { data: bidCountsData } = await supabaseAdmin
-      .from('bids')
-      .select('project_id')
+    
+    // 契約辞退された受注者IDを取得（プロジェクトごと）
+    const { data: declinedContractsForBidCount } = await supabaseAdmin
+      .from('contracts')
+      .select('project_id, contractor_id')
+      .eq('status', 'declined')
       .in('project_id', jobIds)
-      .eq('status', 'submitted')
-
-    // 入札数をカウント
-    const bidCountMap = bidCountsData?.reduce((acc: any, bid: any) => {
-      acc[bid.project_id] = (acc[bid.project_id] || 0) + 1
+    
+    // プロジェクトごとの辞退受注者IDをマップ化
+    const declinedContractorMap = declinedContractsForBidCount?.reduce((acc: any, contract: any) => {
+      if (!acc[contract.project_id]) {
+        acc[contract.project_id] = []
+      }
+      acc[contract.project_id].push(contract.contractor_id)
       return acc
     }, {}) || {}
+    
+    // 各案件の入札数を個別に計算
+    const bidCountMap: { [key: string]: number } = {}
+    
+    for (const jobId of jobIds) {
+      let bidCountsQuery = supabaseAdmin
+        .from('bids')
+        .select('contractor_id')
+        .eq('project_id', jobId)
+        .eq('status', 'submitted')
+      
+      // その案件で辞退した受注者の入札を除外
+      const declinedContractorIds = declinedContractorMap[jobId] || []
+      if (declinedContractorIds.length > 0) {
+        bidCountsQuery = bidCountsQuery.not('contractor_id', 'in', `(${declinedContractorIds.join(',')})`)
+      }
+      
+      const { data: bidCountsData } = await bidCountsQuery
+      bidCountMap[jobId] = bidCountsData?.length || 0
+    }
+
+    // bidCountMapは上記のループで既に計算済み
 
     const formattedJobs = jobsData?.map((job: any) => {
       const currentBidCount = bidCountMap[job.id] || 0
       const isFull = currentBidCount >= (job.required_contractors || 1)
+      
+      // この案件で現在のユーザーが辞退したかどうかをチェック
+      const hasDeclinedContract = declinedContractorMap[job.id]?.includes(userProfile.id) || false
       
       // 期限切れチェック
       const now = new Date()
       const deadline = new Date(job.bidding_deadline)
       const isExpired = deadline < now
       
-      // 辞退案件かチェック
-      const isDeclined = declinedJobs.some((declinedJob: any) => declinedJob.id === job.id)
+      // この案件で現在のユーザーが辞退したかどうかをチェック
+      const isDeclined = hasDeclinedContract
       
       // アドバイス生成
       const advice = generateAdvice(job, currentBidCount, isExpired)

@@ -71,7 +71,17 @@ export async function GET(request: NextRequest) {
       .eq('user_id', userProfile.id)
       .single()
 
-    const hasAccess = membership?.org_id === project.org_id || project.contractor_id === userProfile.id
+    // 複数受注者対応：プロジェクト参加者としてのアクセス権限をチェック
+    const { data: projectParticipant } = await supabaseAdmin
+      .from('project_participants')
+      .select('id, role, status')
+      .eq('project_id', projectId)
+      .eq('user_id', userProfile.id)
+      .single()
+
+    const hasAccess = membership?.org_id === project.org_id || 
+                     project.contractor_id === userProfile.id || 
+                     (projectParticipant && projectParticipant.status === 'active')
 
     if (!hasAccess) {
       return NextResponse.json(
