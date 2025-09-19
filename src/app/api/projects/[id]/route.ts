@@ -245,28 +245,44 @@ export async function PUT(
       return NextResponse.json({ message: '案件の更新に失敗しました' }, { status: 500 })
     }
 
-    // ステータスが「completed」に変更された場合、受注者に通知を送信
-    if (status === 'completed' && updatedProject.contractor_id) {
+    // ステータスが「completed」に変更された場合、受注者と発注者に通知を送信
+    if (status === 'completed') {
       try {
-        // 受注者情報を取得
-        const { data: contractor, error: contractorError } = await supabaseAdmin
-          .from('users')
-          .select('id, display_name')
-          .eq('id', updatedProject.contractor_id)
-          .single()
+        // 受注者への通知
+        if (updatedProject.contractor_id) {
+          const { data: contractor } = await supabaseAdmin
+            .from('users')
+            .select('id')
+            .eq('id', updatedProject.contractor_id)
+            .single()
 
-        if (!contractorError && contractor) {
-          // 受注者に業務完了通知を送信
-          await supabaseAdmin.from('notifications').insert({
-            user_id: contractor.id,
-            type: 'project_completed',
-            title: '案件が完了しました',
-            message: `案件「${updatedProject.title}」が完了しました。評価と業務完了届の作成をお待ちください。`,
-            data: {
-              project_id: projectId,
-              project_title: updatedProject.title
-            }
-          })
+          if (contractor) {
+            await supabaseAdmin.from('notifications').insert({
+              user_id: contractor.id,
+              type: 'project_completed',
+              title: '案件が完了しました',
+              message: `案件「${updatedProject.title}」が完了しました。評価と業務完了届の作成をお待ちください。`,
+              data: { project_id: projectId, project_title: updatedProject.title }
+            })
+          }
+        }
+
+        // 発注者(OrgAdmin全員)への通知: 評価と業務完了届の準備ができました
+        const { data: orgAdmins } = await supabaseAdmin
+          .from('memberships')
+          .select('user_id')
+          .eq('org_id', updatedProject.org_id)
+          .eq('role', 'OrgAdmin')
+
+        if (orgAdmins && orgAdmins.length > 0) {
+          const notifications = orgAdmins.map((m) => ({
+            user_id: m.user_id,
+            type: 'project_ready_for_evaluation',
+            title: '受注者評価と業務完了届の準備ができました',
+            message: `案件「${updatedProject.title}」が完了しました。まず受注者評価を行い、その後 業務完了届 を発行してください。`,
+            data: { project_id: projectId, project_title: updatedProject.title }
+          }))
+          await supabaseAdmin.from('notifications').insert(notifications)
         }
       } catch (notificationError) {
         console.error('業務完了通知送信エラー:', notificationError)

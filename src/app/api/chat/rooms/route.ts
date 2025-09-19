@@ -164,13 +164,20 @@ export async function GET(request: NextRequest) {
       })
     )
 
-    // チャットルームを新しい順（updated_at降順）でソート
+    // チャットルームを「最新コメントがあるもの優先」かつ新しい順でソート
     const sortedChatRooms = chatRooms.sort((a, b) => {
-      // 最新メッセージがある場合はその日時で比較
-      if (a.last_message && b.last_message) {
-        return new Date(b.last_message.created_at).getTime() - new Date(a.last_message.created_at).getTime()
+      const aHasMsg = Boolean(a.last_message)
+      const bHasMsg = Boolean(b.last_message)
+
+      // どちらも最新メッセージあり → その時刻で比較
+      if (aHasMsg && bHasMsg) {
+        return new Date(b.last_message!.created_at).getTime() - new Date(a.last_message!.created_at).getTime()
       }
-      // 最新メッセージがない場合は作成日時で比較
+      // 片方のみ最新メッセージあり → ある方を優先
+      if (aHasMsg && !bHasMsg) return -1
+      if (!aHasMsg && bHasMsg) return 1
+
+      // どちらもメッセージなし → updated_at（作成時刻相当）で比較
       return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
     })
 

@@ -190,18 +190,27 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // 評価完了を発注者に通知（業務完了届は手動作成）
-    await supabaseAdmin.from('notifications').insert({
-      user_id: user.id, // 発注者（評価者）に通知
-      type: 'evaluation_completed',
-      title: '評価が完了しました',
-      message: `案件「${project.title}」の評価が完了しました。業務完了届の作成をお待ちください。`,
-      data: {
-        project_id,
-        contract_id,
-        evaluation_id: evaluation.id
-      }
-    })
+    // 評価完了を発注者（OrgAdmin全員）に通知
+    const { data: orgAdmins } = await supabaseAdmin
+      .from('memberships')
+      .select('user_id')
+      .eq('org_id', project.org_id)
+      .eq('role', 'OrgAdmin')
+
+    if (orgAdmins && orgAdmins.length > 0) {
+      const notifications = orgAdmins.map(m => ({
+        user_id: m.user_id,
+        type: 'evaluation_completed',
+        title: '受注者評価が完了しました',
+        message: `案件「${project.title}」の受注者評価が完了しました。業務完了届の発行が可能です。`,
+        data: {
+          project_id,
+          contract_id,
+          evaluation_id: evaluation.id
+        }
+      }))
+      await supabaseAdmin.from('notifications').insert(notifications)
+    }
 
     return NextResponse.json({
       message: '評価が正常に保存されました',

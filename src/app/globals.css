@@ -56,6 +56,8 @@
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
+    /* レイアウトの安定化: 常に縦スクロールバーを確保 */
+    scrollbar-gutter: stable both-edges;
   }
 }
 
@@ -223,4 +225,26 @@
 
 .to-engineering-green\/5 {
   --tw-gradient-to: rgba(16, 185, 129, 0.05);
+}
+
+/* ===== Layout Stability Utilities ===== */
+html, body {
+  height: 100%;
+}
+
+/* 横スクロール発生の抑止（グローバルに使用可） */
+.avoid-overflow-x {
+  overflow-x: hidden;
+}
+
+/* 長い文やURLでのはみ出し対策 */
+.break-anywhere {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* 画像/動画のはみ出し対策 */
+img, video, canvas, svg {
+  max-width: 100%;
+  height: auto;
 }

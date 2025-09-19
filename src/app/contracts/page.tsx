@@ -584,13 +584,23 @@ function ContractsPageContent() {
                               </div>
                               {userRole === 'OrgAdmin' && (
                                 <div className="col-span-2 flex justify-end">
-                                  <Button
-                                    className="bg-green-500 hover:bg-green-600 text-white"
-                                    size="sm"
-                                    onClick={() => handleEvaluateContractor({ id: contract.project_id }, contract)}
-                                  >
-                                    受注者評価
-                                  </Button>
+                                  {evaluatedProjects.has(contract.project_id) ? (
+                                    <Button
+                                      disabled
+                                      className="bg-gray-300 text-gray-700 cursor-not-allowed"
+                                      size="sm"
+                                    >
+                                      評価済み
+                                    </Button>
+                                  ) : (
+                                    <Button
+                                      className="bg-green-500 hover:bg-green-600 text-white"
+                                      size="sm"
+                                      onClick={() => handleEvaluateContractor({ id: contract.project_id }, contract)}
+                                    >
+                                      受注者評価
+                                    </Button>
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -823,13 +833,23 @@ function ContractsPageContent() {
                           <div className="flex gap-2 ml-4">
                             {/* 評価ボタン（発注者のみ） */}
                             {userRole === 'OrgAdmin' && projectContracts[project.id] && projectContracts[project.id][0] && (
-                              <Button
-                                className="bg-green-500 hover:bg-green-600 text-white"
-                                size="sm"
-                                onClick={() => handleEvaluateContractor({ id: project.id }, projectContracts[project.id][0])}
-                              >
-                                受注者評価
-                              </Button>
+                              evaluatedProjects.has(project.id) ? (
+                                <Button
+                                  disabled
+                                  className="bg-gray-300 text-gray-700 cursor-not-allowed"
+                                  size="sm"
+                                >
+                                  評価済み
+                                </Button>
+                              ) : (
+                                <Button
+                                  className="bg-green-500 hover:bg-green-600 text-white"
+                                  size="sm"
+                                  onClick={() => handleEvaluateContractor({ id: project.id }, projectContracts[project.id][0])}
+                                >
+                                  受注者評価
+                                </Button>
+                              )
                             )}
                             <Button
                               variant="outline"

@@ -136,7 +136,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return
       }
 
-      setUserRole(membership?.role || null)
+      // ロールの解決
+      let resolvedRole: any = membership?.role || null
+
+      // メンバーシップが無い場合は、管理者メールのフォールバックで Admin 扱い
+      try {
+        if (!resolvedRole) {
+          const { data: authUserInfo } = await supabase.auth.getUser()
+          const email = authUserInfo.user?.email || profile?.email || ''
+          const adminEmails = (process.env.NEXT_PUBLIC_ADMIN_EMAILS || 'admin@demo.com')
+            .split(',')
+            .map(e => e.trim().toLowerCase())
+          if (email && adminEmails.includes(email.toLowerCase())) {
+            resolvedRole = 'Admin'
+          }
+        }
+      } catch (_) {
+        // 取得失敗時は無視
+      }
+
+      setUserRole(resolvedRole || null)
       
       // 組織情報を取得
       if (membership?.org_id) {
@@ -300,6 +319,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!userRole) return '/dashboard'
     
     switch (userRole) {
+      case 'Admin':
+        return '/admin/users'
       case 'Contractor':
         return '/jobs'
       case 'OrgAdmin':

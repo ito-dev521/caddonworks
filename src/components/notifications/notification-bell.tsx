@@ -180,7 +180,10 @@ export function NotificationBell() {
         return <Star className="w-4 h-4 text-yellow-600" />
       case 'invoice_created':
       case 'invoice':
+      case 'completion_report_created':
         return <FileText className="w-4 h-4 text-purple-600" />
+      case 'project_ready_for_evaluation':
+        return <Star className="w-4 h-4 text-green-600" />
       case 'project_approval_requested':
         return <AlertCircle className="w-4 h-4 text-orange-600" />
       case 'project_approved':
@@ -287,7 +290,21 @@ export function NotificationBell() {
       // 評価受信通知の場合は評価ページへ
       router.push('/evaluations')
     } else if (notification.type === 'invoice' || notification.type === 'invoice_created') {
-      // 請求書通知の場合は契約一覧ページの請求書タブへ
+      // 請求書通知
+      if (userRole === 'Contractor') {
+        router.push('/invoices')
+      } else {
+        router.push('/contracts?tab=invoice')
+      }
+    } else if (notification.type === 'completion_report_created') {
+      // 業務完了届作成通知
+      if (userRole === 'Contractor') {
+        router.push('/invoices')
+      } else {
+        router.push('/contracts?tab=invoice')
+      }
+    } else if (notification.type === 'project_ready_for_evaluation') {
+      // 案件完了後: 受注者評価と業務完了届が可能
       router.push('/contracts?tab=invoice')
     } else if (notification.type === 'project_approval_requested') {
       // 案件承認依頼通知の場合は案件ページの承認待ちタブへ
