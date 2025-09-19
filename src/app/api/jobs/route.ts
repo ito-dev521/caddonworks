@@ -296,10 +296,12 @@ export async function GET(request: NextRequest) {
       // この案件で現在のユーザーが辞退したかどうかをチェック
       const hasDeclinedContract = declinedContractorMap[job.id]?.includes(userProfile.id) || false
       
-      // 期限切れチェック
+      // 期限切れチェック（その日の終わり23:59:59まで有効）
       const now = new Date()
       const deadline = new Date(job.bidding_deadline)
-      const isExpired = deadline < now
+      const endOfDeadlineDay = new Date(deadline)
+      endOfDeadlineDay.setHours(23, 59, 59, 999)
+      const isExpired = now > endOfDeadlineDay
       
       // この案件で現在のユーザーが辞退したかどうかをチェック
       const isDeclined = hasDeclinedContract

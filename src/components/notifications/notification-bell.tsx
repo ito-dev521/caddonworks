@@ -20,7 +20,7 @@ interface Notification {
 }
 
 export function NotificationBell() {
-  const { user } = useAuth()
+  const { user, userRole } = useAuth()
   const router = useRouter()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
@@ -239,7 +239,7 @@ export function NotificationBell() {
       markAsRead(notification.id)
     }
 
-    // 通知タイプに応じてページ遷移
+    // 通知タイプとユーザーロールに応じてページ遷移
     if (notification.type === 'bid_received') {
       // 入札通知の場合は契約作成ページへ
       if (notification.data?.project_id && notification.data?.bid_id) {
@@ -248,14 +248,41 @@ export function NotificationBell() {
         router.push('/projects')
       }
     } else if (notification.type === 'contract_created') {
-      // 契約作成通知の場合は契約一覧ページの署名待ちタブへ
-      router.push('/contracts?tab=pending')
-    } else if (notification.type === 'contract_signed' || notification.type === 'contract_signed_by_org') {
-      // 契約署名通知の場合は契約一覧ページの署名済みタブへ
-      router.push('/contracts?tab=signature')
+      // 契約作成通知
+      if (userRole === 'OrgAdmin') {
+        // 発注者: 署名待ちタブ（受注者の署名待ち）
+        router.push('/contracts?tab=pending')
+      } else {
+        // 受注者: 署名待ちタブ（自分の署名待ち）
+        router.push('/contracts?tab=pending')
+      }
+    } else if (notification.type === 'contract_signed') {
+      // 契約署名通知（受注者が署名した場合）
+      if (userRole === 'OrgAdmin') {
+        // 発注者: 署名待ちタブ（発注者の署名待ち）
+        router.push('/contracts?tab=pending')
+      } else {
+        // 受注者: 署名済みタブ
+        router.push('/contracts?tab=signature')
+      }
+    } else if (notification.type === 'contract_signed_by_org') {
+      // 契約署名通知（発注者が署名した場合）
+      if (userRole === 'OrgAdmin') {
+        // 発注者: 署名済みタブ
+        router.push('/contracts?tab=signature')
+      } else {
+        // 受注者: 署名済みタブ
+        router.push('/contracts?tab=signature')
+      }
     } else if (notification.type === 'contract_declined') {
-      // 契約辞退通知の場合は契約一覧ページの署名待ちタブへ
-      router.push('/contracts?tab=pending')
+      // 契約辞退通知
+      if (userRole === 'OrgAdmin') {
+        // 発注者: 署名待ちタブ
+        router.push('/contracts?tab=pending')
+      } else {
+        // 受注者: 署名待ちタブ
+        router.push('/contracts?tab=pending')
+      }
     } else if (notification.type === 'evaluation_received') {
       // 評価受信通知の場合は評価ページへ
       router.push('/evaluations')
@@ -263,14 +290,14 @@ export function NotificationBell() {
       // 請求書通知の場合は契約一覧ページの請求書タブへ
       router.push('/contracts?tab=invoice')
     } else if (notification.type === 'project_approval_requested') {
-      // 案件承認依頼通知の場合は案件ページへ
-      router.push('/projects')
+      // 案件承認依頼通知の場合は案件ページの承認待ちタブへ
+      router.push('/projects?tab=pending_approval')
     } else if (notification.type === 'project_approved') {
-      // 案件承認完了通知の場合は案件ページへ
-      router.push('/projects')
+      // 案件承認完了通知の場合は案件ページの進行中タブへ
+      router.push('/projects?tab=active')
     } else if (notification.type === 'project_rejected') {
-      // 案件承認却下通知の場合は案件ページへ
-      router.push('/projects')
+      // 案件承認却下通知の場合は案件ページの完了済みタブへ
+      router.push('/projects?tab=completed')
     }
 
     // 通知モーダルを閉じる

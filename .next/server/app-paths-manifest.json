@@ -1,13 +1,11 @@
 {
+  "/projects/page": "app/projects/page.js",
+  "/api/projects/route": "app/api/projects/route.js",
   "/api/notifications/route": "app/api/notifications/route.js",
   "/api/chat/rooms/route": "app/api/chat/rooms/route.js",
   "/api/contracts/route": "app/api/contracts/route.js",
-  "/auth/login/page": "app/auth/login/page.js",
-  "/projects/page": "app/projects/page.js",
-  "/api/jobs/route": "app/api/jobs/route.js",
-  "/not-found": "app/not-found.js",
+  "/(dashboard)/chat/page": "app/(dashboard)/chat/page.js",
   "/jobs/page": "app/jobs/page.js",
-  "/contracts/create/page": "app/contracts/create/page.js",
-  "/contracts/page": "app/contracts/page.js",
-  "/api/invoices/route": "app/api/invoices/route.js"
+  "/settings/page": "app/settings/page.js",
+  "/contracts/page": "app/contracts/page.js"
 }

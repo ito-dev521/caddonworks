@@ -19,6 +19,7 @@ const badgeVariants = cva(
         info: "border-transparent bg-blue-500 text-white shadow hover:bg-blue-600",
         engineering: "border-engineering-blue bg-engineering-blue/10 text-engineering-blue",
         glass: "glass text-gray-700 border-white/30",
+        approval: "border-transparent bg-orange-500 text-white shadow hover:bg-orange-600",
       },
     },
     defaultVariants: {

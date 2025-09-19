@@ -106,11 +106,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 入札締切チェック
+    // 入札締切チェック（その日の終わり23:59:59まで有効）
     if (project.bidding_deadline) {
       const deadline = new Date(project.bidding_deadline)
+      const endOfDeadlineDay = new Date(deadline)
+      endOfDeadlineDay.setHours(23, 59, 59, 999)
       const now = new Date()
-      if (now > deadline) {
+      if (now > endOfDeadlineDay) {
         return NextResponse.json(
           { message: '入札締切を過ぎています' },
           { status: 400 }

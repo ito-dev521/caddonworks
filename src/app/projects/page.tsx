@@ -1,12 +1,12 @@
 "use client"
 
 import React, { useEffect, useState, useCallback, useRef } from "react"
+import { useSearchParams } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
 import {
   Building,
   Plus,
   Search,
-  Filter,
   MessageSquare,
   Eye,
   Edit,
@@ -66,9 +66,10 @@ interface ProjectData {
 
 function ProjectsPageContent() {
   const { userProfile, userRole, loading } = useAuth()
+  const searchParams = useSearchParams()
   const [projects, setProjects] = useState<ProjectData[]>([])
   const [filteredProjects, setFilteredProjects] = useState<ProjectData[]>([])
-  const [selectedTab, setSelectedTab] = useState<'active' | 'completed' | 'all'>('active')
+  const [selectedTab, setSelectedTab] = useState<'active' | 'completed' | 'pending_approval' | 'all'>('active')
   const [searchTerm, setSearchTerm] = useState('')
   const [showNewProjectForm, setShowNewProjectForm] = useState(false)
   const [showChatModal, setShowChatModal] = useState<string | null>(null)
@@ -105,6 +106,7 @@ function ProjectsPageContent() {
   const [showFavoriteMembersModal, setShowFavoriteMembersModal] = useState(false)
   const [orgAdmins, setOrgAdmins] = useState<any[]>([])
   const [approvalRequired, setApprovalRequired] = useState(false)
+  const [organizationUsers, setOrganizationUsers] = useState<any[]>([])
   const [showReopenModal, setShowReopenModal] = useState<string | null>(null)
   const [reopenProject, setReopenProject] = useState<ProjectData | null>(null)
   const [reopenData, setReopenData] = useState({
@@ -194,6 +196,27 @@ function ProjectsPageContent() {
     }
   }, [userProfile, userRole])
 
+  // 組織内ユーザーを取得する関数
+  const fetchOrganizationUsers = useCallback(async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
+      const response = await fetch('/api/settings/users', {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`
+        }
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setOrganizationUsers(data.users || [])
+      }
+    } catch (error) {
+      console.error('組織ユーザー取得エラー:', error)
+    }
+  }, [])
+
   // 案件データを取得する関数
   const fetchProjects = useCallback(async () => {
     try {
@@ -254,7 +277,16 @@ function ProjectsPageContent() {
     fetchProjects()
     fetchFavoriteMembers()
     fetchOrganizationSettings()
-  }, [userProfile, userRole, fetchProjects, fetchFavoriteMembers, fetchOrganizationSettings])
+    fetchOrganizationUsers()
+  }, [userProfile, userRole, fetchProjects, fetchFavoriteMembers, fetchOrganizationSettings, fetchOrganizationUsers])
+
+  // URLパラメータからタブを読み取る
+  useEffect(() => {
+    const tab = searchParams.get('tab')
+    if (tab && ['active', 'completed', 'pending_approval', 'all'].includes(tab)) {
+      setSelectedTab(tab as 'active' | 'completed' | 'pending_approval' | 'all')
+    }
+  }, [searchParams])
 
   // フィルタリング
   useEffect(() => {
@@ -265,15 +297,30 @@ function ProjectsPageContent() {
       filtered = filtered.filter(p => p.status === 'in_progress' || p.status === 'bidding')
     } else if (selectedTab === 'completed') {
       filtered = filtered.filter(p => p.status === 'completed' || p.status === 'suspended')
+    } else if (selectedTab === 'pending_approval') {
+      filtered = filtered.filter(p => p.status === 'pending_approval')
     }
 
     // 検索フィルタ
     if (searchTerm) {
-      filtered = filtered.filter(p => 
-        p.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.contractor_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.category.toLowerCase().includes(searchTerm.toLowerCase())
-      )
+      filtered = filtered.filter(p => {
+        const searchLower = searchTerm.toLowerCase()
+        
+        // 基本的な検索対象
+        const basicMatch = 
+          p.title.toLowerCase().includes(searchLower) ||
+          p.contractor_name.toLowerCase().includes(searchLower) ||
+          p.category.toLowerCase().includes(searchLower) ||
+          (p.assignee_name && p.assignee_name.toLowerCase().includes(searchLower))
+        
+        // 複数受注者の名前も検索対象に含める
+        const contractorMatch = p.contracts?.some(contract => 
+          contract.contractor_name.toLowerCase().includes(searchLower) ||
+          contract.contractor_email.toLowerCase().includes(searchLower)
+        ) || false
+        
+        return basicMatch || contractorMatch
+      })
     }
 
     setFilteredProjects(filtered)
@@ -630,6 +677,15 @@ function ProjectsPageContent() {
         alert(result.message)
         // 案件一覧を再読み込み
         await fetchProjects()
+        
+        // 承認処理後に適切なタブに移動
+        if (action === 'approve') {
+          // 承認された場合は「進行中」タブに移動
+          setSelectedTab('active')
+        } else if (action === 'reject') {
+          // 却下された場合は「完了済み」タブに移動
+          setSelectedTab('completed')
+        }
       } else {
         alert('承認処理に失敗しました: ' + result.message)
       }
@@ -965,6 +1021,8 @@ function ProjectsPageContent() {
         return 'text-gray-600 bg-gray-100'
       case 'suspended':
         return 'text-red-600 bg-red-100'
+      case 'pending_approval':
+        return 'text-orange-600 bg-orange-100'
       default:
         return 'text-gray-600 bg-gray-100'
     }
@@ -980,6 +1038,8 @@ function ProjectsPageContent() {
         return '完了'
       case 'suspended':
         return '中止'
+      case 'pending_approval':
+        return '承認待ち'
       default:
         return status
     }
@@ -1091,6 +1151,7 @@ function ProjectsPageContent() {
                 {[
                   { id: 'active', label: '進行中', count: projects.filter(p => p.status === 'in_progress' || p.status === 'bidding').length },
                   { id: 'completed', label: '完了済み', count: projects.filter(p => p.status === 'completed' || p.status === 'suspended').length },
+                  { id: 'pending_approval', label: '承認待ち', count: projects.filter(p => p.status === 'pending_approval').length },
                   { id: 'all', label: 'すべて', count: projects.length }
                 ].map((tab) => (
                   <button
@@ -1098,34 +1159,35 @@ function ProjectsPageContent() {
                     onClick={() => setSelectedTab(tab.id as any)}
                     className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                       selectedTab === tab.id
-                        ? 'bg-white text-engineering-blue shadow-sm'
-                        : 'text-gray-600 hover:text-gray-900'
+                        ? tab.id === 'pending_approval' 
+                          ? 'bg-orange-100 text-orange-700 shadow-sm'
+                          : 'bg-white text-engineering-blue shadow-sm'
+                        : tab.id === 'pending_approval'
+                          ? 'text-orange-600 hover:text-orange-800'
+                          : 'text-gray-600 hover:text-gray-900'
                     }`}
                   >
                     {tab.label}
-                    <Badge variant="outline" className="text-xs">
+                    <Badge 
+                      variant={tab.id === 'pending_approval' ? 'approval' : 'outline'} 
+                      className="text-xs"
+                    >
                       {tab.count}
                     </Badge>
                   </button>
                 ))}
               </div>
 
-              {/* 検索とフィルター */}
-              <div className="flex gap-2">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                  <input
-                    type="text"
-                    placeholder="案件名・受注者で検索..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent w-64"
-                  />
-                </div>
-                <Button variant="outline">
-                  <Filter className="w-4 h-4 mr-2" />
-                  フィルター
-                </Button>
+              {/* 検索 */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <input
+                  type="text"
+                  placeholder="案件名・受注者で検索..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent w-64"
+                />
               </div>
             </div>
           </div>
@@ -1162,9 +1224,15 @@ function ProjectsPageContent() {
                           </CardDescription>
                         </div>
                         <div className="flex flex-col gap-1">
-                          <Badge className={getStatusColor(project.status)}>
-                            {getStatusText(project.status)}
-                          </Badge>
+                          {project.status === 'pending_approval' ? (
+                            <Badge variant="approval">
+                              {getStatusText(project.status)}
+                            </Badge>
+                          ) : (
+                            <Badge className={getStatusColor(project.status)}>
+                              {getStatusText(project.status)}
+                            </Badge>
+                          )}
                           {project.is_expired && (
                             <Badge className="bg-red-100 text-red-800 border-red-200">
                               期限切れ
@@ -1611,13 +1679,18 @@ function ProjectsPageContent() {
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         担当者名
                       </label>
-                      <input
-                        type="text"
+                      <select
                         value={newProject.assignee_name}
                         onChange={(e) => setNewProject({ ...newProject, assignee_name: e.target.value })}
-                        placeholder="例: 田中太郎"
                         className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
-                      />
+                      >
+                        <option value="">担当者を選択してください（任意）</option>
+                        {organizationUsers.map(user => (
+                          <option key={user.id} value={user.display_name}>
+                            {user.display_name} ({user.email})
+                          </option>
+                        ))}
+                      </select>
                       <p className="text-sm text-gray-600 mt-1">案件の社内担当者を指定できます（任意）</p>
                     </div>
 
@@ -2012,13 +2085,18 @@ function ProjectsPageContent() {
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                           担当者名
                         </label>
-                        <input
-                          type="text"
+                        <select
                           value={editingProject.assignee_name || ''}
                           onChange={(e) => setEditingProject({ ...editingProject, assignee_name: e.target.value })}
-                          placeholder="例: 田中太郎"
                           className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
-                        />
+                        >
+                          <option value="">担当者を選択してください（任意）</option>
+                          {organizationUsers.map(user => (
+                            <option key={user.id} value={user.display_name}>
+                              {user.display_name} ({user.email})
+                            </option>
+                          ))}
+                        </select>
                         <p className="text-sm text-gray-600 mt-1">案件の社内担当者を指定できます（任意）</p>
                       </div>
                     </div>
@@ -2100,9 +2178,15 @@ function ProjectsPageContent() {
                             } • {project.category}
                           </p>
                           <div className="flex gap-2">
-                            <Badge className={getStatusColor(project.status)}>
-                              {getStatusText(project.status)}
-                            </Badge>
+                            {project.status === 'pending_approval' ? (
+                              <Badge variant="approval">
+                                {getStatusText(project.status)}
+                              </Badge>
+                            ) : (
+                              <Badge className={getStatusColor(project.status)}>
+                                {getStatusText(project.status)}
+                              </Badge>
+                            )}
                             {project.is_expired && (
                               <Badge className="bg-red-100 text-red-800 border-red-200">
                                 期限切れ

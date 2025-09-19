@@ -62,6 +62,7 @@ export async function GET(request: NextRequest) {
           status,
           org_id,
           contractor_id,
+          created_at,
           organizations (
             name
           )
@@ -149,8 +150,8 @@ export async function GET(request: NextRequest) {
           description: project.description,
           project_id: project.id,
           project_name: project.title,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
+          created_at: project.created_at || new Date().toISOString(),
+          updated_at: lastMessage ? lastMessage.created_at : (project.created_at || new Date().toISOString()),
           is_active: project.status === 'in_progress',
           participant_count: participantCount,
           unread_count: unreadCount,
@@ -163,8 +164,18 @@ export async function GET(request: NextRequest) {
       })
     )
 
+    // チャットルームを新しい順（updated_at降順）でソート
+    const sortedChatRooms = chatRooms.sort((a, b) => {
+      // 最新メッセージがある場合はその日時で比較
+      if (a.last_message && b.last_message) {
+        return new Date(b.last_message.created_at).getTime() - new Date(a.last_message.created_at).getTime()
+      }
+      // 最新メッセージがない場合は作成日時で比較
+      return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+    })
+
     return NextResponse.json({
-      rooms: chatRooms
+      rooms: sortedChatRooms
     }, { status: 200 })
 
   } catch (error) {

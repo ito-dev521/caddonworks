@@ -6,8 +6,8 @@ export async function POST(request: NextRequest) {
     const supabaseAdmin = createSupabaseAdmin()
     
     // 期限切れの案件を取得
-    const now = new Date().toISOString()
-    const { data: expiredJobs, error: expiredError } = await supabaseAdmin
+    // 各案件の締切日の23:59:59を過ぎているかをアプリケーション側で判定
+    const { data: biddingJobs, error: expiredError } = await supabaseAdmin
       .from('projects')
       .select(`
         id,
@@ -21,14 +21,23 @@ export async function POST(request: NextRequest) {
         )
       `)
       .eq('status', 'bidding')
-      .lt('bidding_deadline', now)
-
+    
     if (expiredError) {
       return NextResponse.json(
-        { message: '期限切れ案件の取得に失敗しました' },
+        { message: '案件の取得に失敗しました' },
         { status: 400 }
       )
     }
+
+    // アプリケーション側で期限切れを判定
+    const now = new Date()
+    const expiredJobs = (biddingJobs || []).filter(job => {
+      if (!job.bidding_deadline) return false
+      const deadline = new Date(job.bidding_deadline)
+      const endOfDeadlineDay = new Date(deadline)
+      endOfDeadlineDay.setHours(23, 59, 59, 999)
+      return now > endOfDeadlineDay
+    })
 
     const results = []
 

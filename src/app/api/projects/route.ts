@@ -397,15 +397,23 @@ export async function GET(request: NextRequest) {
     }
 
     const formattedProjects = projectsData?.map(project => {
-      // 期限切れチェック
+      // 期限切れチェック（その日の終わり23:59:59まで有効）
       const now = new Date()
       const deadline = project.bidding_deadline ? new Date(project.bidding_deadline) : null
-      const isExpired = deadline && deadline < now && project.status === 'bidding'
+      let isExpired = false
+      if (deadline && project.status === 'bidding') {
+        // 締切日の23:59:59まで有効にする
+        const endOfDeadlineDay = new Date(deadline)
+        endOfDeadlineDay.setHours(23, 59, 59, 999)
+        isExpired = now > endOfDeadlineDay
+      }
       
-      // 期限までの日数を計算
+      // 期限までの日数を計算（その日の終わりまで考慮）
       let daysUntilDeadline = null
       if (deadline) {
-        daysUntilDeadline = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+        const endOfDeadlineDay = new Date(deadline)
+        endOfDeadlineDay.setHours(23, 59, 59, 999)
+        daysUntilDeadline = Math.ceil((endOfDeadlineDay.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
       }
 
       const result = {
