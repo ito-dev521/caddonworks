@@ -19,7 +19,8 @@ import {
   LogOut,
   ChevronDown,
   MessageCircle,
-  Star
+  Star,
+  Box
 } from "lucide-react"
 import { Button } from "../ui/button"
 import { Badge } from "../ui/badge"
@@ -27,7 +28,7 @@ import { useAuth } from "@/contexts/auth-context"
 import { supabase } from "@/lib/supabase"
 import { useRoleAccess } from "../auth/auth-guard"
 import { cn } from "@/lib/utils"
-import { NotificationBell } from "../notifications/notification-bell"
+// import { NotificationBell } from "../notifications/notification-bell"
 import { useNavigationBadges } from "@/hooks/use-navigation-badges"
 
 interface NavigationProps {
@@ -47,6 +48,7 @@ const getNavigationItems = (userRole: string, badges: any) => {
       { icon: FolderOpen, label: "案件管理", href: "/projects", badge: badges.projects || null },
       { icon: MessageCircle, label: "チャット", href: "/chat", badge: badges.chat || null },
       { icon: FileText, label: "契約管理", href: "/contracts", badge: badges.contracts || null },
+      { icon: Box, label: "ファイル管理", href: "/project-files", badge: null },
       { icon: BarChart3, label: "会計・請求", href: "/billing", badge: "新" },
       { icon: Users, label: "お気に入り会員", href: "/favorite-members", badge: null },
       { icon: Settings, label: "設定", href: "/settings", badge: null },
@@ -80,7 +82,10 @@ const getNavigationItems = (userRole: string, badges: any) => {
 
 export function Navigation({ userRole: propUserRole }: NavigationProps) {
   const { user, userProfile, userRole, userOrganization, signOut } = useAuth()
-  const { badges, loading: badgesLoading } = useNavigationBadges()
+  const { badges } = useNavigationBadges()
+
+  // propUserRoleは将来の拡張用として保持
+  const _ = propUserRole
   const router = useRouter()
   const pathname = usePathname()
   const [isExpanded, setIsExpanded] = useState(true)
@@ -199,7 +204,7 @@ export function Navigation({ userRole: propUserRole }: NavigationProps) {
               )}
             </motion.div>
             <div className="flex items-center gap-2">
-              {isExpanded && <NotificationBell />}
+              {/* {isExpanded && <NotificationBell />} */}
               <Button
                 variant="ghost"
                 size="icon"

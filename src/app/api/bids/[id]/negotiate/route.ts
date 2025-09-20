@@ -113,6 +113,46 @@ export async function PUT(
         )
       }
 
+      // Boxフォルダを作成（入札承認後）
+      try {
+        const parentId = process.env.BOX_PROJECTS_ROOT_FOLDER_ID
+        if (parentId) {
+          const folderName = `[PRJ-${bid.projects.id.slice(0, 8)}] ${bid.projects.title}`
+          const subfolders = ['受取', '作業', '納品', '契約']
+
+          const boxResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3002'}/api/box/provision`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: folderName,
+              parentId,
+              subfolders
+            })
+          })
+
+          if (boxResponse.ok) {
+            const { folderId, subfolderIds } = await boxResponse.json()
+
+            // プロジェクトにBox情報を保存
+            await supabaseAdmin
+              .from('projects')
+              .update({
+                box_folder_id: folderId
+                // box_subfoldersカラムが存在しないため一時的に除外
+                // box_subfolders: subfolderIds ? JSON.stringify(subfolderIds) : null
+              })
+              .eq('id', bid.projects.id)
+
+            console.log('Boxフォルダ作成完了:', { folderId, subfolderIds })
+          } else {
+            console.error('Boxフォルダ作成失敗:', await boxResponse.text())
+          }
+        }
+      } catch (boxError) {
+        console.error('Boxフォルダ作成エラー:', boxError)
+        // Box作成エラーは入札承認を妨げない
+      }
+
       // 受注者に通知
       await supabaseAdmin
         .from('notifications')

@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useRef } from "react"
+import React, { useState, useEffect, useRef, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Bell, X, Check, AlertCircle, FileText, Hand, Star, GripVertical } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -34,7 +34,7 @@ export function NotificationBell() {
   const modalRef = useRef<HTMLDivElement>(null)
 
   // 通知を取得
-  const fetchNotifications = async () => {
+  const fetchNotifications = useCallback(async () => {
     if (!user) return
 
     try {
@@ -58,7 +58,7 @@ export function NotificationBell() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [user])
 
   // 通知を既読にする
   const markAsRead = async (notificationId: string) => {
@@ -115,54 +115,51 @@ export function NotificationBell() {
     }
   }
 
-  const handleMouseMove = (e: MouseEvent) => {
-    if (!isDragging) return
-    
-    e.preventDefault()
-    
-    // マウス位置からドラッグ開始時のオフセットを引く
-    const newX = e.clientX - dragStart.x
-    const newY = e.clientY - dragStart.y
-    
-    // 画面境界内に制限
-    const modalWidth = modalRef.current?.offsetWidth || 448
-    const modalHeight = modalRef.current?.offsetHeight || 400
-    const maxX = Math.max(0, window.innerWidth - modalWidth)
-    const maxY = Math.max(0, window.innerHeight - modalHeight)
-    
-    // 境界内に制限
-    const clampedX = Math.max(0, Math.min(newX, maxX))
-    const clampedY = Math.max(0, Math.min(newY, maxY))
-    
-    setPosition({
-      x: clampedX,
-      y: clampedY
-    })
-  }
-
-  const handleMouseUp = () => {
-    setIsDragging(false)
-  }
 
 
   // マウスイベントのリスナーを設定
   useEffect(() => {
+    const handleMouseMoveEvent = (e: MouseEvent) => {
+      if (!isDragging) return
+
+      e.preventDefault()
+
+      // マウス位置からドラッグ開始時のオフセットを引く
+      const newX = e.clientX - dragStart.x
+      const newY = e.clientY - dragStart.y
+
+      // 画面境界内に制限
+      const modalWidth = modalRef.current?.offsetWidth || 448
+      const modalHeight = modalRef.current?.offsetHeight || 400
+      const maxX = Math.max(0, window.innerWidth - modalWidth)
+      const maxY = Math.max(0, window.innerHeight - modalHeight)
+
+      // 境界内に制限
+      const clampedX = Math.max(0, Math.min(newX, maxX))
+      const clampedY = Math.max(0, Math.min(newY, maxY))
+
+      setPosition({
+        x: clampedX,
+        y: clampedY
+      })
+    }
+
+    const handleMouseUpEvent = () => {
+      setIsDragging(false)
+    }
+
     if (isDragging) {
-      document.addEventListener('mousemove', handleMouseMove)
-      document.addEventListener('mouseup', handleMouseUp)
+      document.addEventListener('mousemove', handleMouseMoveEvent)
+      document.addEventListener('mouseup', handleMouseUpEvent)
       document.body.style.userSelect = 'none'
-    } else {
-      document.removeEventListener('mousemove', handleMouseMove)
-      document.removeEventListener('mouseup', handleMouseUp)
-      document.body.style.userSelect = ''
     }
 
     return () => {
-      document.removeEventListener('mousemove', handleMouseMove)
-      document.removeEventListener('mouseup', handleMouseUp)
+      document.removeEventListener('mousemove', handleMouseMoveEvent)
+      document.removeEventListener('mouseup', handleMouseUpEvent)
       document.body.style.userSelect = ''
     }
-  }, [isDragging, dragStart])
+  }, [isDragging, dragStart.x, dragStart.y])
 
   // 通知アイコンを取得
   const getNotificationIcon = (type: string) => {
@@ -214,7 +211,7 @@ export function NotificationBell() {
       const interval = setInterval(fetchNotifications, 30000)
       return () => clearInterval(interval)
     }
-  }, [user])
+  }, [user, fetchNotifications])
 
   if (!user) return null
 

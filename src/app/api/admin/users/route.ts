@@ -1,27 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-import { type MemberLevel } from '@/lib/member-level'
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://rxnozwuamddqlcwysxag.supabase.co'
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ4bm96d3VhbWRkcWxjd3lzeGFnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1Nzc2NjgwMywiZXhwIjoyMDczMzQyODAzfQ.w7KcFrtcTRhqoHwTSlgTc6NDNHIJH985rAgT9bD0ipE'
-
-const supabaseAdmin = createClient(
-  supabaseUrl,
-  supabaseServiceKey,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    }
-  }
-)
+import { createSupabaseAdmin } from '@/lib/supabase'
 
 // 全ユーザー一覧を取得（運営者用）
 export async function GET(request: NextRequest) {
   try {
+    const supabaseAdmin = createSupabaseAdmin()
     // Authorizationヘッダーからユーザー情報を取得
     const authHeader = request.headers.get('authorization')
-    
+
     if (!authHeader) {
       return NextResponse.json(
         { message: '認証が必要です' },
@@ -31,7 +17,7 @@ export async function GET(request: NextRequest) {
 
     const token = authHeader.replace('Bearer ', '')
     const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
-    
+
     if (authError || !user) {
       return NextResponse.json(
         { message: '認証に失敗しました' },
@@ -39,26 +25,37 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // ユーザープロフィールを取得
-    const { data: userProfile, error: userError } = await supabaseAdmin
+    // ユーザープロフィール取得（存在しない可能性も許容）
+    const { data: userProfile } = await supabaseAdmin
       .from('users')
-      .select('id, email, display_name, role')
+      .select('id, email, display_name')
       .eq('auth_user_id', user.id)
       .single()
 
-    if (userError || !userProfile) {
-      return NextResponse.json(
-        { message: 'ユーザープロフィールが見つかりません' },
-        { status: 403 }
-      )
+    // 管理者権限チェック
+    const adminEmails = (process.env.NEXT_PUBLIC_ADMIN_EMAILS || 'admin@demo.com')
+      .split(',')
+      .map(e => e.trim().toLowerCase())
+
+    const isEmailAdmin = !!user.email && adminEmails.includes(user.email.toLowerCase())
+
+    let isMembershipAdmin = false
+    const userIdCandidates = [userProfile?.id, user.id].filter(Boolean) as string[]
+    for (const candidate of userIdCandidates) {
+      const { data: membership } = await supabaseAdmin
+        .from('memberships')
+        .select('role')
+        .eq('user_id', candidate)
+        .eq('role', 'Admin')
+        .maybeSingle()
+      if (membership) {
+        isMembershipAdmin = true
+        break
+      }
     }
 
-    // 運営者権限チェック
-    if (userProfile.role !== 'admin') {
-      return NextResponse.json(
-        { message: '運営者権限が必要です' },
-        { status: 403 }
-      )
+    if (!isEmailAdmin && !isMembershipAdmin) {
+      return NextResponse.json({ message: '運営者権限が必要です' }, { status: 403 })
     }
 
     // 全ユーザー一覧を取得
@@ -104,9 +101,10 @@ export async function GET(request: NextRequest) {
 // ユーザーの会員レベルを更新（運営者用）
 export async function PUT(request: NextRequest) {
   try {
+    const supabaseAdmin = createSupabaseAdmin()
     // Authorizationヘッダーからユーザー情報を取得
     const authHeader = request.headers.get('authorization')
-    
+
     if (!authHeader) {
       return NextResponse.json(
         { message: '認証が必要です' },
@@ -116,7 +114,7 @@ export async function PUT(request: NextRequest) {
 
     const token = authHeader.replace('Bearer ', '')
     const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
-    
+
     if (authError || !user) {
       return NextResponse.json(
         { message: '認証に失敗しました' },
@@ -124,26 +122,36 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    // ユーザープロフィールを取得
-    const { data: userProfile, error: userError } = await supabaseAdmin
+    // ユーザープロフィール取得（存在しない可能性も許容）
+    const { data: userProfile } = await supabaseAdmin
       .from('users')
-      .select('id, email, display_name, role')
+      .select('id, email, display_name')
       .eq('auth_user_id', user.id)
       .single()
 
-    if (userError || !userProfile) {
-      return NextResponse.json(
-        { message: 'ユーザープロフィールが見つかりません' },
-        { status: 403 }
-      )
+    const adminEmails = (process.env.NEXT_PUBLIC_ADMIN_EMAILS || 'admin@demo.com')
+      .split(',')
+      .map(e => e.trim().toLowerCase())
+
+    const isEmailAdmin = !!user.email && adminEmails.includes(user.email.toLowerCase())
+
+    let isMembershipAdmin = false
+    const userIdCandidates = [userProfile?.id, user.id].filter(Boolean) as string[]
+    for (const candidate of userIdCandidates) {
+      const { data: membership } = await supabaseAdmin
+        .from('memberships')
+        .select('role')
+        .eq('user_id', candidate)
+        .eq('role', 'Admin')
+        .maybeSingle()
+      if (membership) {
+        isMembershipAdmin = true
+        break
+      }
     }
 
-    // 運営者権限チェック
-    if (userProfile.role !== 'admin') {
-      return NextResponse.json(
-        { message: '運営者権限が必要です' },
-        { status: 403 }
-      )
+    if (!isEmailAdmin && !isMembershipAdmin) {
+      return NextResponse.json({ message: '運営者権限が必要です' }, { status: 403 })
     }
 
     const body = await request.json()
