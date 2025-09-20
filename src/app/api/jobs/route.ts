@@ -72,7 +72,6 @@ export async function GET(request: NextRequest) {
     const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
     
     if (authError || !user) {
-      console.error('jobs API: 認証エラー:', authError)
       return NextResponse.json(
         { message: '認証に失敗しました: ' + (authError?.message || 'ユーザーが見つかりません') },
         { status: 401 }
@@ -88,7 +87,6 @@ export async function GET(request: NextRequest) {
       .single()
 
     if (userError || !userProfile) {
-      console.error('jobs API: ユーザープロフィールエラー:', userError)
       return NextResponse.json(
         { message: 'ユーザープロフィールが見つかりません' },
         { status: 403 }
@@ -156,7 +154,6 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false }) // 最新の契約を優先
 
     if (biddingError || contractsError) {
-      console.error('jobs API: 案件データ取得エラー:', { biddingError, contractsError })
       return NextResponse.json(
         { message: '案件データの取得に失敗しました' },
         { status: 400 }
@@ -186,7 +183,6 @@ export async function GET(request: NextRequest) {
       )
       const latestContract = sortedContracts[0]
       
-      console.log(`プロジェクト ${projectId} の契約履歴:`, {
         projectId,
         projectTitle: latestContract.projects?.title,
         contractsCount: contracts.length,
@@ -210,17 +206,6 @@ export async function GET(request: NextRequest) {
         declinedProjectIds.push(projectId)
       }
     }
-    
-    console.log('jobs API: 契約ステータス確認（最終結果）', {
-      userId: userProfile.id,
-      userEmail: userProfile.email,
-      totalContracts: allUserContracts?.length || 0,
-      uniqueProjects: projectContractsMap.size,
-      awardedJobsCount: awardedJobs.length,
-      declinedProjectsCount: declinedProjectIds.length,
-      awardedJobTitles: awardedJobs.map(job => job.title),
-      declinedProjectIds: declinedProjectIds
-    })
     
     const filteredAwardedJobs = awardedJobs
     
@@ -253,7 +238,6 @@ export async function GET(request: NextRequest) {
       .eq('response', 'declined')
 
     if (declinedError) {
-      console.error('jobs API: 辞退案件取得エラー:', declinedError)
     }
 
     const declinedJobs = declinedInvitations?.map(invitation => invitation.projects).filter(Boolean) || []
@@ -270,24 +254,10 @@ export async function GET(request: NextRequest) {
       ...declinedJobs.map(job => String(job.id)) // 優先依頼で辞退した案件
     ]
     
-    console.log('jobs API: 辞退案件除外処理', {
-      userId: userProfile.id,
-      contractDeclinedCount: declinedProjectIds.length,
-      priorityDeclinedCount: declinedJobs.length,
-      totalDeclinedCount: allDeclinedProjectIds.length,
-      declinedProjectIds: allDeclinedProjectIds,
-      beforeFilterCount: levelFilteredBiddingJobs.length
-    })
-    
     // 入札可能な案件から辞退した案件を除外
     const filteredBiddingJobs = levelFilteredBiddingJobs.filter(job => 
       !allDeclinedProjectIds.includes(String(job.id))
     )
-    
-    console.log('jobs API: 辞退案件除外後', {
-      afterFilterCount: filteredBiddingJobs.length,
-      excludedCount: levelFilteredBiddingJobs.length - filteredBiddingJobs.length
-    })
     
     // フィルタリングされた入札可能な案件と落札した案件のみを結合（辞退した案件は除外）
     let jobsData = [...filteredBiddingJobs, ...filteredAwardedJobs]
@@ -406,7 +376,6 @@ export async function GET(request: NextRequest) {
     }, { status: 200 })
 
   } catch (error) {
-    console.error('jobs API: サーバーエラー:', error)
     return NextResponse.json(
       { message: 'サーバーエラーが発生しました: ' + (error instanceof Error ? error.message : '不明なエラー') },
       { status: 500 }

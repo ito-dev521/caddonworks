@@ -79,6 +79,8 @@ function ContractsPageContent() {
   const [evaluatedProjects, setEvaluatedProjects] = useState<Set<string>>(new Set())
   const [invoicedProjects, setInvoicedProjects] = useState<Set<string>>(new Set())
   const [invoiceStatuses, setInvoiceStatuses] = useState<Map<string, any>>(new Map())
+  // 完了済みプロジェクトID集合
+  const completedProjectIdSet = React.useMemo(() => new Set(completedProjects.map((p:any) => p.id)), [completedProjects])
 
   // 契約一覧を取得
   const fetchContracts = async () => {
@@ -582,7 +584,7 @@ function ContractsPageContent() {
                                   {new Date(contract.start_date).toLocaleDateString('ja-JP')} - {new Date(contract.end_date).toLocaleDateString('ja-JP')}
                                 </p>
                               </div>
-                              {userRole === 'OrgAdmin' && (
+                              {userRole === 'OrgAdmin' && completedProjectIdSet.has(contract.project_id) && (
                                 <div className="col-span-2 flex justify-end">
                                   {evaluatedProjects.has(contract.project_id) ? (
                                     <Button

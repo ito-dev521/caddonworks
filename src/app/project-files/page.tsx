@@ -32,7 +32,7 @@ interface BoxProject {
   id: string
   title: string
   box_folder_id: string
-  box_subfolders: Record<string, string>
+  subfolders?: Record<string, string>
   status: string
   created_at: string
   box_items: BoxItem[]
@@ -367,7 +367,7 @@ export default function ProjectFilesPage() {
                             <div className="space-y-2">
                               <h4 className="text-sm font-medium text-gray-700">サブフォルダ</h4>
                               <div className="grid grid-cols-2 gap-2">
-                                {Object.entries(project.box_subfolders || {}).map(([name, _id]) => (
+                                {Object.entries(project.subfolders || {}).map(([name, _id]) => (
                                   <div key={name} className="flex items-center gap-2 p-2 bg-gray-50 rounded text-xs">
                                     <FolderOpen className="w-3 h-3 text-blue-500" />
                                     <span className="truncate">{getSubfolderName(name)}</span>

@@ -1056,6 +1056,9 @@ video {
 .min-w-\[120px\] {
   min-width: 120px;
 }
+.min-w-full {
+  min-width: 100%;
+}
 .max-w-20 {
   max-width: 5rem;
 }
@@ -2038,8 +2041,14 @@ video {
 .pl-4 {
   padding-left: 1rem;
 }
+.pl-9 {
+  padding-left: 2.25rem;
+}
 .pr-12 {
   padding-right: 3rem;
+}
+.pr-3 {
+  padding-right: 0.75rem;
 }
 .pr-4 {
   padding-right: 1rem;

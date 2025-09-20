@@ -21,12 +21,16 @@ interface Notification {
 
 export function NotificationBell() {
   const { user, userRole } = useAuth()
+
+  // Early return if user is not authenticated - must be before any hooks
+  if (!user) return null
+
   const router = useRouter()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [isOpen, setIsOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  
+
   // ドラッグ機能のための状態
   const [position, setPosition] = useState({ x: -1, y: -1 }) // -1は未初期化を示す
   const [isDragging, setIsDragging] = useState(false)
@@ -213,8 +217,6 @@ export function NotificationBell() {
     }
   }, [user, fetchNotifications])
 
-  if (!user) return null
-
   // 通知ドロップダウンを右側に固定表示
   const handleToggle = () => {
     setIsOpen(!isOpen)
@@ -227,7 +229,7 @@ export function NotificationBell() {
       const modalHeight = 400 // 推定高さ
       const centerX = (window.innerWidth - modalWidth) / 2
       const centerY = (window.innerHeight - modalHeight) / 2
-      
+
       setPosition({ x: centerX, y: centerY })
     }
   }, [isOpen, position.x])

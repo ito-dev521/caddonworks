@@ -106,7 +106,6 @@ export async function PUT(
         .single()
 
       if (updateError) {
-        console.error('入札承認エラー:', updateError)
         return NextResponse.json(
           { message: '入札の承認に失敗しました' },
           { status: 500 }
@@ -116,11 +115,14 @@ export async function PUT(
       // Boxフォルダを作成（入札承認後）
       try {
         const parentId = process.env.BOX_PROJECTS_ROOT_FOLDER_ID
+
         if (parentId) {
           const folderName = `[PRJ-${bid.projects.id.slice(0, 8)}] ${bid.projects.title}`
           const subfolders = ['受取', '作業', '納品', '契約']
 
-          const boxResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3002'}/api/box/provision`, {
+          const boxApiUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/box/provision`
+
+          const boxResponse = await fetch(boxApiUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -142,14 +144,9 @@ export async function PUT(
                 // box_subfolders: subfolderIds ? JSON.stringify(subfolderIds) : null
               })
               .eq('id', bid.projects.id)
-
-            console.log('Boxフォルダ作成完了:', { folderId, subfolderIds })
-          } else {
-            console.error('Boxフォルダ作成失敗:', await boxResponse.text())
           }
         }
       } catch (boxError) {
-        console.error('Boxフォルダ作成エラー:', boxError)
         // Box作成エラーは入札承認を妨げない
       }
 
@@ -192,7 +189,6 @@ export async function PUT(
         .single()
 
       if (updateError) {
-        console.error('入札拒否エラー:', updateError)
         return NextResponse.json(
           { message: '入札の拒否に失敗しました' },
           { status: 500 }
@@ -227,7 +223,6 @@ export async function PUT(
     }
 
   } catch (error) {
-    console.error('入札交渉エラー:', error)
     return NextResponse.json(
       { message: 'サーバーエラーが発生しました' },
       { status: 500 }

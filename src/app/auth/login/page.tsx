@@ -75,8 +75,14 @@ export default function LoginPage() {
   }
 
   const demoLogin = (role: 'admin' | 'orgadmin' | 'orgadmin2' | 'contractor' | 'contractor2' | 'reviewer') => {
+    const adminEmail = (process.env.NEXT_PUBLIC_ADMIN_EMAILS || 'admin@demo.com')
+      .split(',')
+      .map(e => e.trim())
+      .filter(Boolean)[0] || 'admin@demo.com'
+
     const demoCredentials = {
-      admin: { email: "admin@demo.com", password: "demo123" },
+      // 運営者デモは環境変数の先頭メール + 一時PW に合わせる
+      admin: { email: adminEmail, password: 'AdminDemo123!' },
       orgadmin: { email: "orgadmin@demo.com", password: "demo123" },
       orgadmin2: { email: "orgadmin2@demo.com", password: "demo123" },
       contractor: { email: "contractor@demo.com", password: "demo123" },

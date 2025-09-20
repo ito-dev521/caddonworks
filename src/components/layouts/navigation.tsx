@@ -28,7 +28,7 @@ import { useAuth } from "@/contexts/auth-context"
 import { supabase } from "@/lib/supabase"
 import { useRoleAccess } from "../auth/auth-guard"
 import { cn } from "@/lib/utils"
-// import { NotificationBell } from "../notifications/notification-bell"
+import { NotificationBell } from "../notifications/notification-bell"
 import { useNavigationBadges } from "@/hooks/use-navigation-badges"
 
 interface NavigationProps {
@@ -39,7 +39,8 @@ const getNavigationItems = (userRole: string, badges: any) => {
   const baseItems = {
     Admin: [
       { icon: Home, label: "ダッシュボード", href: "/dashboard", badge: null },
-      { icon: Users, label: "会員管理", href: "/admin/users", badge: null },
+      { icon: Users, label: "ユーザー管理", href: "/admin/users", badge: null },
+      { icon: FileText, label: "請求書管理", href: "/admin/invoices", badge: null },
       { icon: BarChart3, label: "統計・レポート", href: "/admin/reports", badge: null },
       { icon: Settings, label: "システム設定", href: "/admin/settings", badge: null },
     ],
@@ -204,7 +205,7 @@ export function Navigation({ userRole: propUserRole }: NavigationProps) {
               )}
             </motion.div>
             <div className="flex items-center gap-2">
-              {/* {isExpanded && <NotificationBell />} */}
+              <NotificationBell />
               <Button
                 variant="ghost"
                 size="icon"

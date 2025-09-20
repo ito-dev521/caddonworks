@@ -151,14 +151,39 @@ function CreateContractPageContent() {
     try {
       setIsCreating(true)
       const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-      
+
       if (sessionError || !session) {
         console.error('セッション取得エラー:', sessionError)
         setError('認証が必要です')
         return
       }
 
-      const response = await fetch('/api/contracts', {
+      // Step 1: 入札承認（Boxフォルダ作成含む）
+      console.log('🎯 Step 1: 入札承認処理開始')
+      const bidApprovalResponse = await fetch(`/api/bids/${bid.id}/negotiate`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          action: 'approve'
+        })
+      })
+
+      if (!bidApprovalResponse.ok) {
+        const bidApprovalError = await bidApprovalResponse.json()
+        console.error('入札承認エラー:', bidApprovalError)
+        setError(`入札承認に失敗しました: ${bidApprovalError.message || '不明なエラー'}`)
+        return
+      }
+
+      const bidApprovalResult = await bidApprovalResponse.json()
+      console.log('✅ 入札承認完了:', bidApprovalResult)
+
+      // Step 2: 契約作成
+      console.log('🎯 Step 2: 契約作成処理開始')
+      const contractResponse = await fetch('/api/contracts', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
@@ -178,16 +203,18 @@ function CreateContractPageContent() {
         })
       })
 
-      const result = await response.json()
+      const contractResult = await contractResponse.json()
 
-      if (response.ok) {
+      if (contractResponse.ok) {
+        console.log('✅ 契約作成完了:', contractResult)
         // 契約一覧ページに遷移
         router.push('/contracts')
       } else {
-        setError(result.message || '契約の作成に失敗しました')
+        console.error('契約作成エラー:', contractResult)
+        setError(contractResult.message || '契約の作成に失敗しました')
       }
     } catch (err: any) {
-      console.error('契約作成エラー:', err)
+      console.error('契約作成プロセスエラー:', err)
       setError('サーバーエラーが発生しました')
     } finally {
       setIsCreating(false)

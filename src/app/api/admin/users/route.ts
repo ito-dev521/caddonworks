@@ -58,24 +58,27 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ message: '運営者権限が必要です' }, { status: 403 })
     }
 
-    // 全ユーザー一覧を取得
-    const { data: users, error: usersError } = await supabaseAdmin
-      .from('users')
+    // 運営側（監督員）だけを表示: memberships経由でReviewerに限定
+    const { data: reviewerRows, error: usersError } = await supabaseAdmin
+      .from('memberships')
       .select(`
-        id,
-        email,
-        display_name,
-        specialties,
-        qualifications,
-        experience_years,
-        member_level,
-        formal_name,
-        phone_number,
-        address,
-        created_at,
-        updated_at
+        role,
+        users:users!inner(
+          id,
+          email,
+          display_name,
+          specialties,
+          qualifications,
+          experience_years,
+          member_level,
+          formal_name,
+          phone_number,
+          address,
+          created_at,
+          updated_at
+        )
       `)
-      .order('created_at', { ascending: false })
+      .eq('role', 'Reviewer')
 
     if (usersError) {
       console.error('ユーザー一覧取得エラー:', usersError)
@@ -85,9 +88,9 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    return NextResponse.json({
-      users: users || []
-    }, { status: 200 })
+    const users = (reviewerRows || []).map((row: any) => row.users)
+
+    return NextResponse.json({ users }, { status: 200 })
 
   } catch (error) {
     console.error('admin users API: サーバーエラー:', error)
