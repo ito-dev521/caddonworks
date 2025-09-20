@@ -61,7 +61,6 @@ export function AccessControlModal({ fileId, onClose }: AccessControlModalProps)
       action: "downloaded",
       timestamp: "2024-01-18T14:15:00Z",
       ip: "192.168.1.100",
-      device: "Windows PC",
       approved: true,
       approver: null
     },
@@ -71,7 +70,6 @@ export function AccessControlModal({ fileId, onClose }: AccessControlModalProps)
       action: "viewed",
       timestamp: "2024-01-18T11:30:00Z",
       ip: "192.168.1.101",
-      device: "MacBook",
       approved: true,
       approver: null
     },
@@ -81,7 +79,6 @@ export function AccessControlModal({ fileId, onClose }: AccessControlModalProps)
       action: "download_requested",
       timestamp: "2024-01-18T09:20:00Z",
       ip: "192.168.1.102",
-      device: "iPad",
       approved: false,
       approver: null
     },
@@ -91,7 +88,6 @@ export function AccessControlModal({ fileId, onClose }: AccessControlModalProps)
       action: "access_denied",
       timestamp: "2024-01-17T16:45:00Z",
       ip: "203.104.1.50",
-      device: "Unknown",
       approved: false,
       approver: null
     }
@@ -363,8 +359,7 @@ export function AccessControlModal({ fileId, onClose }: AccessControlModalProps)
                                   <span className="text-gray-600">{getActionLabel(entry.action)}</span>
                                 </div>
                                 <div className="text-sm text-gray-500">
-                                  {new Date(entry.timestamp).toLocaleString('ja-JP')} •
-                                  {entry.ip} • {entry.device}
+                                  {new Date(entry.timestamp).toLocaleString('ja-JP')} • {entry.ip}
                                 </div>
                               </div>
                             </div>
