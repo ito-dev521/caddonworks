@@ -69,13 +69,8 @@ export async function POST(
         id,
         title,
         status,
-        approver_id,
-        org_id,
-        users!projects_approver_id_fkey (
-          id,
-          display_name,
-          email
-        )
+        approver_ids,
+        org_id
       `)
       .eq('id', projectId)
       .single()
@@ -88,7 +83,7 @@ export async function POST(
     }
 
     // 承認者であることを確認
-    if (project.approver_id !== userProfile.id) {
+    if (!project.approver_ids || !Array.isArray(project.approver_ids) || !project.approver_ids.includes(userProfile.id)) {
       return NextResponse.json(
         { message: 'この案件の承認権限がありません' },
         { status: 403 }
@@ -137,7 +132,7 @@ export async function POST(
 
     const updateData: any = {
       status: newStatus,
-      approver_id: null // 承認後は承認者IDをクリア
+      approver_ids: null // 承認後は承認者IDをクリア
     }
 
     // BOXフォルダが作成された場合は追加

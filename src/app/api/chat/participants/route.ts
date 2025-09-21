@@ -84,7 +84,7 @@ export async function GET(request: NextRequest) {
       
       // created_byがない場合はnullを設定
       if (project) {
-        project.created_by = null
+        (project as any).created_by = null
       }
     }
 
@@ -115,7 +115,7 @@ export async function GET(request: NextRequest) {
       title: project.title,
       org_id: project.org_id,
       contractor_id: project.contractor_id,
-      created_by: project.created_by
+      created_by: (project as any).created_by
     })
 
     // アクセス権限をチェック
@@ -145,12 +145,12 @@ export async function GET(request: NextRequest) {
     }
 
     // プロジェクトの基本参加者を取得（作成者・担当者・受注者・サポート）
-    const basicParticipants = []
+    const basicParticipants: any[] = []
     console.log('チャット参加者取得 - 基本参加者の取得開始')
 
     // 1. プロジェクト作成者を追加
-    if (project.created_by) {
-      console.log('チャット参加者取得 - プロジェクト作成者を取得:', project.created_by)
+    if ((project as any).created_by) {
+      console.log('チャット参加者取得 - プロジェクト作成者を取得:', (project as any).created_by)
       const { data: creator } = await supabaseAdmin
         .from('users')
         .select(`
@@ -163,7 +163,7 @@ export async function GET(request: NextRequest) {
             role
           )
         `)
-        .eq('id', project.created_by)
+        .eq('id', (project as any).created_by)
         .eq('memberships.org_id', project.org_id)
         .single()
 
@@ -315,7 +315,7 @@ export async function GET(request: NextRequest) {
     //    - サポートメンバーの抽出: memberships.role IN ('Reviewer','Staff') のユーザー
     let supportNeeded = false
     try {
-      supportNeeded = !!project.support_enabled
+      supportNeeded = !!(project as any).support_enabled
     } catch (_) {
       supportNeeded = false
     }
@@ -369,7 +369,7 @@ export async function GET(request: NextRequest) {
       .single()
 
     // 招待された参加者を取得
-    let invitedParticipants = []
+    let invitedParticipants: any[] = []
     if (chatRoom) {
       const { data: chatParticipants, error: chatParticipantsError } = await supabaseAdmin
         .from('chat_participants')

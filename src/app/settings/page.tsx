@@ -19,7 +19,8 @@ import {
   CheckCircle,
   XCircle,
   ToggleLeft,
-  ToggleRight
+  ToggleRight,
+  FileText
 } from "lucide-react"
 import { Navigation } from "@/components/layouts/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -31,7 +32,6 @@ import { useAuth } from "@/contexts/auth-context"
 import { AuthGuard } from "@/components/auth/auth-guard"
 import { MEMBER_LEVELS, type MemberLevel } from "@/lib/member-level"
 import { supabase } from "@/lib/supabase"
-import { BoxAccountIntegration } from "@/components/settings/box-account-integration"
 
 interface OrganizationUser {
   id: string
@@ -64,6 +64,41 @@ interface OrganizationSettings {
   created_at: string
 }
 
+interface CompanyInfo {
+  id: string
+  name: string
+  postal_code: string
+  address: string
+  phone_number: string
+  representative_name: string
+  department?: string
+  position?: string
+  business_registration_number?: string
+  business_type?: string
+  updated_at: string
+}
+
+interface OrganizationRegistration {
+  id: string
+  organization_name: string
+  organization_type: string
+  tax_id?: string
+  address: string
+  phone: string
+  billing_email: string
+  website?: string
+  description?: string
+  admin_name: string
+  admin_email: string
+  admin_phone: string
+  admin_department?: string
+  system_fee: number
+  status: 'pending' | 'approved' | 'rejected'
+  submitted_at: string
+  reviewed_at?: string
+  reviewer_notes?: string
+}
+
 export default function SettingsPage() {
   return (
     <AuthGuard requiredRole="OrgAdmin">
@@ -84,6 +119,12 @@ function SettingsPageContent() {
   const [organizationDomain, setOrganizationDomain] = useState('')
   const [organizationSettings, setOrganizationSettings] = useState<OrganizationSettings | null>(null)
   const [isLoadingSettings, setIsLoadingSettings] = useState(false)
+  const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null)
+  const [isLoadingCompanyInfo, setIsLoadingCompanyInfo] = useState(false)
+  const [isEditingCompanyInfo, setIsEditingCompanyInfo] = useState(false)
+  const [editingCompanyInfo, setEditingCompanyInfo] = useState<Partial<CompanyInfo>>({})
+  const [registrationInfo, setRegistrationInfo] = useState<OrganizationRegistration | null>(null)
+  const [isLoadingRegistration, setIsLoadingRegistration] = useState(false)
 
   const [newUser, setNewUser] = useState<NewUserData>({
     email: '',
@@ -93,6 +134,7 @@ function SettingsPageContent() {
   })
 
   const [editingUser, setEditingUser] = useState<Partial<OrganizationUser>>({})
+  const [editingRole, setEditingRole] = useState<'OrgAdmin' | 'Contractor' | 'Staff'>('Contractor')
 
   // 組織のドメインを取得
   useEffect(() => {
@@ -128,61 +170,9 @@ function SettingsPageContent() {
     }
   }
 
-  // デバッグ: メンバーシップ情報を確認
-  const debugMemberships = async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      
-      if (!session) {
-        alert('セッションが見つかりません')
-        return
-      }
-
-      const response = await fetch('/api/debug-memberships', {
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json'
-        }
-      })
-
-      const data = await response.json()
-      console.log('デバッグ結果:', data)
-      alert('デバッグ結果をコンソールに出力しました')
-    } catch (error) {
-      console.error('デバッグエラー:', error)
-      alert('デバッグに失敗しました')
-    }
-  }
-
-  // デバッグ: メールアドレス不一致を確認
-  const debugUserEmails = async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      
-      if (!session) {
-        alert('セッションが見つかりません')
-        return
-      }
-
-      const response = await fetch('/api/debug-user-emails', {
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json'
-        }
-      })
-
-      const data = await response.json()
-      console.log('メールアドレス調査結果:', data)
-      alert('メールアドレス調査結果をコンソールに出力しました')
-    } catch (error) {
-      console.error('デバッグエラー:', error)
-      alert('デバッグに失敗しました')
-    }
-  }
-
   // 認証ユーザーを修正
   const fixAuthUser = async (userId: string) => {
-    if (!confirm('このユーザーの認証情報を修正しますか？新しいパスワードが生成されます。')) {
+    if (!confirm('このユーザーの認証情報を修正しますか？既存の場合はリセットメールを送信します。')) {
       return
     }
 
@@ -205,43 +195,34 @@ function SettingsPageContent() {
 
       if (!response.ok) {
         const errorData = await response.json()
+        // 既に認証ユーザーがある場合は、リセットメール送信にフォールバック
+        if (response.status === 400 && typeof errorData.message === 'string' && errorData.message.includes('既に認証ユーザーが設定されています')) {
+          const fallback = await fetch('/api/admin/users/send-reset-email', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${session.access_token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ userId })
+          })
+          const fbData = await fallback.json()
+          if (!fallback.ok) {
+            throw new Error(fbData.message || 'リセットメール送信に失敗しました')
+          }
+          alert('既存の認証ユーザーがあるため、リセットメールを送信しました')
+          return
+        }
         throw new Error(errorData.message || '認証ユーザーの修正に失敗しました')
       }
 
       const data = await response.json()
       fetchUsers()
-      alert(`認証ユーザーが修正されました。新しいパスワード: ${data.password}`)
+      alert(`認証ユーザーを作成しました。新しいパスワード: ${data.password}`)
     } catch (error) {
       console.error('認証ユーザー修正エラー:', error)
       alert(error instanceof Error ? error.message : '認証ユーザーの修正に失敗しました')
     } finally {
       setIsSaving(false)
-    }
-  }
-
-  // 組織メールアドレスを調査
-  const debugOrganizationEmail = async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      
-      if (!session) {
-        alert('セッションが見つかりません')
-        return
-      }
-
-      const response = await fetch('/api/debug-organization-email', {
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json'
-        }
-      })
-
-      const data = await response.json()
-      console.log('組織メールアドレス調査結果:', data)
-      alert('組織メールアドレス調査結果をコンソールに出力しました')
-    } catch (error) {
-      console.error('デバッグエラー:', error)
-      alert('デバッグに失敗しました')
     }
   }
 
@@ -282,7 +263,7 @@ function SettingsPageContent() {
     try {
       setIsSaving(true)
       const { data: { session } } = await supabase.auth.getSession()
-      
+
       if (!session) {
         throw new Error('セッションが見つかりません')
       }
@@ -312,6 +293,127 @@ function SettingsPageContent() {
     }
   }
 
+  // 会社情報を取得
+  const fetchCompanyInfo = async () => {
+    try {
+      setIsLoadingCompanyInfo(true)
+      const { data: { session } } = await supabase.auth.getSession()
+
+      if (!session) {
+        throw new Error('セッションが見つかりません')
+      }
+
+      const response = await fetch('/api/organization/profile', {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        if (response.status === 404) {
+          setCompanyInfo(null)
+          return
+        }
+        throw new Error(errorData.message || '会社情報の取得に失敗しました')
+      }
+
+      const data = await response.json()
+      setCompanyInfo(data.organization)
+    } catch (error) {
+      console.error('会社情報取得エラー:', error)
+      alert(error instanceof Error ? error.message : '会社情報の取得に失敗しました')
+    } finally {
+      setIsLoadingCompanyInfo(false)
+    }
+  }
+
+  // 会社情報を更新
+  const updateCompanyInfo = async () => {
+    try {
+      setIsSaving(true)
+      const { data: { session } } = await supabase.auth.getSession()
+
+      if (!session) {
+        throw new Error('セッションが見つかりません')
+      }
+
+      const response = await fetch('/api/organization/profile', {
+        method: companyInfo ? 'PUT' : 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(editingCompanyInfo)
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || '会社情報の更新に失敗しました')
+      }
+
+      const data = await response.json()
+      setCompanyInfo(data.organization)
+      setIsEditingCompanyInfo(false)
+      setEditingCompanyInfo({})
+      alert('会社情報が更新されました')
+    } catch (error) {
+      console.error('会社情報更新エラー:', error)
+      alert(error instanceof Error ? error.message : '会社情報の更新に失敗しました')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  // 編集開始
+  const startEditingCompanyInfo = () => {
+    setEditingCompanyInfo(companyInfo || {})
+    setIsEditingCompanyInfo(true)
+  }
+
+  // 編集キャンセル
+  const cancelEditingCompanyInfo = () => {
+    setEditingCompanyInfo({})
+    setIsEditingCompanyInfo(false)
+  }
+
+  // 組織登録申請情報を取得
+  const fetchRegistrationInfo = async () => {
+    try {
+      setIsLoadingRegistration(true)
+      const { data: { session } } = await supabase.auth.getSession()
+
+      if (!session) {
+        throw new Error('セッションが見つかりません')
+      }
+
+      const response = await fetch('/api/organization/registration', {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        if (response.status === 404) {
+          setRegistrationInfo(null)
+          return
+        }
+        throw new Error(errorData.message || '組織登録申請情報の取得に失敗しました')
+      }
+
+      const data = await response.json()
+      setRegistrationInfo(data.registration)
+    } catch (error) {
+      console.error('組織登録申請情報取得エラー:', error)
+      // エラーはコンソールに記録するが、UIには表示しない（404の場合は正常）
+    } finally {
+      setIsLoadingRegistration(false)
+    }
+  }
+
   // ユーザー一覧を取得
   const fetchUsers = async () => {
     try {
@@ -335,7 +437,6 @@ function SettingsPageContent() {
 
       if (!response.ok) {
         const errorData = await response.json()
-        console.error('ユーザー一覧取得エラー詳細:', errorData)
         throw new Error(errorData.message || 'ユーザー一覧の取得に失敗しました')
       }
 
@@ -431,7 +532,8 @@ function SettingsPageContent() {
         body: JSON.stringify({
           userId: editingUserId,
           display_name: editingUser.display_name,
-          formal_name: editingUser.formal_name
+          formal_name: editingUser.formal_name,
+          newRole: editingRole
         })
       })
 
@@ -507,6 +609,8 @@ function SettingsPageContent() {
   useEffect(() => {
     fetchUsers()
     fetchOrganizationSettings()
+    fetchCompanyInfo()
+    fetchRegistrationInfo()
   }, [])
 
   if (loading || isLoading) {
@@ -543,6 +647,155 @@ function SettingsPageContent() {
             </p>
           </div>
 
+          {/* 組織登録申請情報 */}
+          {registrationInfo && (
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="w-5 h-5" />
+                  組織登録申請情報
+                </CardTitle>
+                <CardDescription>
+                  組織登録時に申請した情報です
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {isLoadingRegistration ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="md:col-span-2">
+                        <div className="flex items-center justify-between mb-4">
+                          <div>
+                            <h3 className="text-lg font-semibold text-gray-900">{registrationInfo.organization_name}</h3>
+                            <p className="text-sm text-gray-600">{registrationInfo.organization_type}</p>
+                          </div>
+                          <Badge
+                            variant={
+                              registrationInfo.status === 'approved' ? 'default' :
+                              registrationInfo.status === 'pending' ? 'secondary' :
+                              'destructive'
+                            }
+                            className={
+                              registrationInfo.status === 'approved' ? 'bg-green-100 text-green-800' :
+                              registrationInfo.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-red-100 text-red-800'
+                            }
+                          >
+                            {registrationInfo.status === 'approved' ? '承認済み' :
+                             registrationInfo.status === 'pending' ? '審査中' :
+                             '却下'}
+                          </Badge>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">法人番号</label>
+                        <p className="text-gray-900">{registrationInfo.tax_id || '未設定'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">電話番号</label>
+                        <p className="text-gray-900">{registrationInfo.phone}</p>
+                      </div>
+
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">住所</label>
+                        <p className="text-gray-900">{registrationInfo.address}</p>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">請求先メール</label>
+                        <p className="text-gray-900">{registrationInfo.billing_email}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">ウェブサイト</label>
+                        <p className="text-gray-900">{registrationInfo.website || '未設定'}</p>
+                      </div>
+
+                      {registrationInfo.description && (
+                        <div className="md:col-span-2">
+                          <label className="block text-sm font-medium text-gray-700 mb-1">事業内容</label>
+                          <p className="text-gray-900">{registrationInfo.description}</p>
+                        </div>
+                      )}
+
+                      <div className="md:col-span-2 border-t border-gray-200 pt-4">
+                        <h4 className="font-medium text-gray-900 mb-3">管理者情報</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">管理者名</label>
+                            <p className="text-gray-900">{registrationInfo.admin_name}</p>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">管理者メール</label>
+                            <p className="text-gray-900">{registrationInfo.admin_email}</p>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">管理者電話</label>
+                            <p className="text-gray-900">{registrationInfo.admin_phone}</p>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">部署</label>
+                            <p className="text-gray-900">{registrationInfo.admin_department || '未設定'}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="md:col-span-2 border-t border-gray-200 pt-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">システム利用料</label>
+                            <p className="text-gray-900 font-semibold">¥{registrationInfo.system_fee.toLocaleString()}/月</p>
+                          </div>
+                          <div className="text-right">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">申請日時</label>
+                            <p className="text-sm text-gray-500">
+                              {new Date(registrationInfo.submitted_at).toLocaleDateString('ja-JP', {
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </p>
+                          </div>
+                        </div>
+
+                        {registrationInfo.reviewed_at && (
+                          <div className="mt-4 pt-3 border-t border-gray-100">
+                            <div className="flex items-center justify-between">
+                              <label className="block text-sm font-medium text-gray-700 mb-1">審査完了日時</label>
+                              <p className="text-sm text-gray-500">
+                                {new Date(registrationInfo.reviewed_at).toLocaleDateString('ja-JP', {
+                                  year: 'numeric',
+                                  month: 'long',
+                                  day: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </p>
+                            </div>
+                            {registrationInfo.reviewer_notes && (
+                              <div className="mt-2">
+                                <label className="block text-sm font-medium text-gray-700 mb-1">審査メモ</label>
+                                <p className="text-sm text-gray-600 bg-gray-50 rounded-lg p-3">
+                                  {registrationInfo.reviewer_notes}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {/* ドメイン情報 */}
           <Card className="mb-6">
             <CardHeader>
@@ -561,6 +814,217 @@ function SettingsPageContent() {
               <p className="text-xs text-gray-500 mt-2">
                 新規ユーザーはこのドメインのメールアドレスでのみ登録できます
               </p>
+            </CardContent>
+          </Card>
+
+          {/* 会社情報セクション */}
+          <Card className="mb-6">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Building className="w-5 h-5" />
+                    会社情報
+                  </CardTitle>
+                  <CardDescription>
+                    組織の詳細情報を管理します
+                  </CardDescription>
+                </div>
+                {!isEditingCompanyInfo && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={startEditingCompanyInfo}
+                    className="bg-engineering-blue text-white hover:bg-engineering-blue/90"
+                  >
+                    <Edit className="w-4 h-4 mr-2" />
+                    {companyInfo ? '編集' : '登録'}
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              {isLoadingCompanyInfo ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {isEditingCompanyInfo ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="md:col-span-2">
+                        <Label htmlFor="company_name">会社名 *</Label>
+                        <Input
+                          id="company_name"
+                          value={editingCompanyInfo.name || ''}
+                          onChange={(e) => setEditingCompanyInfo({ ...editingCompanyInfo, name: e.target.value })}
+                          placeholder="株式会社○○"
+                          className="mt-1"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="postal_code">郵便番号 *</Label>
+                        <Input
+                          id="postal_code"
+                          value={editingCompanyInfo.postal_code || ''}
+                          onChange={(e) => setEditingCompanyInfo({ ...editingCompanyInfo, postal_code: e.target.value })}
+                          placeholder="123-4567"
+                          className="mt-1"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="phone_number">電話番号 *</Label>
+                        <Input
+                          id="phone_number"
+                          value={editingCompanyInfo.phone_number || ''}
+                          onChange={(e) => setEditingCompanyInfo({ ...editingCompanyInfo, phone_number: e.target.value })}
+                          placeholder="03-1234-5678"
+                          className="mt-1"
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <Label htmlFor="address">住所 *</Label>
+                        <Input
+                          id="address"
+                          value={editingCompanyInfo.address || ''}
+                          onChange={(e) => setEditingCompanyInfo({ ...editingCompanyInfo, address: e.target.value })}
+                          placeholder="東京都○○区○○ 1-2-3"
+                          className="mt-1"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="representative_name">管理者名 *</Label>
+                        <Input
+                          id="representative_name"
+                          value={editingCompanyInfo.representative_name || ''}
+                          onChange={(e) => setEditingCompanyInfo({ ...editingCompanyInfo, representative_name: e.target.value })}
+                          placeholder="田中 太郎"
+                          className="mt-1"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="department">部署</Label>
+                        <Input
+                          id="department"
+                          value={editingCompanyInfo.department || ''}
+                          onChange={(e) => setEditingCompanyInfo({ ...editingCompanyInfo, department: e.target.value })}
+                          placeholder="技術部"
+                          className="mt-1"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="position">役職</Label>
+                        <Input
+                          id="position"
+                          value={editingCompanyInfo.position || ''}
+                          onChange={(e) => setEditingCompanyInfo({ ...editingCompanyInfo, position: e.target.value })}
+                          placeholder="部長"
+                          className="mt-1"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="business_registration_number">法人番号</Label>
+                        <Input
+                          id="business_registration_number"
+                          value={editingCompanyInfo.business_registration_number || ''}
+                          onChange={(e) => setEditingCompanyInfo({ ...editingCompanyInfo, business_registration_number: e.target.value })}
+                          placeholder="1234567890123"
+                          className="mt-1"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="business_type">事業内容</Label>
+                        <Input
+                          id="business_type"
+                          value={editingCompanyInfo.business_type || ''}
+                          onChange={(e) => setEditingCompanyInfo({ ...editingCompanyInfo, business_type: e.target.value })}
+                          placeholder="土木設計・建設コンサルタント"
+                          className="mt-1"
+                        />
+                      </div>
+                      <div className="md:col-span-2 flex justify-end gap-3 pt-4">
+                        <Button
+                          variant="outline"
+                          onClick={cancelEditingCompanyInfo}
+                          disabled={isSaving}
+                        >
+                          <X className="w-4 h-4 mr-2" />
+                          キャンセル
+                        </Button>
+                        <Button
+                          onClick={updateCompanyInfo}
+                          disabled={isSaving || !editingCompanyInfo.name || !editingCompanyInfo.postal_code || !editingCompanyInfo.address || !editingCompanyInfo.phone_number || !editingCompanyInfo.representative_name}
+                          className="bg-engineering-green hover:bg-engineering-green/90"
+                        >
+                          <Save className="w-4 h-4 mr-2" />
+                          {isSaving ? '保存中...' : '保存'}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : companyInfo ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">会社名</label>
+                        <p className="text-gray-900 font-medium">{companyInfo.name}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">郵便番号</label>
+                        <p className="text-gray-900">{companyInfo.postal_code}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">電話番号</label>
+                        <p className="text-gray-900">{companyInfo.phone_number}</p>
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">住所</label>
+                        <p className="text-gray-900">{companyInfo.address}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">管理者名</label>
+                        <p className="text-gray-900">{companyInfo.representative_name}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">部署</label>
+                        <p className="text-gray-900">{companyInfo.department || '未設定'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">役職</label>
+                        <p className="text-gray-900">{companyInfo.position || '未設定'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">法人番号</label>
+                        <p className="text-gray-900">{companyInfo.business_registration_number || '未設定'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">事業内容</label>
+                        <p className="text-gray-900">{companyInfo.business_type || '未設定'}</p>
+                      </div>
+                      <div className="md:col-span-2 pt-2 border-t border-gray-200">
+                        <p className="text-sm text-gray-500">
+                          最終更新: {new Date(companyInfo.updated_at).toLocaleDateString('ja-JP')}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <Building className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">
+                        会社情報が未登録です
+                      </h3>
+                      <p className="text-gray-500 mb-4">
+                        会社の基本情報を登録してください
+                      </p>
+                      <Button
+                        onClick={startEditingCompanyInfo}
+                        className="bg-engineering-blue hover:bg-engineering-blue/90"
+                      >
+                        <Building className="w-4 h-4 mr-2" />
+                        会社情報を登録
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -631,24 +1095,6 @@ function SettingsPageContent() {
             </CardContent>
           </Card>
 
-          {/* BOXアカウント連携セクション */}
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <svg className="w-5 h-5 text-blue-600" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M7.5 1L2 5.5V12L7.5 16.5L13 12V5.5L7.5 1ZM7.5 3.8L10.2 5.5V10.5L7.5 12.2L4.8 10.5V5.5L7.5 3.8Z"/>
-                  <path d="M15 9L22 5V12L15 16L8 12V19L15 23L22 19V12L15 16V9Z"/>
-                </svg>
-                BOXアカウント連携
-              </CardTitle>
-              <CardDescription>
-                BOXアカウントを連携してファイル共有機能を利用できます
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <BoxAccountIntegration />
-            </CardContent>
-          </Card>
 
           {/* ユーザー管理セクション */}
           <Card className="mb-6">
@@ -670,27 +1116,6 @@ function SettingsPageContent() {
                   >
                     <UserPlus className="w-4 h-4 mr-2" />
                     新規ユーザー
-                  </Button>
-                  <Button
-                    onClick={debugMemberships}
-                    variant="outline"
-                    size="sm"
-                  >
-                    デバッグ
-                  </Button>
-                  <Button
-                    onClick={debugUserEmails}
-                    variant="outline"
-                    size="sm"
-                  >
-                    メール調査
-                  </Button>
-                  <Button
-                    onClick={debugOrganizationEmail}
-                    variant="outline"
-                    size="sm"
-                  >
-                    組織調査
                   </Button>
                 </div>
               </div>
@@ -776,6 +1201,7 @@ function SettingsPageContent() {
                                   display_name: user.display_name,
                                   formal_name: user.formal_name
                                 })
+                                setEditingRole(user.role)
                               }}
                             >
                               <Edit className="w-4 h-4" />
@@ -801,6 +1227,39 @@ function SettingsPageContent() {
                                 >
                                   🔧
                                 </Button>
+                                {(!(process.env.NEXT_PUBLIC_ENV === 'production' || process.env.NODE_ENV === 'production')) && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-orange-600 hover:text-orange-700"
+                                    disabled={isSaving}
+                                    title="即時再発行(表示)"
+                                    onClick={async () => {
+                                      try {
+                                        const ok = confirm('即時に新しいパスワードを発行して表示します。よろしいですか？')
+                                        if (!ok) return
+                                        const { data: { session } } = await supabase.auth.getSession()
+                                        if (!session) throw new Error('セッションが見つかりません')
+                                        const res = await fetch('/api/admin/users/reset-password', {
+                                          method: 'POST',
+                                          headers: {
+                                            'Authorization': `Bearer ${session.access_token}`,
+                                            'Content-Type': 'application/json'
+                                          },
+                                          body: JSON.stringify({ userId: user.id })
+                                        })
+                                        const data = await res.json()
+                                        if (!res.ok) throw new Error(data.message || '再発行に失敗しました')
+                                        alert(`新しいパスワード: ${data.newPassword}`)
+                                      } catch (e: any) {
+                                        console.error('即時再発行失敗:', e)
+                                        alert(e.message || '再発行に失敗しました')
+                                      }
+                                    }}
+                                  >
+                                    <Key className="w-4 h-4" />
+                                  </Button>
+                                )}
                               </>
                             )}
                           </div>
@@ -951,6 +1410,20 @@ function SettingsPageContent() {
                   onChange={(e) => setEditingUser({ ...editingUser, formal_name: e.target.value })}
                   className="mt-1"
                 />
+              </div>
+
+              <div>
+                <Label htmlFor="edit_role">役割</Label>
+                <select
+                  id="edit_role"
+                  value={editingRole}
+                  onChange={(e) => setEditingRole(e.target.value as any)}
+                  className="w-full mt-1 px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
+                >
+                  <option value="OrgAdmin">管理者</option>
+                  <option value="Staff">スタッフ</option>
+                  <option value="Contractor">一般ユーザー（受注者）</option>
+                </select>
               </div>
 
             </div>

@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@/contexts/auth-context'
+import { supabase } from '@/lib/supabase'
 import {
   CheckCircle,
   XCircle,
@@ -22,13 +23,14 @@ interface BoxAccountStatus {
 }
 
 export function BoxAccountIntegration() {
-  const { session } = useAuth()
+  const { user } = useAuth()
   const [boxStatus, setBoxStatus] = useState<BoxAccountStatus>({ isLinked: false })
   const [isLoading, setIsLoading] = useState(true)
   const [isConnecting, setIsConnecting] = useState(false)
 
   // BOXアカウント状態を取得
   const fetchBoxStatus = async () => {
+    const { data: { session } } = await supabase.auth.getSession()
     if (!session?.access_token) return
 
     try {
@@ -51,6 +53,7 @@ export function BoxAccountIntegration() {
 
   // BOX OAuth認証を開始
   const connectBoxAccount = async (accountType: 'new' | 'existing') => {
+    const { data: { session } } = await supabase.auth.getSession()
     if (!session?.access_token) return
 
     setIsConnecting(true)
@@ -97,7 +100,7 @@ export function BoxAccountIntegration() {
       // URLからパラメータを削除
       window.history.replaceState({}, '', window.location.pathname)
     }
-  }, [session])
+  }, [])
 
   if (isLoading) {
     return (

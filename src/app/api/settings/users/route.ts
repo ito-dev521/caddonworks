@@ -271,7 +271,7 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
-    const { userId, display_name, formal_name } = body
+    const { userId, display_name, formal_name, newRole } = body as { userId: string; display_name?: string; formal_name?: string; newRole?: 'OrgAdmin' | 'Staff' | 'Contractor' }
 
     if (!userId) {
       return NextResponse.json({ message: 'ユーザーIDが必要です' }, { status: 400 })
@@ -326,6 +326,31 @@ export async function PUT(request: NextRequest) {
     if (updateError) {
       console.error('ユーザー更新エラー:', updateError)
       return NextResponse.json({ message: 'ユーザー情報の更新に失敗しました' }, { status: 500 })
+    }
+
+    // 役割変更（任意）
+    if (newRole) {
+      // 対象ユーザーの現在の membership を取得
+      const { data: targetMembership } = await supabaseAdmin
+        .from('memberships')
+        .select('id, org_id, role')
+        .eq('user_id', userId)
+        .maybeSingle()
+
+      const orgId = memberships.find(m => m.role === 'OrgAdmin')?.org_id
+      if (orgId) {
+        if (targetMembership) {
+          await supabaseAdmin
+            .from('memberships')
+            .update({ role: newRole })
+            .eq('user_id', userId)
+            .eq('org_id', orgId)
+        } else {
+          await supabaseAdmin
+            .from('memberships')
+            .insert({ user_id: userId, org_id: orgId, role: newRole })
+        }
+      }
     }
 
     return NextResponse.json({ message: 'ユーザー情報が正常に更新されました' }, { status: 200 })

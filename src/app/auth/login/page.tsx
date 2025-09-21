@@ -28,15 +28,20 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)
 
   const { signIn, getRedirectPath, userRole, loading } = useAuth()
+
+  // デバッグ情報をコンソールに出力
+  useEffect(() => {
+    console.log('LoginPage: 認証状態', { userRole, loading })
+  }, [userRole, loading])
   const router = useRouter()
 
   // 認証状態の変更を監視してリダイレクト
   useEffect(() => {
     if (!loading && userRole && success) {
-      
+
       // ユーザーロールに基づいてリダイレクト先を決定
       const redirectPath = getRedirectPath()
-      
+
       // セッションストレージに保存されたリダイレクト先を確認
       const savedRedirect = sessionStorage.getItem('redirectAfterLogin')
       if (savedRedirect && savedRedirect !== '/auth/login') {
@@ -46,7 +51,16 @@ export default function LoginPage() {
         router.push(redirectPath)
       }
     }
-  }, [userRole, loading, success])
+  }, [userRole, loading, success, router, getRedirectPath])
+
+  // 既にログイン済みユーザーの自動リダイレクトを防ぐ
+  useEffect(() => {
+    if (!loading && userRole && !success) {
+      console.log('LoginPage: 既にログイン済みユーザーを検出、リダイレクトします')
+      const redirectPath = getRedirectPath()
+      router.push(redirectPath)
+    }
+  }, [userRole, loading, success, router, getRedirectPath])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -99,7 +113,7 @@ export default function LoginPage() {
       <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
         {/* Left Side - Branding */}
         <motion.div
-          initial={{ opacity: 0, x: -50 }}
+          initial={{ opacity: 1, x: 0 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.8 }}
           className="hidden lg:block"
@@ -206,7 +220,7 @@ export default function LoginPage() {
 
         {/* Right Side - Login Form */}
         <motion.div
-          initial={{ opacity: 0, x: 50 }}
+          initial={{ opacity: 1, x: 0 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.8, delay: 0.2 }}
         >

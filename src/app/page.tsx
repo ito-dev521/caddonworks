@@ -1,8 +1,9 @@
 "use client"
 
-import React from "react"
+import React, { useEffect } from "react"
 import { motion } from "framer-motion"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import {
   ArrowRight,
   Shield,
@@ -18,8 +19,18 @@ import {
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { useAuth } from "@/contexts/auth-context"
 
 export default function LandingPage() {
+  const { userRole, loading, getRedirectPath } = useAuth()
+  const router = useRouter()
+
+  useEffect(() => {
+    if (!loading && userRole) {
+      const redirectPath = getRedirectPath()
+      router.push(redirectPath)
+    }
+  }, [userRole, loading, router, getRedirectPath])
   const features = [
     {
       icon: <Shield className="w-8 h-8" />,

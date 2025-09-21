@@ -150,6 +150,7 @@ function CreateContractPageContent() {
 
     try {
       setIsCreating(true)
+      setError(null) // エラーをクリア
       const { data: { session }, error: sessionError } = await supabase.auth.getSession()
 
       if (sessionError || !session) {
@@ -158,18 +159,27 @@ function CreateContractPageContent() {
         return
       }
 
-      // Step 1: 入札承認（Boxフォルダ作成含む）
+      // Step 1: 入札承認（Boxフォルダ作成は別途実行）
       console.log('🎯 Step 1: 入札承認処理開始')
-      const bidApprovalResponse = await fetch(`/api/bids/${bid.id}/negotiate`, {
+
+      // タイムアウト付きで入札承認を実行
+      const bidApprovalPromise = fetch(`/api/bids/${bid.id}/negotiate`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          action: 'approve'
+          action: 'approve',
+          skip_box_creation: false // BOXフォルダ作成を有効化
         })
       })
+
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('入札承認処理がタイムアウトしました')), 10000) // 10秒でタイムアウト
+      })
+
+      const bidApprovalResponse = await Promise.race([bidApprovalPromise, timeoutPromise]) as Response
 
       if (!bidApprovalResponse.ok) {
         const bidApprovalError = await bidApprovalResponse.json()

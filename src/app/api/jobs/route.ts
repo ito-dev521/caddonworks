@@ -173,9 +173,9 @@ export async function GET(request: NextRequest) {
     const awardedJobs = []
     const declinedProjectIds = []
     
-    for (const [projectId, contracts] of projectContractsMap) {
+    for (const [projectId, contracts] of Array.from(projectContractsMap.entries())) {
       // 契約を作成日時でソートして最新を取得
-      const sortedContracts = contracts.sort((a, b) => {
+      const sortedContracts = contracts.sort((a: any, b: any) => {
         const aTime = new Date(a.updated_at || a.created_at).getTime()
         const bTime = new Date(b.updated_at || b.created_at).getTime()
         return bTime - aTime
@@ -239,7 +239,7 @@ export async function GET(request: NextRequest) {
     // 辞退した案件のIDを収集
     const allDeclinedProjectIds = [
       ...declinedProjectIds.map((id: any) => String(id)), // 契約辞退した案件（最新ステータスベース）
-      ...declinedJobs.map(job => String(job.id)) // 優先依頼で辞退した案件
+      ...declinedJobs.map((job: any) => String(job.id)) // 優先依頼で辞退した案件
     ]
     
     // 入札可能な案件から辞退した案件を除外

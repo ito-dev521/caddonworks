@@ -36,24 +36,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fetchingRef = useRef<string | null>(null)
 
   useEffect(() => {
+    let mounted = true
+
     // Get initial session
     const getInitialSession = async () => {
       try {
         const { data: { session }, error } = await supabase.auth.getSession()
-        
+
+        if (!mounted) return
+
         if (error) {
           console.error('AuthProvider: セッション取得エラー:', error)
           setLoading(false)
           return
         }
 
-        
         setUser(session?.user ?? null)
 
         if (session?.user && session?.access_token) {
           // setTimeoutで次のイベントループで実行（React Strict Mode対策）
           setTimeout(() => {
-            fetchUserProfile(session.user.id)
+            if (mounted) {
+              fetchUserProfile(session.user.id)
+            }
           }, 0)
         } else {
           setLoading(false)
@@ -61,11 +66,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (error) {
         console.error('AuthProvider: 初期化エラー:', error)
         // エラーが発生してもローディング状態を解除
-        setUser(null)
-        setUserProfile(null)
-        setUserRole(null)
-        setUserOrganization(null)
-        setLoading(false)
+        if (mounted) {
+          setUser(null)
+          setUserProfile(null)
+          setUserRole(null)
+          setUserOrganization(null)
+          setLoading(false)
+        }
       }
     }
 
@@ -95,7 +102,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     )
 
-    return () => subscription.unsubscribe()
+    return () => {
+      mounted = false
+      subscription.unsubscribe()
+    }
   }, []) // fetchUserProfileを依存配列から削除
 
   const fetchUserProfile = async (authUserId: string) => {

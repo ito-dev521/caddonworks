@@ -66,7 +66,7 @@ function AdminUsersPageContent() {
         <div className="container mx-auto px-4 py-8">
           <div className="text-center">
             <h1 className="text-2xl font-bold text-gray-900 mb-4">アクセス拒否</h1>
-            <p className="text-gray-600">このページにアクセスするには運営者権限が必要です。</p>
+            <p className="text-gray-600">このページにアクセスするには管理者権限が必要です。</p>
           </div>
         </div>
       </div>
@@ -322,6 +322,66 @@ function AdminUsersPageContent() {
                               >
                                 <Edit className="w-4 h-4" />
                               </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-red-600 border-red-300 hover:bg-red-50"
+                                onClick={async () => {
+                                  try {
+                                    const ok = confirm(`選択ユーザーのパスワードをリセットします。よろしいですか？`)
+                                    if (!ok) return
+                                    const { data: { session } } = await supabase.auth.getSession()
+                                    if (!session) throw new Error('セッションが見つかりません')
+                                    const res = await fetch('/api/admin/users/send-reset-email', {
+                                      method: 'POST',
+                                      headers: {
+                                        'Authorization': `Bearer ${session.access_token}`,
+                                        'Content-Type': 'application/json'
+                                      },
+                                      body: JSON.stringify({ userId: user.id })
+                                    })
+                                    const data = await res.json()
+                                    if (!res.ok) throw new Error(data.message || 'メール送信に失敗しました')
+                                    alert('リセットメールを送信しました')
+                                  } catch (e: any) {
+                                    console.error('パスワードリセット失敗:', e)
+                                    alert(e.message || 'パスワードリセットに失敗しました')
+                                  }
+                                }}
+                              >
+                                リセットメール送信
+                              </Button>
+                              {(!(process.env.NEXT_PUBLIC_ENV === 'production' || process.env.NODE_ENV === 'production')) && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-orange-600 border-orange-300 hover:bg-orange-50"
+                                  onClick={async () => {
+                                    try {
+                                      const ok = confirm('即時に新しいパスワードを発行して表示します（メールは送信しません）。よろしいですか？')
+                                      if (!ok) return
+                                      const { data: { session } } = await supabase.auth.getSession()
+                                      if (!session) throw new Error('セッションが見つかりません')
+                                      const res = await fetch('/api/admin/users/reset-password', {
+                                        method: 'POST',
+                                        headers: {
+                                          'Authorization': `Bearer ${session.access_token}`,
+                                          'Content-Type': 'application/json'
+                                        },
+                                        body: JSON.stringify({ userId: user.id })
+                                      })
+                                      const data = await res.json()
+                                      if (!res.ok) throw new Error(data.message || '再発行に失敗しました')
+                                      alert(`新しいパスワード: ${data.newPassword}`)
+                                    } catch (e: any) {
+                                      console.error('即時再発行失敗:', e)
+                                      alert(e.message || '再発行に失敗しました')
+                                    }
+                                  }}
+                                >
+                                  即時再発行(表示)
+                                </Button>
+                              )}
                             </div>
                           )}
                         </div>

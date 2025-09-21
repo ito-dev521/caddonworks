@@ -230,6 +230,12 @@ export async function PUT(
       // ステータスが提供されている場合は追加
       if (status) {
         updateData.status = status
+
+        // ステータスが完了系に変更された場合、完了日時を設定
+        if (['completed', 'cancelled', 'archived'].includes(status) &&
+            !['completed', 'cancelled', 'archived'].includes(project.status)) {
+          updateData.completed_at = new Date().toISOString()
+        }
       }
     }
 
@@ -297,6 +303,138 @@ export async function PUT(
 
   } catch (error) {
     console.error('案件更新APIエラー:', error)
+    return NextResponse.json(
+      { message: 'サーバーエラーが発生しました' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const projectId = params.id
+
+    if (!projectId) {
+      return NextResponse.json({ message: '案件IDが必要です' }, { status: 400 })
+    }
+
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader) {
+      return NextResponse.json({ message: '認証が必要です' }, { status: 401 })
+    }
+
+    const token = authHeader.replace('Bearer ', '')
+
+    // Supabaseクライアントを作成
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false
+        }
+      }
+    )
+
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
+
+    if (authError || !user) {
+      return NextResponse.json({ message: '認証に失敗しました' }, { status: 401 })
+    }
+
+    // ユーザープロフィールを取得
+    const { data: userProfile, error: userProfileError } = await supabaseAdmin
+      .from('users')
+      .select('id')
+      .eq('auth_user_id', user.id)
+      .single()
+
+    if (userProfileError || !userProfile) {
+      return NextResponse.json({ message: 'ユーザープロフィールが見つかりません' }, { status: 403 })
+    }
+
+    // 案件の存在確認と権限チェック
+    const { data: project, error: projectError } = await supabaseAdmin
+      .from('projects')
+      .select('*')
+      .eq('id', projectId)
+      .single()
+
+    if (projectError || !project) {
+      return NextResponse.json({ message: '案件が見つかりません' }, { status: 404 })
+    }
+
+    // ユーザーのロールを確認
+    const { data: membership, error: membershipError } = await supabaseAdmin
+      .from('memberships')
+      .select('role, org_id')
+      .eq('user_id', userProfile.id)
+      .single()
+
+    if (membershipError || !membership) {
+      return NextResponse.json({ message: '組織情報が見つかりません' }, { status: 403 })
+    }
+
+    // 権限チェック（OrgAdminかつ同じ組織のみ削除可能）
+    const isOrgAdmin = membership.role === 'OrgAdmin' && project.org_id === membership.org_id
+
+    if (!isOrgAdmin) {
+      return NextResponse.json({ message: 'この案件を削除する権限がありません' }, { status: 403 })
+    }
+
+    // 案件の状態チェック（進行中の案件は削除不可）
+    if (['active', 'contract_pending', 'in_progress'].includes(project.status)) {
+      return NextResponse.json({
+        message: '進行中の案件は削除できません。先に案件を完了またはキャンセルしてください。'
+      }, { status: 400 })
+    }
+
+    // 関連データを確認（入札や契約がある場合は削除を制限）
+    const { data: bids } = await supabaseAdmin
+      .from('bids')
+      .select('id')
+      .eq('project_id', projectId)
+      .limit(1)
+
+    const { data: contracts } = await supabaseAdmin
+      .from('contracts')
+      .select('id')
+      .eq('project_id', projectId)
+      .limit(1)
+
+    if (bids && bids.length > 0) {
+      return NextResponse.json({
+        message: '入札が存在する案件は削除できません。'
+      }, { status: 400 })
+    }
+
+    if (contracts && contracts.length > 0) {
+      return NextResponse.json({
+        message: '契約が存在する案件は削除できません。'
+      }, { status: 400 })
+    }
+
+    // 案件を削除
+    const { error: deleteError } = await supabaseAdmin
+      .from('projects')
+      .delete()
+      .eq('id', projectId)
+
+    if (deleteError) {
+      console.error('案件削除エラー:', deleteError)
+      return NextResponse.json({ message: '案件の削除に失敗しました' }, { status: 500 })
+    }
+
+    return NextResponse.json({
+      message: '案件が正常に削除されました'
+    }, { status: 200 })
+
+  } catch (error) {
+    console.error('案件削除APIエラー:', error)
     return NextResponse.json(
       { message: 'サーバーエラーが発生しました' },
       { status: 500 }

@@ -19,7 +19,7 @@ export async function PUT(
   try {
     const bidId = params.id
     const body = await request.json()
-    const { action, rejection_reason } = body
+    const { action, rejection_reason, skip_box_creation } = body
 
     // Authorizationヘッダーからユーザー情報を取得
     const authHeader = request.headers.get('authorization')
@@ -111,42 +111,51 @@ export async function PUT(
         return NextResponse.json({ message: '入札の承認に失敗しました', details: String(updateError.message || updateError) }, { status: 500 })
       }
 
-      // Boxフォルダを作成（入札承認後）
-      try {
-        const parentId = process.env.BOX_PROJECTS_ROOT_FOLDER_ID
+      // Boxフォルダを作成（入札承認後）- skip_box_creationがtrueの場合はスキップ
+      if (!skip_box_creation) {
+        try {
+          const parentId = process.env.BOX_PROJECTS_ROOT_FOLDER_ID
 
-        if (parentId) {
-          const folderName = `[PRJ-${bid.projects.id.slice(0, 8)}] ${bid.projects.title}`
-          const subfolders = ['受取', '作業', '納品', '契約']
+          if (parentId) {
+            const folderName = `[PRJ-${bid.projects.id.slice(0, 8)}] ${bid.projects.title}`
+            const subfolders = ['01_受取データ', '02_作業フォルダ', '03_納品データ', '04_契約資料']
 
-          const boxApiUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/box/provision`
+            const boxApiUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/box/provision`
 
-          const boxResponse = await fetch(boxApiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              name: folderName,
-              parentId,
-              subfolders
-            })
-          })
-
-          if (boxResponse.ok) {
-            const { folderId, subfolderIds } = await boxResponse.json()
-
-            // プロジェクトにBox情報を保存
-            await supabaseAdmin
-              .from('projects')
-              .update({
-                box_folder_id: folderId
-                // box_subfoldersカラムが存在しないため一時的に除外
-                // box_subfolders: subfolderIds ? JSON.stringify(subfolderIds) : null
+            // タイムアウト付きでBOX API呼び出し
+            const boxPromise = fetch(boxApiUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                name: folderName,
+                parentId,
+                subfolders
               })
-              .eq('id', bid.projects.id)
+            })
+
+            const timeoutPromise = new Promise((_, reject) => {
+              setTimeout(() => reject(new Error('BOX API timeout')), 5000) // 5秒でタイムアウト
+            })
+
+            const boxResponse = await Promise.race([boxPromise, timeoutPromise]) as Response
+
+            if (boxResponse.ok) {
+              const { folderId } = await boxResponse.json()
+
+              // プロジェクトにBox情報を保存
+              await supabaseAdmin
+                .from('projects')
+                .update({
+                  box_folder_id: folderId
+                  // box_subfoldersカラムが存在しないため一時的に除外
+                })
+                .eq('id', bid.projects.id)
+            }
           }
+        } catch (boxError) {
+          console.warn('BOX フォルダ作成エラー（入札承認は続行）:', boxError)
+          // Box作成エラーは入札承認を妨げない
         }
-      } catch (boxError) {
-        // Box作成エラーは入札承認を妨げない
       }
 
       // 受注者に通知
@@ -190,13 +199,13 @@ export async function PUT(
         }
       } catch (_) {}
 
-      const { data: updatedBid } = await supabaseAdmin
+      const { data: updatedBid, error: fetchError } = await supabaseAdmin
         .from('bids')
         .select('*')
         .eq('id', bidId)
         .single()
 
-      if (updateError) {
+      if (fetchError) {
         return NextResponse.json(
           { message: '入札の拒否に失敗しました' },
           { status: 500 }

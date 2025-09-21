@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
         if (mem) isAdmin = true
       }
     }
-    if (!isAdmin) return NextResponse.json({ message: '運営者権限が必要です' }, { status: 403 })
+  if (!isAdmin) return NextResponse.json({ message: '管理者権限が必要です' }, { status: 403 })
 
     const { searchParams } = new URL(request.url)
     const q = searchParams.get('q')?.toLowerCase() || ''

@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: 'プロジェクトが見つかりません' }, { status: 404 })
     }
 
-    // ユーザーのロール（見つからない場合は受注者として扱う）
+    // ユーザーのロールを取得（見つからない場合は null）
     const { data: membership } = await supabaseAdmin
       .from('memberships')
       .select('role, org_id')
@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
       .maybeSingle()
 
     // 権限チェック（OrgAdminのみ請求書作成可能）
-    if (membership.role !== 'OrgAdmin' || project.org_id !== membership.org_id) {
+    if (!membership || membership.role !== 'OrgAdmin' || project.org_id !== membership.org_id) {
       return NextResponse.json({ message: '請求書を作成する権限がありません' }, { status: 403 })
     }
 
@@ -219,8 +219,7 @@ export async function POST(request: NextRequest) {
       due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30日後
       org_id: project.org_id,
       contractor_id: contract.contractor_id,
-      contract_id: contract.id,
-      memo: contractSupport ? `受注者サポート控除 ${supportPercent}%` : (projectSupport ? `発注者サポート手数料 ${supportPercent}%` : null)
+      contract_id: contract.id
     }
 
     // 一部環境で存在しない列のため、存在する場合のみ付与（冪等）
@@ -257,6 +256,21 @@ export async function POST(request: NextRequest) {
         .limit(1)
       if (!dirProbe) {
         invoiceData.direction = 'to_operator'
+      }
+    } catch (_) {
+      // 列が無い環境
+    }
+
+    // メモ列（存在すれば付与）
+    try {
+      const { error: memoProbe } = await supabaseAdmin
+        .from('invoices')
+        .select('memo')
+        .limit(1)
+      if (!memoProbe) {
+        invoiceData.memo = contractSupport
+          ? `受注者サポート控除 ${supportPercent}%`
+          : (projectSupport ? `発注者サポート手数料 ${supportPercent}%` : null)
       }
     } catch (_) {
       // 列が無い環境
@@ -411,7 +425,7 @@ export async function GET(request: NextRequest) {
         withHolding: withholding
       })
 
-      return new NextResponse(pdfBuf, {
+      return new NextResponse(new Uint8Array(pdfBuf), {
         status: 200,
         headers: {
           'Content-Type': 'application/pdf',

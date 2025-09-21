@@ -173,6 +173,11 @@ export function Navigation({ userRole: propUserRole }: NavigationProps) {
     return userProfile?.display_name || 'ユーザー'
   }
 
+  // サブラベルはログイン中のユーザー情報（メール）を優先表示
+  const getSubLabel = () => {
+    return user?.email || userProfile?.email || ''
+  }
+
   return (
     <>
       {/* Desktop Navigation */}
@@ -290,7 +295,7 @@ export function Navigation({ userRole: propUserRole }: NavigationProps) {
                       <p className="font-medium text-sm">
                         {getDisplayName()}
                       </p>
-                      <p className="text-xs text-gray-500">{userRole}</p>
+                      <p className="text-xs text-gray-500">{getSubLabel()}</p>
                       {userOrganization && (
                         <p className="text-xs text-gray-400 truncate">
                           {userOrganization.name}

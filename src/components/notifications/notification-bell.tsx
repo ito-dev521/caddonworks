@@ -21,10 +21,6 @@ interface Notification {
 
 export function NotificationBell() {
   const { user, userRole } = useAuth()
-
-  // Early return if user is not authenticated - must be before any hooks
-  if (!user) return null
-
   const router = useRouter()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
@@ -36,6 +32,9 @@ export function NotificationBell() {
   const [isDragging, setIsDragging] = useState(false)
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
   const modalRef = useRef<HTMLDivElement>(null)
+
+  // Early return if user is not authenticated - after all hooks
+  if (!user) return null
 
   // 通知を取得
   const fetchNotifications = useCallback(async () => {

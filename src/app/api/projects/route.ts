@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
       assignee_name,
       required_contractors = 1,
       required_level = 'beginner',
-      approver_id,
+      approver_ids,
       support_enabled
     } = body
 
@@ -150,10 +150,10 @@ export async function POST(request: NextRequest) {
     const company = membership.organizations as any
     const approvalRequired = company.approval_required
 
-    // 承認が必要でapprover_idが指定されていない場合のバリデーション
-    if (approvalRequired && !approver_id) {
+    // 承認が必要でapprover_idsが指定されていない場合のバリデーション
+    if (approvalRequired && (!approver_ids || !Array.isArray(approver_ids) || approver_ids.length === 0)) {
       return NextResponse.json(
-        { message: '承認が必要な組織では承認者を選択してください' },
+        { message: '承認が必要な組織では少なくとも1人の承認者を選択してください' },
         { status: 400 }
       )
     }
@@ -170,7 +170,7 @@ export async function POST(request: NextRequest) {
       contractor_id: contractor_id || null,
       assignee_name: assignee_name || null,
       org_id: company.id,
-      approver_id: approver_id || null,
+      approver_ids: approver_ids || null,
       created_by: userProfile.id, // プロジェクト作成者を記録
       status: approvalRequired ? 'pending_approval' : 'bidding', // 承認が必要な場合は承認待ち
       support_enabled: !!support_enabled
@@ -217,13 +217,13 @@ export async function POST(request: NextRequest) {
     }
 
     // 承認が必要な場合、承認者に通知を送信
-    if (approvalRequired && approver_id) {
+    if (approvalRequired && approver_ids) {
       try {
         // 承認者のメンバーシップを取得
         const { data: approverMembership, error: approverMembershipError } = await supabaseAdmin
           .from('memberships')
           .select('user_id')
-          .eq('user_id', approver_id)
+          .eq('user_id', approver_ids)
           .eq('org_id', company.id)
           .single()
 
@@ -232,7 +232,7 @@ export async function POST(request: NextRequest) {
           const { error: notificationError } = await supabaseAdmin
             .from('notifications')
             .insert({
-              user_id: approver_id,
+              user_id: approver_ids,
               type: 'project_approval_requested',
               title: '案件承認依頼',
               message: `案件「${title}」の承認をお願いします。`,
@@ -393,7 +393,7 @@ export async function GET(request: NextRequest) {
         .eq('status', 'signed') // 署名済み契約のみ
       
       // 受注者情報を取得
-      const contractorIds = [...new Set(contracts?.map(c => c.contractor_id) || [])]
+      const contractorIds = Array.from(new Set(contracts?.map(c => c.contractor_id) || []))
       let contractorMap: any = {}
       
       if (contractorIds.length > 0) {
@@ -481,15 +481,32 @@ export async function GET(request: NextRequest) {
         required_contractors: project.required_contractors || 1,
         is_expired: isExpired,
         days_until_deadline: daysUntilDeadline,
-        contracts: contractMap[project.id] || [] // 複数受注者の契約情報
+        contracts: contractMap[project.id] || [], // 複数受注者の契約情報
+        approver_ids: project.approver_ids || null
       }
       
       
       return result
     }) || []
 
+    // 承認待ちの案件は、承認者として選択されたユーザーのみに表示
+    const filteredProjects = formattedProjects.filter(project => {
+      // 承認待ち以外の案件は全て表示
+      if (project.status !== 'pending_approval') {
+        return true
+      }
+
+      // 承認待ちの案件は、approver_idsに現在のユーザーが含まれている場合のみ表示
+      if (project.approver_ids && Array.isArray(project.approver_ids)) {
+        return project.approver_ids.includes(userProfile.id)
+      }
+
+      // approver_idsが設定されていない場合は表示しない
+      return false
+    })
+
     return NextResponse.json({
-      projects: formattedProjects
+      projects: filteredProjects
     }, { status: 200 })
 
   } catch (error) {

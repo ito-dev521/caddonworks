@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (!isEmailAdmin && !isMembershipAdmin) {
-      return NextResponse.json({ message: '運営者権限が必要です' }, { status: 403 })
+      return NextResponse.json({ message: '管理者権限が必要です' }, { status: 403 })
     }
 
     // 運営側（監督員）だけを表示: memberships経由でReviewerに限定
@@ -154,7 +154,7 @@ export async function PUT(request: NextRequest) {
     }
 
     if (!isEmailAdmin && !isMembershipAdmin) {
-      return NextResponse.json({ message: '運営者権限が必要です' }, { status: 403 })
+      return NextResponse.json({ message: '管理者権限が必要です' }, { status: 403 })
     }
 
     const body = await request.json()

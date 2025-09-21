@@ -14,7 +14,6 @@ import {
   List,
   Box,
   Building2,
-  Calendar,
   Users,
   FileText,
   Image,
@@ -28,6 +27,14 @@ import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/contexts/auth-context"
 import { StatusIndicator } from "@/components/ui/status-indicator"
 import { supabase } from "@/lib/supabase"
+import {
+  getProjectArchiveStatus,
+  filterVisibleFiles,
+  getArchiveWarningMessage,
+  DEFAULT_ARCHIVE_SETTINGS,
+  type ArchiveSettings,
+  type ProjectArchiveStatus
+} from "@/lib/archive-manager"
 
 interface BoxProject {
   id: string
@@ -36,9 +43,12 @@ interface BoxProject {
   subfolders?: Record<string, string>
   status: string
   created_at: string
+  completed_at?: string | null
+  updated_at: string
   box_items: BoxItem[]
   recent_files?: BoxItem[]
   error?: string
+  archive_status?: ProjectArchiveStatus
 }
 
 interface BoxItem {
@@ -64,6 +74,11 @@ export default function ProjectFilesPage() {
   const [selectedFolder, setSelectedFolder] = useState<{id: string, name: string} | null>(null)
   const [folderContents, setFolderContents] = useState<BoxItem[]>([])
   const [loadingFolder, setLoadingFolder] = useState(false)
+  const [uploadingFile, setUploadingFile] = useState(false)
+  const [dragActive, setDragActive] = useState(false)
+  const [archiveSettings] = useState<ArchiveSettings>(DEFAULT_ARCHIVE_SETTINGS)
+  const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({})
+  const [folderHierarchy, setFolderHierarchy] = useState<Record<string, BoxItem[]>>({})
 
   useEffect(() => {
     if (authLoading) {
@@ -107,7 +122,16 @@ export default function ProjectFilesPage() {
       }
 
       const data = await response.json()
-      setProjects(data.projects || [])
+      const projectsWithArchive = (data.projects || []).map((project: BoxProject) => {
+        const archiveStatus = getProjectArchiveStatus(project, archiveSettings)
+        const visibleFiles = filterVisibleFiles(project.box_items || [], archiveStatus)
+        return {
+          ...project,
+          archive_status: archiveStatus,
+          box_items: visibleFiles
+        }
+      })
+      setProjects(projectsWithArchive)
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -149,45 +173,93 @@ export default function ProjectFilesPage() {
     }
   }
 
-  const handleFileDownload = async (fileId: string, fileName: string) => {
+  const handleFileUpload = async (folderId: string, files: FileList) => {
+    if (!files || files.length === 0) return
+
+    setUploadingFile(true)
+    const uploadedFiles: string[] = []
+    const failedFiles: string[] = []
+
     try {
-      console.log(`Downloading file: ${fileName} (${fileId})`)
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i]
+        console.log(`Uploading file: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`)
 
-      // Supabaseから現在のセッションを取得
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+        try {
+          const { data: { session }, error: sessionError } = await supabase.auth.getSession()
 
-      if (sessionError || !session?.access_token) {
-        throw new Error('認証に失敗しました')
-      }
+          if (sessionError || !session?.access_token) {
+            throw new Error('認証に失敗しました')
+          }
 
-      // BOXファイルダウンロードAPIを呼び出し
-      const response = await fetch(`/api/box/download/${fileId}`, {
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`
+          const formData = new FormData()
+          formData.append('file', file)
+
+          const response = await fetch(`/api/box/upload/${folderId}`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${session.access_token}`
+            },
+            body: formData
+          })
+
+          if (response.ok) {
+            uploadedFiles.push(file.name)
+            console.log(`✅ Uploaded: ${file.name}`)
+          } else {
+            const errorData = await response.json()
+            failedFiles.push(`${file.name}: ${errorData.message}`)
+            console.error(`❌ Failed to upload ${file.name}:`, errorData.message)
+          }
+        } catch (error: any) {
+          failedFiles.push(`${file.name}: ${error.message}`)
+          console.error(`❌ Upload error for ${file.name}:`, error)
         }
-      })
-
-      if (!response.ok) {
-        throw new Error(`ダウンロードに失敗しました: ${response.status}`)
       }
 
-      // ファイルをダウンロード
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = fileName
-      document.body.appendChild(a)
-      a.click()
-      window.URL.revokeObjectURL(url)
-      document.body.removeChild(a)
+      // 結果をユーザーに通知
+      if (uploadedFiles.length > 0) {
+        alert(`✅ ${uploadedFiles.length}件のファイルをアップロードしました:\n${uploadedFiles.join('\n')}`)
 
-      console.log(`✅ File downloaded: ${fileName}`)
-    } catch (err: any) {
-      console.error('Download error:', err)
-      alert(`ダウンロードに失敗しました: ${err.message}`)
+        // フォルダ内容を再読み込み
+        if (selectedFolder) {
+          handleFolderClick(selectedFolder.id, selectedFolder.name)
+        }
+        fetchProjects() // プロジェクト一覧も更新
+      }
+
+      if (failedFiles.length > 0) {
+        alert(`❌ ${failedFiles.length}件のファイルのアップロードに失敗しました:\n${failedFiles.join('\n')}`)
+      }
+
+    } catch (error: any) {
+      console.error('Upload process error:', error)
+      alert(`アップロード処理でエラーが発生しました: ${error.message}`)
+    } finally {
+      setUploadingFile(false)
     }
   }
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setDragActive(true)
+    } else if (e.type === 'dragleave') {
+      setDragActive(false)
+    }
+  }
+
+  const handleDrop = (e: React.DragEvent, folderId: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragActive(false)
+
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleFileUpload(folderId, e.dataTransfer.files)
+    }
+  }
+
 
   const getFileIcon = (name: string, type: string) => {
     if (type === 'folder') {
@@ -231,6 +303,137 @@ export default function ProjectFilesPage() {
       return `${diffMinutes}分前`
     } else {
       return 'たった今'
+    }
+  }
+
+  // フォルダ階層の表示
+  const renderFileHierarchy = (items: BoxItem[], projectId: string, parentPath: string, level: number = 0) => {
+    return items.map((item) => {
+      const itemPath = parentPath ? `${parentPath}/${item.name}` : item.name
+      const isExpanded = expandedFolders[`${projectId}-${itemPath}`] || false
+
+      return (
+        <div key={item.id} style={{ marginLeft: `${level * 16}px` }}>
+          <div className="flex items-center gap-2 p-2 bg-white rounded text-sm hover:bg-gray-50">
+            {item.type === 'folder' ? (
+              <button
+                onClick={() => toggleFolder(projectId, itemPath, item.id)}
+                className="flex items-center gap-2 flex-1 text-left"
+              >
+                {isExpanded ? (
+                  <FolderOpen className="w-4 h-4 text-blue-600" />
+                ) : (
+                  <FolderOpen className="w-4 h-4 text-blue-500" />
+                )}
+                <span className="font-medium">{item.name}</span>
+                <span className="text-xs text-gray-500 ml-2">
+                  {new Date(item.modified_at).toLocaleDateString('ja-JP')}
+                </span>
+              </button>
+            ) : (
+              <>
+                {getFileIcon(item.name, item.type)}
+                <div className="flex-1 min-w-0">
+                  <p className="truncate font-medium">{item.name}</p>
+                  <p className="text-xs text-gray-500">
+                    {item.size ? formatFileSize(item.size) : 'ファイル'} •
+                    {new Date(item.modified_at).toLocaleDateString('ja-JP')}
+                  </p>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* 子階層を表示 */}
+          {item.type === 'folder' && isExpanded && folderHierarchy[item.id] && (
+            <div className="mt-1">
+              {renderFileHierarchy(folderHierarchy[item.id], projectId, itemPath, level + 1)}
+            </div>
+          )}
+        </div>
+      )
+    })
+  }
+
+  // フォルダの展開/折りたたみ
+  const toggleFolder = async (projectId: string, itemPath: string, folderId: string) => {
+    const key = `${projectId}-${itemPath}`
+    const isCurrentlyExpanded = expandedFolders[key] || false
+
+    setExpandedFolders(prev => ({
+      ...prev,
+      [key]: !isCurrentlyExpanded
+    }))
+
+    // フォルダ内容をまだ取得していない場合は取得
+    if (!isCurrentlyExpanded && !folderHierarchy[folderId]) {
+      try {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+
+        if (sessionError || !session?.access_token) {
+          throw new Error('認証に失敗しました')
+        }
+
+        const response = await fetch(`/api/box/folder/${folderId}`, {
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json'
+          }
+        })
+
+        if (!response.ok) {
+          throw new Error(`フォルダ内容の取得に失敗しました: ${response.status}`)
+        }
+
+        const data = await response.json()
+        setFolderHierarchy(prev => ({
+          ...prev,
+          [folderId]: data.items || []
+        }))
+      } catch (err: any) {
+        console.error('Folder content fetch error:', err)
+        alert(`フォルダを開けませんでした: ${err.message}`)
+      }
+    }
+  }
+
+  // 一括ダウンロード
+  const handleBulkDownload = async (projectId: string, projectTitle: string) => {
+    try {
+      console.log(`Bulk download for project: ${projectTitle} (${projectId})`)
+
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+
+      if (sessionError || !session?.access_token) {
+        throw new Error('認証に失敗しました')
+      }
+
+      // プロジェクトのすべてのファイルを取得
+      const response = await fetch(`/api/box/projects/${projectId}/download-all`, {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error(`一括ダウンロードに失敗しました: ${response.status}`)
+      }
+
+      // ZIPファイルとしてダウンロード
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${projectTitle}_files.zip`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+
+      console.log(`✅ Bulk download completed: ${projectTitle}`)
+    } catch (err: any) {
+      console.error('Bulk download error:', err)
+      alert(`一括ダウンロードに失敗しました: ${err.message}`)
     }
   }
 
@@ -484,28 +687,62 @@ export default function ProjectFilesPage() {
                           </div>
                         ) : (
                           <>
+                            {/* Archive Warning */}
+                            {project.archive_status && (() => {
+                              const warningMessage = getArchiveWarningMessage(project.archive_status)
+                              return warningMessage ? (
+                                <div className="flex items-center gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-800">
+                                  <Archive className="w-4 h-4" />
+                                  <span className="text-sm">{warningMessage}</span>
+                                </div>
+                              ) : null
+                            })()}
                             {/* Subfolders */}
                             <div className="space-y-2">
                               <h4 className="text-sm font-medium text-gray-700">サブフォルダ</h4>
                               <div className="grid grid-cols-2 gap-2">
                                 {Object.entries(project.subfolders || {}).map(([name, folderId]) => (
-                                  <button
+                                  <div
                                     key={name}
-                                    onClick={() => handleFolderClick(folderId, getSubfolderName(name))}
-                                    className="flex items-center gap-2 p-2 bg-gray-50 hover:bg-gray-100 rounded text-xs transition-colors cursor-pointer"
+                                    className={`relative group bg-gray-50 hover:bg-gray-100 rounded transition-colors ${
+                                      dragActive ? 'bg-blue-100 border-2 border-dashed border-blue-400' : ''
+                                    }`}
+                                    onDragEnter={handleDrag}
+                                    onDragLeave={handleDrag}
+                                    onDragOver={handleDrag}
+                                    onDrop={(e) => handleDrop(e, folderId)}
                                   >
-                                    <FolderOpen className="w-3 h-3 text-blue-500" />
-                                    <span className="truncate">{getSubfolderName(name)}</span>
-                                  </button>
+                                    <button
+                                      onClick={() => handleFolderClick(folderId, getSubfolderName(name))}
+                                      className="flex items-center gap-2 p-2 w-full text-left text-xs cursor-pointer"
+                                    >
+                                      <FolderOpen className="w-3 h-3 text-blue-500" />
+                                      <span className="truncate flex-1">{getSubfolderName(name)}</span>
+                                    </button>
+                                    <label className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                                      <input
+                                        type="file"
+                                        multiple
+                                        className="hidden"
+                                        onChange={(e) => {
+                                          if (e.target.files) {
+                                            handleFileUpload(folderId, e.target.files)
+                                          }
+                                        }}
+                                      />
+                                      <Upload className="w-3 h-3 text-gray-500 hover:text-blue-600" />
+                                    </label>
+                                  </div>
                                 ))}
                               </div>
                             </div>
 
                             {/* Recent Files */}
-                            <div className="space-y-2">
-                              <h4 className="text-sm font-medium text-gray-700">最近のファイル</h4>
-                              <div className="space-y-1 max-h-32 overflow-y-auto">
-                                {getRecentFiles(project).map((item) => (
+                            {project.archive_status?.files_visible && (
+                              <div className="space-y-2">
+                                <h4 className="text-sm font-medium text-gray-700">最近のファイル</h4>
+                                <div className="space-y-1 max-h-32 overflow-y-auto">
+                                  {getRecentFiles(project).map((item) => (
                                   <div
                                     key={item.id}
                                     className="flex items-center gap-2 p-1 text-xs hover:bg-gray-50 rounded"
@@ -529,27 +766,37 @@ export default function ProjectFilesPage() {
                                         )}
                                       </div>
                                     </div>
-                                    <button
-                                      onClick={() => handleFileDownload(item.id, item.name)}
-                                      className="ml-2 p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded"
-                                      title="ダウンロード"
-                                    >
-                                      <Download className="w-3 h-3" />
-                                    </button>
                                   </div>
                                 ))}
-                                {getRecentFiles(project).length === 0 && (
-                                  <p className="text-xs text-gray-500 text-center py-2">
-                                    ファイルはありません
-                                  </p>
-                                )}
-                                {(project.box_items?.filter(item => item.type === 'file').length || 0) > 5 && (
-                                  <p className="text-xs text-gray-500 text-center">
-                                    他 {(project.box_items?.filter(item => item.type === 'file').length || 0) - 5} ファイル
-                                  </p>
-                                )}
+                                  {getRecentFiles(project).length === 0 && (
+                                    <p className="text-xs text-gray-500 text-center py-2">
+                                      ファイルはありません
+                                    </p>
+                                  )}
+                                  {(project.box_items?.filter(item => item.type === 'file').length || 0) > 5 && (
+                                    <p className="text-xs text-gray-500 text-center">
+                                      他 {(project.box_items?.filter(item => item.type === 'file').length || 0) - 5} ファイル
+                                    </p>
+                                  )}
+                                </div>
                               </div>
-                            </div>
+                            )}
+
+                            {/* Archive Message for Hidden Files */}
+                            {!project.archive_status?.files_visible && (
+                              <div className="space-y-2">
+                                <h4 className="text-sm font-medium text-gray-700">ファイル</h4>
+                                <div className="text-center py-4 bg-gray-50 rounded-lg">
+                                  <Archive className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                                  <p className="text-xs text-gray-500">
+                                    プロジェクト完了から30日が経過したため、ファイルは非表示になっています。
+                                  </p>
+                                  <p className="text-xs text-gray-400 mt-1">
+                                    BOX内にはファイルが保持されています。
+                                  </p>
+                                </div>
+                              </div>
+                            )}
 
                             {/* Metadata */}
                             <div className="space-y-2 text-xs text-gray-600 pt-2 border-t border-gray-100">
@@ -576,13 +823,26 @@ export default function ProjectFilesPage() {
                             >
                               <Eye className="w-4 h-4 group-hover/btn:text-engineering-blue" />
                             </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="group/btn"
-                            >
-                              <Upload className="w-4 h-4 group-hover/btn:text-engineering-blue" />
-                            </Button>
+                            <label className="cursor-pointer">
+                              <input
+                                type="file"
+                                multiple
+                                className="hidden"
+                                onChange={(e) => {
+                                  if (e.target.files && project.box_folder_id) {
+                                    handleFileUpload(project.box_folder_id, e.target.files)
+                                  }
+                                }}
+                              />
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="group/btn"
+                                disabled={uploadingFile || !project.box_folder_id}
+                              >
+                                <Upload className="w-4 h-4 group-hover/btn:text-engineering-blue" />
+                              </Button>
+                            </label>
                           </div>
                         </div>
                       </CardContent>
@@ -597,26 +857,33 @@ export default function ProjectFilesPage() {
                             className="border-t border-gray-200"
                           >
                             <CardContent className="p-4 bg-gray-50">
-                              <h4 className="font-medium mb-3">全ファイル一覧</h4>
-                              <div className="space-y-2 max-h-48 overflow-y-auto">
-                                {(project.box_items || []).map((item) => (
-                                  <div key={item.id} className="flex items-center gap-2 p-2 bg-white rounded text-sm">
-                                    {getFileIcon(item.name, item.type)}
-                                    <div className="flex-1 min-w-0">
-                                      <p className="truncate font-medium">{item.name}</p>
-                                      <p className="text-xs text-gray-500">
-                                        {item.size ? formatFileSize(item.size) : 'フォルダ'} •
-                                        {new Date(item.modified_at).toLocaleDateString('ja-JP')}
-                                      </p>
-                                    </div>
-                                    {item.type === 'file' && (
-                                      <Button variant="outline" size="sm">
-                                        <Download className="w-3 h-3" />
-                                      </Button>
-                                    )}
-                                  </div>
-                                ))}
+                              <div className="flex items-center justify-between mb-3">
+                                <h4 className="font-medium">全ファイル一覧</h4>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleBulkDownload(project.id, project.title)}
+                                  className="text-blue-600 hover:text-blue-800"
+                                >
+                                  <Download className="w-3 h-3 mr-1" />
+                                  一括ダウンロード
+                                </Button>
                               </div>
+                              {project.archive_status?.files_visible ? (
+                                <div className="space-y-2 max-h-64 overflow-y-auto">
+                                  {renderFileHierarchy(project.box_items || [], project.id, '')}
+                                </div>
+                              ) : (
+                                <div className="text-center py-8">
+                                  <Archive className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                                  <p className="text-sm text-gray-500">
+                                    プロジェクト完了から30日が経過したため、ファイルは非表示になっています。
+                                  </p>
+                                  <p className="text-xs text-gray-400 mt-1">
+                                    BOX内にはファイルが保持されています。
+                                  </p>
+                                </div>
+                              )}
                             </CardContent>
                           </motion.div>
                         )}
@@ -662,9 +929,25 @@ export default function ProjectFilesPage() {
                             >
                               <Eye className="w-4 h-4" />
                             </Button>
-                            <Button variant="outline" size="sm">
-                              <Upload className="w-4 h-4" />
-                            </Button>
+                            <label className="cursor-pointer">
+                              <input
+                                type="file"
+                                multiple
+                                className="hidden"
+                                onChange={(e) => {
+                                  if (e.target.files && project.box_folder_id) {
+                                    handleFileUpload(project.box_folder_id, e.target.files)
+                                  }
+                                }}
+                              />
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={uploadingFile || !project.box_folder_id}
+                              >
+                                <Upload className="w-4 h-4" />
+                              </Button>
+                            </label>
                           </div>
                         </div>
                       </CardContent>
@@ -753,7 +1036,7 @@ export default function ProjectFilesPage() {
                                 </div>
                               </div>
                               {item.type === 'folder' && (
-                                <div className="mt-2">
+                                <div className="mt-2 space-y-1">
                                   <Button
                                     variant="outline"
                                     size="sm"
@@ -763,19 +1046,27 @@ export default function ProjectFilesPage() {
                                     <FolderOpen className="w-3 h-3 mr-2" />
                                     開く
                                   </Button>
-                                </div>
-                              )}
-                              {item.type === 'file' && (
-                                <div className="mt-2">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="w-full"
-                                    onClick={() => handleFileDownload(item.id, item.name)}
-                                  >
-                                    <Download className="w-3 h-3 mr-2" />
-                                    ダウンロード
-                                  </Button>
+                                  <label className="cursor-pointer">
+                                    <input
+                                      type="file"
+                                      multiple
+                                      className="hidden"
+                                      onChange={(e) => {
+                                        if (e.target.files) {
+                                          handleFileUpload(item.id, e.target.files)
+                                        }
+                                      }}
+                                    />
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="w-full"
+                                      disabled={uploadingFile}
+                                    >
+                                      <Upload className="w-3 h-3 mr-2" />
+                                      {uploadingFile ? 'アップロード中...' : 'ファイル追加'}
+                                    </Button>
+                                  </label>
                                 </div>
                               )}
                             </CardContent>
