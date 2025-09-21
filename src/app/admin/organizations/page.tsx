@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react"
 import { Navigation } from "@/components/layouts/navigation"
 import { motion } from "framer-motion"
-import { Building2, Search, CheckCircle2, XCircle, Clock, AlertTriangle, Folder } from "lucide-react"
+import { Building2, Search, CheckCircle2, XCircle, Clock, AlertTriangle, Folder, Play, Pause, Trash2 } from "lucide-react"
 import { AuthGuard } from "@/components/auth/auth-guard"
 
 interface Org {
@@ -47,18 +47,20 @@ function AdminOrganizationsPageContent() {
     fetchOrgs()
   }, [])
 
-  const handleApproval = async (orgId: string, action: 'approve' | 'reject', reason?: string) => {
+  const handleActiveToggle = async (orgId: string, currentActive: boolean) => {
+    if (!confirm(`組織を${currentActive ? '停止' : '有効化'}しますか？`)) return
+
     setActionLoading(orgId)
     try {
-      const res = await fetch(`/api/admin/organizations/${orgId}/approval`, {
+      const res = await fetch(`/api/admin/organizations/${orgId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, reason })
+        body: JSON.stringify({ active: !currentActive })
       })
 
       if (res.ok) {
-        const updatedOrg = await res.json()
-        setOrgs(prev => prev.map(o => o.id === orgId ? { ...o, ...updatedOrg.organization } : o))
+        setOrgs(prev => prev.map(o => o.id === orgId ? { ...o, active: !o.active } : o))
+        alert(`組織を${currentActive ? '停止' : '有効化'}しました`)
       } else {
         const error = await res.json()
         alert(`エラー: ${error.message}`)
@@ -71,20 +73,26 @@ function AdminOrganizationsPageContent() {
     }
   }
 
-  const handleActiveToggle = async (orgId: string, currentActive: boolean) => {
+  const handleDelete = async (orgId: string, orgName: string) => {
+    if (!confirm(`「${orgName}」を完全に削除しますか？\n\n注意: この操作は取り消せません。BOXフォルダは削除されませんが、システムからデータが完全に削除されます。`)) return
+
     setActionLoading(orgId)
     try {
       const res = await fetch(`/api/admin/organizations/${orgId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ active: !currentActive })
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' }
       })
 
       if (res.ok) {
-        setOrgs(prev => prev.map(o => o.id === orgId ? { ...o, active: !o.active } : o))
+        setOrgs(prev => prev.filter(o => o.id !== orgId))
+        alert('組織を削除しました')
+      } else {
+        const error = await res.json()
+        alert(`エラー: ${error.message}`)
       }
     } catch (e) {
       console.error(e)
+      alert('処理中にエラーが発生しました')
     } finally {
       setActionLoading(null)
     }
@@ -160,8 +168,10 @@ function AdminOrganizationsPageContent() {
                         ) : (
                           <span className="text-red-600 flex items-center gap-1 text-sm"><XCircle className="w-4 h-4" />停止中</span>
                         )}
-                        {org.box_folder_id && (
-                          <span className="text-blue-600 flex items-center gap-1 text-sm"><Folder className="w-4 h-4" />BOX連携済み</span>
+                        {org.box_folder_id ? (
+                          <span className="text-green-600 flex items-center gap-1 text-sm"><Folder className="w-4 h-4" />BOX連携済み</span>
+                        ) : (
+                          <span className="text-orange-600 flex items-center gap-1 text-sm"><Folder className="w-4 h-4" />BOX未連携</span>
                         )}
                       </div>
                       <div className="text-sm text-gray-600 space-y-1">
@@ -169,57 +179,57 @@ function AdminOrganizationsPageContent() {
                         {org.approved_at && <div>承認日: {new Date(org.approved_at).toLocaleDateString('ja-JP')}</div>}
                         {org.billing_email && <div>請求先: {org.billing_email}</div>}
                         <div>システム手数料: {org.system_fee ?? 50000}円</div>
+                        {org.box_folder_id && <div>BOXフォルダID: {org.box_folder_id}</div>}
                         {org.description && <div>説明: {org.description}</div>}
                         {org.rejection_reason && <div className="text-red-600">却下理由: {org.rejection_reason}</div>}
                       </div>
                     </div>
 
                     <div className="flex flex-wrap gap-2">
-                      {org.approval_status === 'pending' && (
-                        <>
-                          <button
-                            onClick={() => handleApproval(org.id, 'approve')}
-                            disabled={actionLoading === org.id}
-                            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 text-sm"
-                          >
-                            {actionLoading === org.id ? '処理中...' : '承認'}
-                          </button>
-                          <button
-                            onClick={() => {
-                              const reason = prompt('却下理由を入力してください:')
-                              if (reason) handleApproval(org.id, 'reject', reason)
-                            }}
-                            disabled={actionLoading === org.id}
-                            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 text-sm"
-                          >
-                            却下
-                          </button>
-                        </>
-                      )}
+                      <div className="px-4 py-2 bg-blue-100 text-blue-800 rounded-lg text-sm">
+                        既存組織（承認済み）
+                      </div>
 
-                      {org.approval_status === 'approved' && (
-                        <button
-                          onClick={() => handleActiveToggle(org.id, org.active)}
-                          disabled={actionLoading === org.id}
-                          className={`px-4 py-2 rounded-lg text-sm ${
-                            org.active
-                              ? 'bg-red-100 text-red-700 hover:bg-red-200'
-                              : 'bg-green-100 text-green-700 hover:bg-green-200'
-                          } disabled:opacity-50`}
-                        >
-                          {actionLoading === org.id ? '処理中...' : org.active ? '利用停止' : '利用再開'}
-                        </button>
-                      )}
+                      {/* 稼働停止・有効化ボタン */}
+                      <button
+                        onClick={() => handleActiveToggle(org.id, org.active)}
+                        disabled={actionLoading === org.id}
+                        className={`px-3 py-1 rounded-lg text-sm font-medium flex items-center gap-1 ${
+                          org.active
+                            ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                            : 'bg-green-100 text-green-700 hover:bg-green-200'
+                        } disabled:opacity-50 disabled:cursor-not-allowed`}
+                      >
+                        {actionLoading === org.id ? (
+                          <div className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+                        ) : org.active ? (
+                          <>
+                            <Pause className="w-4 h-4" />
+                            停止
+                          </>
+                        ) : (
+                          <>
+                            <Play className="w-4 h-4" />
+                            有効化
+                          </>
+                        )}
+                      </button>
 
-                      {org.approval_status === 'rejected' && (
-                        <button
-                          onClick={() => handleApproval(org.id, 'approve')}
-                          disabled={actionLoading === org.id}
-                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm"
-                        >
-                          再承認
-                        </button>
-                      )}
+                      {/* 削除ボタン */}
+                      <button
+                        onClick={() => handleDelete(org.id, org.name)}
+                        disabled={actionLoading === org.id}
+                        className="px-3 py-1 bg-red-100 text-red-700 hover:bg-red-200 rounded-lg text-sm font-medium flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {actionLoading === org.id ? (
+                          <div className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+                        ) : (
+                          <>
+                            <Trash2 className="w-4 h-4" />
+                            削除
+                          </>
+                        )}
+                      </button>
                     </div>
                   </div>
                 </div>

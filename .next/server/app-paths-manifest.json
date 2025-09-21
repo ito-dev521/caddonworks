@@ -1,20 +1,7 @@
 {
-  "/auth/login/page": "app/auth/login/page.js",
-  "/api/settings/public/route": "app/api/settings/public/route.js",
-  "/api/projects/route": "app/api/projects/route.js",
   "/api/notifications/route": "app/api/notifications/route.js",
-  "/api/contracts/route": "app/api/contracts/route.js",
-  "/api/chat/rooms/route": "app/api/chat/rooms/route.js",
-  "/api/organization/profile/route": "app/api/organization/profile/route.js",
-  "/contracts/[id]/page": "app/contracts/[id]/page.js",
-  "/(dashboard)/chat/page": "app/(dashboard)/chat/page.js",
-  "/project-files/page": "app/project-files/page.js",
-  "/api/box/projects/route": "app/api/box/projects/route.js",
-  "/api/favorite-members/route": "app/api/favorite-members/route.js",
-  "/api/settings/organization/route": "app/api/settings/organization/route.js",
-  "/projects/page": "app/projects/page.js",
-  "/api/settings/users/route": "app/api/settings/users/route.js",
-  "/api/settings/orgadmins/route": "app/api/settings/orgadmins/route.js",
-  "/api/projects/[id]/route": "app/api/projects/[id]/route.js",
-  "/api/projects/[id]/suspend/route": "app/api/projects/[id]/suspend/route.js"
+  "/api/admin/organizations/route": "app/api/admin/organizations/route.js",
+  "/admin/users/page": "app/admin/users/page.js",
+  "/admin/organizations/page": "app/admin/organizations/page.js",
+  "/auth/login/page": "app/auth/login/page.js"
 }
