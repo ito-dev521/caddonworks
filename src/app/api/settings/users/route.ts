@@ -92,7 +92,7 @@ export async function GET(request: NextRequest) {
       // 一般ユーザー（Contractor）のプロフィールを取得
       const { data: contractorProfiles } = await supabaseAdmin
         .from('users')
-        .select('id, email, display_name, formal_name, created_at, updated_at')
+        .select('id, email, display_name, formal_name, department, created_at, updated_at')
         .in('id', userIds)
 
       userDetailsMap = userIds.reduce((acc: any, userId: string) => {
@@ -113,6 +113,7 @@ export async function GET(request: NextRequest) {
         email: userDetails?.email || 'メールアドレス未設定',
         display_name: userDetails?.display_name || '表示名未設定',
         formal_name: userDetails?.formal_name || null,
+        department: userDetails?.department || null,
         role: membership.role,
         created_at: membership.created_at,
         updated_at: userDetails?.updated_at || membership.created_at,
@@ -152,7 +153,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { email, display_name, formal_name, role } = body
+    const { email, display_name, formal_name, department, role } = body as { email: string; display_name: string; formal_name?: string; department?: string; role: 'OrgAdmin' | 'Staff' }
 
     if (!email || !display_name) {
       return NextResponse.json({ message: '必須項目が入力されていません' }, { status: 400 })
@@ -224,7 +225,8 @@ export async function POST(request: NextRequest) {
         auth_user_id: authUser.user.id,
         email,
         display_name,
-        formal_name
+        formal_name,
+        department
       })
       .select()
       .single()
@@ -271,7 +273,7 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
-    const { userId, display_name, formal_name, newRole } = body as { userId: string; display_name?: string; formal_name?: string; newRole?: 'OrgAdmin' | 'Staff' | 'Contractor' }
+    const { userId, display_name, formal_name, department, newRole } = body as { userId: string; display_name?: string; formal_name?: string; department?: string; newRole?: 'OrgAdmin' | 'Staff' | 'Contractor' }
 
     if (!userId) {
       return NextResponse.json({ message: 'ユーザーIDが必要です' }, { status: 400 })
@@ -315,7 +317,8 @@ export async function PUT(request: NextRequest) {
     // ユーザー情報を更新
     const updateData: any = {
       display_name,
-      formal_name
+      formal_name,
+      department
     }
 
     const { error: updateError } = await supabaseAdmin

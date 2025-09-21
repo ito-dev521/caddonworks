@@ -20,7 +20,7 @@ export function AuthGuard({
   allowedRoles,
   redirectTo = "/auth/login"
 }: AuthGuardProps) {
-  const { user, userRole, loading } = useAuth()
+  const { user, userRole, loading, signOut } = useAuth()
   const router = useRouter()
   const pathname = usePathname()
   const isRedirectingRef = useRef(false)
@@ -45,19 +45,37 @@ export function AuthGuard({
 
     // Check role permissions
     if (requiredRole && userRole !== requiredRole) {
-      // User doesn't have the required role
-      if (pathname !== "/unauthorized") {
-        isRedirectingRef.current = true
-        router.push("/unauthorized")
+      // ロール不一致: 強制サインアウトしてログインへ
+      if (!isRedirectingRef.current) {
+        (async () => {
+          try {
+            isRedirectingRef.current = true
+            sessionStorage.removeItem('redirectAfterLogin')
+            sessionStorage.removeItem('previousPage')
+            sessionStorage.removeItem('currentPage')
+            await signOut()
+          } finally {
+            router.push('/auth/login')
+          }
+        })()
       }
       return
     }
 
     if (allowedRoles && allowedRoles.length > 0 && (!userRole || !allowedRoles.includes(userRole))) {
-      // User doesn't have any of the allowed roles
-      if (pathname !== "/unauthorized") {
-        isRedirectingRef.current = true
-        router.push("/unauthorized")
+      // 許可されていないロール: 強制サインアウトしてログインへ
+      if (!isRedirectingRef.current) {
+        (async () => {
+          try {
+            isRedirectingRef.current = true
+            sessionStorage.removeItem('redirectAfterLogin')
+            sessionStorage.removeItem('previousPage')
+            sessionStorage.removeItem('currentPage')
+            await signOut()
+          } finally {
+            router.push('/auth/login')
+          }
+        })()
       }
       return
     }

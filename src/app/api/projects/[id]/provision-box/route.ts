@@ -14,7 +14,7 @@ export async function POST(_: NextRequest, { params }: { params: { id: string } 
 
     const { data: project, error } = await supabaseAdmin
       .from('projects')
-      .select('id, title, box_folder_id')
+      .select('id, title, box_folder_id, org_id')
       .eq('id', projectId)
       .single()
 
@@ -23,16 +23,56 @@ export async function POST(_: NextRequest, { params }: { params: { id: string } 
 
     if (project.box_folder_id) return NextResponse.json({ folderId: project.box_folder_id }, { status: 200 })
 
-    const parentId = process.env.BOX_PROJECTS_ROOT_FOLDER_ID
-    if (!parentId) return NextResponse.json({ message: 'BOX_PROJECTS_ROOT_FOLDER_ID が未設定です' }, { status: 500 })
+    // 発注組織の情報を取得
+    const { data: organization, error: orgError } = await supabaseAdmin
+      .from('organizations')
+      .select('id, name, box_folder_id')
+      .eq('id', project.org_id)
+      .single()
+
+    if (orgError || !organization) {
+      return NextResponse.json({ message: '発注組織が見つかりません' }, { status: 404 })
+    }
+
+    let companyFolderId = organization.box_folder_id
+
+    // 会社フォルダが存在しない場合は作成
+    if (!companyFolderId) {
+      const companyFolderResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/box/company-folder`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ companyName: organization.name })
+      })
+
+      if (!companyFolderResponse.ok) {
+        const boxError = await companyFolderResponse.json()
+        return NextResponse.json({
+          message: '会社フォルダ作成エラー',
+          error: boxError.error || boxError.message
+        }, { status: companyFolderResponse.status })
+      }
+
+      const { folderId: newCompanyFolderId } = await companyFolderResponse.json()
+      companyFolderId = newCompanyFolderId
+
+      // 組織にBOXフォルダIDを保存
+      await supabaseAdmin
+        .from('organizations')
+        .update({ box_folder_id: companyFolderId })
+        .eq('id', organization.id)
+    }
 
     const name = `[PRJ-${project.id.slice(0, 8)}] ${project.title}`
 
-    // Box API専用ルートに委譲
+    // プロジェクトフォルダを会社フォルダ下に作成
     const boxResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/box/provision`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, parentId })
+      body: JSON.stringify({
+        name,
+        parentId: companyFolderId,
+        subfolders: ['受取', '作業', '納品', '契約']
+      })
     })
 
     if (!boxResponse.ok) {

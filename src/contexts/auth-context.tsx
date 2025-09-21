@@ -129,25 +129,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // プロフィールが見つからない場合でも続行
       }
 
-      setUserProfile(profile)
+      // 表示名のフォールバック: 空なら氏名→メールローカル部の順で補完
+      let normalizedProfile: any = profile ? { ...profile } : null
+      if (normalizedProfile) {
+        const currentDisplay = (normalizedProfile.display_name || '').trim()
+        if (!currentDisplay) {
+          try {
+            const { data: authUserInfo } = await supabase.auth.getUser()
+            const email = normalizedProfile.email || authUserInfo.user?.email || ''
+            normalizedProfile.display_name = (normalizedProfile.formal_name || '').trim() || (email ? email.split('@')[0] : 'ユーザー')
+          } catch {
+            normalizedProfile.display_name = (normalizedProfile.formal_name || '').trim() || 'ユーザー'
+          }
+        }
+      }
+      setUserProfile(normalizedProfile)
 
       // Fetch user role and organization from memberships
       // プロフィールがある場合はprofile.id、ない場合はauthUserIdを使用
       const userId = profile?.id || authUserId
       
-      const { data: membership, error: roleError } = await supabase
+      const { data: memberships, error: roleError } = await supabase
         .from('memberships')
         .select('role, org_id')
         .eq('user_id', userId)
-        .single()
 
       if (roleError && roleError.code !== 'PGRST116') {
         console.error('Error fetching user role:', roleError)
         return
       }
 
-      // ロールの解決
-      let resolvedRole: any = membership?.role || null
+      // ロールの解決（複数メンバーシップを考慮して優先度で選択）
+      const priority: UserRole[] = ['OrgAdmin', 'Staff', 'Contractor', 'Reviewer', 'Auditor']
+      const membershipsArray = Array.isArray(memberships) ? memberships : (memberships ? [memberships] : [])
+      const pickByPriority = () => {
+        for (const role of priority) {
+          const found = membershipsArray.find((m: any) => m.role === role)
+          if (found) return found
+        }
+        return membershipsArray[0] || null
+      }
+      const pickedMembership: any = pickByPriority()
+      let resolvedRole: any = pickedMembership?.role || null
 
       // メンバーシップが無い場合は、管理者メールのフォールバックで Admin 扱い
       try {
@@ -168,11 +191,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUserRole(resolvedRole || null)
       
       // 組織情報を取得
-      if (membership?.org_id) {
+      const orgIdToLoad = pickedMembership?.org_id
+      if (orgIdToLoad) {
         const { data: orgData, error: orgError } = await supabase
           .from('organizations')
           .select('id, name')
-          .eq('id', membership.org_id)
+          .eq('id', orgIdToLoad)
           .single()
         
         if (orgError) {
@@ -196,6 +220,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             id: authUserId,
             auth_user_id: authUserId,
             display_name: authUser.user.email?.split('@')[0] || '管理者',
+            formal_name: (authUser.user.email?.split('@')[0] || '管理者'),
             email: authUser.user.email || '',
             specialties: [],
             qualifications: [],
@@ -326,20 +351,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const getRedirectPath = () => {
+    // 発注者(OrgAdmin/Staff)は案件管理へ、受注者は案件一覧へ
     if (!userRole) return '/dashboard'
-    
-    switch (userRole) {
-      case 'Admin':
-        return '/admin/users'
-      case 'Contractor':
-        return '/jobs'
-      case 'OrgAdmin':
-        return '/projects'
-      case 'Reviewer':
-        return '/reviews'
-      default:
-        return '/dashboard'
-    }
+    if (userRole === 'OrgAdmin' || userRole === 'Staff') return '/projects'
+    if (userRole === 'Contractor') return '/jobs'
+    if (userRole === 'Admin') return '/admin/users'
+    if (userRole === 'Reviewer') return '/reviews'
+    return '/dashboard'
   }
 
   const value: AuthContextType = {

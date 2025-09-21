@@ -37,9 +37,10 @@ interface OrganizationUser {
   id: string
   email: string
   display_name: string
-  role: 'OrgAdmin' | 'Contractor'
+  role: 'OrgAdmin' | 'Contractor' | 'Staff'
   member_level?: MemberLevel
   formal_name?: string
+  department?: string
   phone_number?: string
   created_at: string
   updated_at: string
@@ -50,7 +51,8 @@ interface NewUserData {
   email: string
   display_name: string
   formal_name?: string
-  role: 'OrgAdmin' | 'Contractor'
+  department?: string
+  role: 'OrgAdmin' | 'Contractor' | 'Staff'
 }
 
 interface OrganizationSettings {
@@ -75,6 +77,7 @@ interface CompanyInfo {
   position?: string
   business_registration_number?: string
   business_type?: string
+  website?: string
   updated_at: string
 }
 
@@ -126,15 +129,18 @@ function SettingsPageContent() {
   const [registrationInfo, setRegistrationInfo] = useState<OrganizationRegistration | null>(null)
   const [isLoadingRegistration, setIsLoadingRegistration] = useState(false)
 
+  // 機能フラグ: 組織登録申請情報セクションの表示/取得を制御（デフォルトOFF）
+  const SHOW_REGISTRATION_INFO = process.env.NEXT_PUBLIC_SHOW_ORG_REGISTRATION === 'true'
+
   const [newUser, setNewUser] = useState<NewUserData>({
     email: '',
     display_name: '',
     formal_name: '',
-    role: 'Contractor'
+    role: 'OrgAdmin'
   })
 
   const [editingUser, setEditingUser] = useState<Partial<OrganizationUser>>({})
-  const [editingRole, setEditingRole] = useState<'OrgAdmin' | 'Contractor' | 'Staff'>('Contractor')
+  const [editingRole, setEditingRole] = useState<'OrgAdmin' | 'Contractor' | 'Staff'>('OrgAdmin')
 
   // 組織のドメインを取得
   useEffect(() => {
@@ -340,12 +346,12 @@ function SettingsPageContent() {
       }
 
       const response = await fetch('/api/organization/profile', {
-        method: companyInfo ? 'PUT' : 'POST',
+        method: 'PUT',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(editingCompanyInfo)
+        body: JSON.stringify({ organizationData: editingCompanyInfo })
       })
 
       if (!response.ok) {
@@ -395,19 +401,22 @@ function SettingsPageContent() {
         }
       })
 
+      // 404は未登録として扱い、JSON解析は行わない（Nextの404はHTML）
+      if (response.status === 404) {
+        setRegistrationInfo(null)
+        return
+      }
+
       if (!response.ok) {
-        const errorData = await response.json()
-        if (response.status === 404) {
-          setRegistrationInfo(null)
-          return
-        }
-        throw new Error(errorData.message || '組織登録申請情報の取得に失敗しました')
+        // JSONでない可能性があるためtextで安全に取得
+        const message = await response.text()
+        throw new Error(message || '組織登録申請情報の取得に失敗しました')
       }
 
       const data = await response.json()
       setRegistrationInfo(data.registration)
     } catch (error) {
-      console.error('組織登録申請情報取得エラー:', error)
+      console.info('組織登録申請情報取得スキップまたは未設定:', error)
       // エラーはコンソールに記録するが、UIには表示しない（404の場合は正常）
     } finally {
       setIsLoadingRegistration(false)
@@ -533,6 +542,7 @@ function SettingsPageContent() {
           userId: editingUserId,
           display_name: editingUser.display_name,
           formal_name: editingUser.formal_name,
+          department: editingUser.department,
           newRole: editingRole
         })
       })
@@ -610,7 +620,9 @@ function SettingsPageContent() {
     fetchUsers()
     fetchOrganizationSettings()
     fetchCompanyInfo()
-    fetchRegistrationInfo()
+    if (SHOW_REGISTRATION_INFO) {
+      fetchRegistrationInfo()
+    }
   }, [])
 
   if (loading || isLoading) {
@@ -648,7 +660,7 @@ function SettingsPageContent() {
           </div>
 
           {/* 組織登録申請情報 */}
-          {registrationInfo && (
+          {SHOW_REGISTRATION_INFO && registrationInfo && (
             <Card className="mb-6">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -942,6 +954,17 @@ function SettingsPageContent() {
                           className="mt-1"
                         />
                       </div>
+                      <div className="md:col-span-2">
+                        <Label htmlFor="website">会社URL</Label>
+                        <Input
+                          id="website"
+                          type="url"
+                          value={editingCompanyInfo.website || ''}
+                          onChange={(e) => setEditingCompanyInfo({ ...editingCompanyInfo, website: e.target.value })}
+                          placeholder="https://example.co.jp"
+                          className="mt-1"
+                        />
+                      </div>
                       <div className="md:col-span-2 flex justify-end gap-3 pt-4">
                         <Button
                           variant="outline"
@@ -998,6 +1021,10 @@ function SettingsPageContent() {
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">事業内容</label>
                         <p className="text-gray-900">{companyInfo.business_type || '未設定'}</p>
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">会社URL</label>
+                        <p className="text-gray-900">{companyInfo.website || '未設定'}</p>
                       </div>
                       <div className="md:col-span-2 pt-2 border-t border-gray-200">
                         <p className="text-sm text-gray-500">
@@ -1334,17 +1361,28 @@ function SettingsPageContent() {
                 />
               </div>
 
+              <div>
+                <Label htmlFor="new_department">部署</Label>
+                <Input
+                  id="new_department"
+                  value={newUser.department || ''}
+                  onChange={(e) => setNewUser({ ...newUser, department: e.target.value })}
+                  placeholder="設計部"
+                  className="mt-1"
+                />
+              </div>
+
 
               <div>
                 <Label htmlFor="role">役割 *</Label>
                 <select
                   id="role"
                   value={newUser.role}
-                  onChange={(e) => setNewUser({ ...newUser, role: e.target.value as 'OrgAdmin' | 'Contractor' })}
+                  onChange={(e) => setNewUser({ ...newUser, role: e.target.value as 'OrgAdmin' | 'Staff' })}
                   className="w-full mt-1 px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
                 >
-                  <option value="Contractor">一般ユーザー</option>
                   <option value="OrgAdmin">管理者</option>
+                  <option value="Staff">スタッフ</option>
                 </select>
               </div>
 
@@ -1413,6 +1451,16 @@ function SettingsPageContent() {
               </div>
 
               <div>
+                <Label htmlFor="edit_department">部署</Label>
+                <Input
+                  id="edit_department"
+                  value={editingUser.department || ''}
+                  onChange={(e) => setEditingUser({ ...editingUser, department: e.target.value })}
+                  className="mt-1"
+                />
+              </div>
+
+              <div>
                 <Label htmlFor="edit_role">役割</Label>
                 <select
                   id="edit_role"
@@ -1422,7 +1470,6 @@ function SettingsPageContent() {
                 >
                   <option value="OrgAdmin">管理者</option>
                   <option value="Staff">スタッフ</option>
-                  <option value="Contractor">一般ユーザー（受注者）</option>
                 </select>
               </div>
 
@@ -1450,3 +1497,4 @@ function SettingsPageContent() {
     </div>
   )
 }
+

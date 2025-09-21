@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useEffect, useState } from "react"
 import { motion } from "framer-motion"
 import { User, Edit, Save, X, Shield, Mail } from "lucide-react"
 import { AuthGuard } from "@/components/auth/auth-guard"
@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/contexts/auth-context"
+import { supabase } from "@/lib/supabase"
 
 export default function ProfilePage() {
   return (
@@ -22,12 +23,33 @@ function ProfilePageContent() {
   const { user, userProfile, userRole, updateProfile } = useAuth()
   const [isEditing, setIsEditing] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  const [displayName, setDisplayName] = useState<string>(userProfile?.display_name || '')
+  const [displayName, setDisplayName] = useState<string>(userProfile?.display_name || userProfile?.formal_name || '')
+  const [formalName, setFormalName] = useState<string>(userProfile?.formal_name || '')
+  const [orgContactName, setOrgContactName] = useState<string | null>(null)
+
+  // 発注者の場合は組織の代表者名を取得して表示に利用
+  useEffect(() => {
+    const fetchOrgProfile = async () => {
+      try {
+        if (userRole !== 'OrgAdmin' && userRole !== 'Staff') return
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session?.access_token) return
+        const res = await fetch('/api/organization/profile', {
+          headers: { Authorization: `Bearer ${session.access_token}` }
+        })
+        if (!res.ok) return
+        const json = await res.json()
+        const name = json?.organization?.representative_name || json?.organization?.contact_person || null
+        if (name) setOrgContactName(name)
+      } catch {}
+    }
+    fetchOrgProfile()
+  }, [userRole])
 
   const handleSave = async () => {
     setIsLoading(true)
     try {
-      await updateProfile({ display_name: displayName })
+      await updateProfile({ display_name: displayName, formal_name: formalName })
       setIsEditing(false)
       alert('プロフィールが正常に更新されました')
     } catch (_) {
@@ -39,6 +61,7 @@ function ProfilePageContent() {
 
   const handleCancel = () => {
     setDisplayName(userProfile?.display_name || '')
+    setFormalName(userProfile?.formal_name || '')
     setIsEditing(false)
   }
 
@@ -87,12 +110,22 @@ function ProfilePageContent() {
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
                       />
                     ) : (
-                      <p className="text-gray-900 font-medium">{userProfile?.display_name}</p>
+                      <p className="text-gray-900 font-medium">{orgContactName || userProfile?.display_name || userProfile?.formal_name}</p>
                     )}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">氏名</label>
-                    <p className="text-gray-900">{userProfile?.formal_name || '未設定'}</p>
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        value={formalName}
+                        onChange={(e) => setFormalName(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
+                        placeholder="山田 太郎"
+                      />
+                    ) : (
+                      <p className="text-gray-900">{orgContactName || userProfile?.formal_name || '未設定'}</p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">メールアドレス</label>
@@ -114,5 +147,6 @@ function ProfilePageContent() {
     </div>
   )
 }
+
 
 

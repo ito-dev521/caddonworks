@@ -9,6 +9,7 @@ interface BadgeData {
   jobs?: number
   deliverables?: number
   reviews?: number
+  organizations?: number
 }
 
 export function useNavigationBadges() {
@@ -39,6 +40,21 @@ export function useNavigationBadges() {
 
         // ユーザーロールに応じて必要なバッジデータを取得
         switch (userRole) {
+          case 'Admin':
+            // 管理者: 承認待ちの組織数
+            try {
+              const organizationsRes = await fetch('/api/admin/organizations', { headers })
+
+              if (organizationsRes.ok) {
+                const organizationsData = await organizationsRes.json()
+                const pendingOrgs = organizationsData.organizations?.filter((org: any) => org.approval_status === 'pending').length || 0
+                badgeData.organizations = pendingOrgs
+              }
+            } catch (error) {
+              console.error('Admin badges fetch error:', error)
+            }
+            break
+
           case 'OrgAdmin':
             // 発注者: 案件管理、チャット、契約管理
             try {

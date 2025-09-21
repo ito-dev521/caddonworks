@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 2. 組織を作成
+    // 2. 組織を作成（承認待ち状態で作成）
     const { data: orgData, error: orgError } = await supabase
       .from('organizations')
       .insert({
@@ -108,7 +108,8 @@ export async function POST(request: NextRequest) {
         description: description || null,
         billing_email: billingEmail || adminEmail,
         system_fee: systemFee || 50000,
-        active: true
+        active: false,
+        approval_status: 'pending'
       })
       .select()
       .single()
@@ -168,13 +169,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 成功レスポンス
+    // 5. 会社用BOXフォルダの作成は管理者による承認後に実行されるため、ここでは作成しない
+    // （承認時に /api/admin/organizations/[id]/approval で自動作成される）
+
+    // 成功レスポンス（承認待ち状態）
     return NextResponse.json({
-      message: '組織登録が完了しました',
+      message: '組織登録申請が完了しました。運営者による承認をお待ちください。',
       data: {
         organizationId: orgData.id,
         userId: userData.id,
-        authUserId: authData.user.id
+        authUserId: authData.user.id,
+        approval_status: 'pending'
       }
     }, { status: 200 })
 

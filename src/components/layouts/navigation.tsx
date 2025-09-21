@@ -20,7 +20,8 @@ import {
   ChevronDown,
   MessageCircle,
   Star,
-  Box
+  Box,
+  Building2
 } from "lucide-react"
 import { Button } from "../ui/button"
 import { Badge } from "../ui/badge"
@@ -31,15 +32,16 @@ import { cn } from "@/lib/utils"
 import { NotificationBell } from "../notifications/notification-bell"
 import { useNavigationBadges } from "@/hooks/use-navigation-badges"
 
-interface NavigationProps {
-  userRole?: "Admin" | "OrgAdmin" | "Staff" | "Contractor" | "Reviewer" | "Auditor"
-}
+// interface NavigationProps {
+//   userRole?: "Admin" | "OrgAdmin" | "Staff" | "Contractor" | "Reviewer" | "Auditor"
+// }
 
 const getNavigationItems = (userRole: string, badges: any) => {
   const baseItems = {
     Admin: [
       { icon: Home, label: "ダッシュボード", href: "/dashboard", badge: null },
       { icon: Users, label: "ユーザー管理", href: "/admin/users", badge: null },
+      { icon: Building2, label: "会社管理・承認", href: "/admin/organizations", badge: badges.organizations || null },
       { icon: FileText, label: "請求書管理", href: "/admin/invoices", badge: null },
       { icon: BarChart3, label: "統計・レポート", href: "/admin/reports", badge: null },
       { icon: Settings, label: "システム設定", href: "/admin/settings", badge: null },
@@ -81,12 +83,10 @@ const getNavigationItems = (userRole: string, badges: any) => {
   return baseItems[userRole as keyof typeof baseItems] || baseItems.Admin
 }
 
-export function Navigation({ userRole: propUserRole }: NavigationProps) {
+export function Navigation() {
   const { user, userProfile, userRole, userOrganization, signOut } = useAuth()
   const { badges } = useNavigationBadges()
 
-  // propUserRoleは将来の拡張用として保持
-  const _ = propUserRole
   const router = useRouter()
   const pathname = usePathname()
   const [isExpanded, setIsExpanded] = useState(true)
@@ -144,7 +144,12 @@ export function Navigation({ userRole: propUserRole }: NavigationProps) {
         if (response.ok) {
           const data = await response.json()
           if (data.organization) {
-            setOrganizationContactPerson(data.organization?.contact_person || null)
+            // APIは representative_name を返す。互換のため contact_person もフォールバック
+            setOrganizationContactPerson(
+              data.organization?.representative_name ||
+              data.organization?.contact_person ||
+              null
+            )
           }
         } else {
           console.error('組織情報API失敗:', response.status)

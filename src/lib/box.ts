@@ -221,16 +221,143 @@ export async function ensureProjectFolder(options: { name: string; parentFolderI
   return { id: json.id as string }
 }
 
-export async function createProjectFolderStructure(projectTitle: string, projectId: string): Promise<{
+export async function createCompanyFolder(companyName: string): Promise<{ id: string }> {
+  try {
+    const accessToken = await getAppAuthAccessToken()
+    const parentFolderId = getEnv('BOX_PROJECTS_ROOT_FOLDER_ID')
+
+    const res = await fetch('https://api.box.com/2.0/folders', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        name: companyName,
+        parent: { id: parentFolderId }
+      })
+    })
+
+    if (!res.ok) {
+      if (res.status === 409) {
+        const folders = await getBoxFolderItems(parentFolderId)
+        const existingFolder = folders.find(item => item.type === 'folder' && item.name === companyName)
+        if (existingFolder) {
+          return { id: existingFolder.id }
+        }
+      }
+      const errorText = await res.text()
+      throw new Error(`Company folder creation failed ${res.status}: ${errorText}`)
+    }
+
+    const folder: any = await res.json()
+    return { id: folder.id as string }
+
+  } catch (error) {
+    console.error('❌ Company folder creation failed:', error)
+    throw error
+  }
+}
+
+export async function addBoxCollaborator(folderId: string, email: string, role: 'viewer' | 'editor' | 'co-owner' = 'editor'): Promise<any> {
+  try {
+    const accessToken = await getAppAuthAccessToken()
+
+    const res = await fetch('https://api.box.com/2.0/collaborations', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        item: {
+          type: 'folder',
+          id: folderId
+        },
+        accessible_by: {
+          type: 'user',
+          login: email
+        },
+        role: role,
+        can_view_path: true
+      })
+    })
+
+    if (!res.ok) {
+      const errorText = await res.text()
+      console.error('BOX collaboration error:', errorText)
+
+      if (res.status === 400 && errorText.includes('already has access')) {
+        console.warn('User already has access to this folder')
+        return null
+      }
+
+      throw new Error(`BOX collaboration failed ${res.status}: ${errorText}`)
+    }
+
+    return res.json()
+
+  } catch (error) {
+    console.error('❌ BOX collaboration failed:', error)
+    throw error
+  }
+}
+
+export async function removeBoxCollaborator(collaborationId: string): Promise<void> {
+  try {
+    const accessToken = await getAppAuthAccessToken()
+
+    const res = await fetch(`https://api.box.com/2.0/collaborations/${collaborationId}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`
+      }
+    })
+
+    if (!res.ok) {
+      const errorText = await res.text()
+      throw new Error(`BOX collaboration removal failed ${res.status}: ${errorText}`)
+    }
+
+  } catch (error) {
+    console.error('❌ BOX collaboration removal failed:', error)
+    throw error
+  }
+}
+
+export async function getBoxFolderCollaborators(folderId: string): Promise<any[]> {
+  try {
+    const accessToken = await getAppAuthAccessToken()
+
+    const res = await fetch(`https://api.box.com/2.0/folders/${folderId}/collaborations`, {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`
+      }
+    })
+
+    if (!res.ok) {
+      const errorText = await res.text()
+      throw new Error(`BOX collaborations fetch failed ${res.status}: ${errorText}`)
+    }
+
+    const data: any = await res.json()
+    return data.entries || []
+
+  } catch (error) {
+    console.error('❌ BOX collaborations fetch failed:', error)
+    throw error
+  }
+}
+
+export async function createProjectFolderStructure(projectTitle: string, projectId: string, companyFolderId: string): Promise<{
   folderId: string;
   subfolders: Record<string, string>;
 }> {
   try {
     const accessToken = await getAppAuthAccessToken()
-    const parentFolderId = getEnv('BOX_PROJECTS_ROOT_FOLDER_ID')
 
-    // メインプロジェクトフォルダを作成
-    const mainFolderName = `${projectTitle}_${projectId.slice(0, 8)}`
+    // メインプロジェクトフォルダを作成（会社フォルダ下）
+    const mainFolderName = `[PRJ-${projectId.slice(0, 8)}] ${projectTitle}`
     console.log(`Creating main folder: ${mainFolderName}`)
 
     const mainFolderRes = await fetch('https://api.box.com/2.0/folders', {
@@ -241,7 +368,7 @@ export async function createProjectFolderStructure(projectTitle: string, project
       },
       body: JSON.stringify({
         name: mainFolderName,
-        parent: { id: parentFolderId }
+        parent: { id: companyFolderId }
       })
     })
 

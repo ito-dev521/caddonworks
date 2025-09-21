@@ -43,13 +43,13 @@ export default function LoginPage() {
       const redirectPath = getRedirectPath()
 
       // セッションストレージに保存されたリダイレクト先を確認
-      const savedRedirect = sessionStorage.getItem('redirectAfterLogin')
-      if (savedRedirect && savedRedirect !== '/auth/login') {
+      // 前回のキャッシュはすべてクリア
+      try {
         sessionStorage.removeItem('redirectAfterLogin')
-        router.push(savedRedirect)
-      } else {
-        router.push(redirectPath)
-      }
+        sessionStorage.removeItem('previousPage')
+        sessionStorage.removeItem('currentPage')
+      } catch {}
+      router.push(redirectPath)
     }
   }, [userRole, loading, success, router, getRedirectPath])
 
@@ -57,6 +57,11 @@ export default function LoginPage() {
   useEffect(() => {
     if (!loading && userRole && !success) {
       console.log('LoginPage: 既にログイン済みユーザーを検出、リダイレクトします')
+      try {
+        sessionStorage.removeItem('redirectAfterLogin')
+        sessionStorage.removeItem('previousPage')
+        sessionStorage.removeItem('currentPage')
+      } catch {}
       const redirectPath = getRedirectPath()
       router.push(redirectPath)
     }
