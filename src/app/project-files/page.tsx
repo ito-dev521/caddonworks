@@ -59,6 +59,9 @@ export default function ProjectFilesPage() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedProject, setSelectedProject] = useState<string | null>(null)
+  const [selectedFolder, setSelectedFolder] = useState<{id: string, name: string} | null>(null)
+  const [folderContents, setFolderContents] = useState<BoxItem[]>([])
+  const [loadingFolder, setLoadingFolder] = useState(false)
 
   useEffect(() => {
     if (authLoading) {
@@ -107,6 +110,40 @@ export default function ProjectFilesPage() {
       setError(err.message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleFolderClick = async (folderId: string, folderName: string) => {
+    try {
+      setLoadingFolder(true)
+      setSelectedFolder({id: folderId, name: folderName})
+
+      // Supabaseから現在のセッションを取得
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+
+      if (sessionError || !session?.access_token) {
+        throw new Error('認証に失敗しました')
+      }
+
+      // BOXフォルダの中身を取得するAPIエンドポイントを呼び出し
+      const response = await fetch(`/api/box/folder/${folderId}`, {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error(`フォルダ内容の取得に失敗しました: ${response.status}`)
+      }
+
+      const data = await response.json()
+      setFolderContents(data.items || [])
+    } catch (err: any) {
+      console.error('Folder click error:', err)
+      alert(`フォルダを開けませんでした: ${err.message}`)
+    } finally {
+      setLoadingFolder(false)
     }
   }
 
@@ -381,11 +418,18 @@ export default function ProjectFilesPage() {
                               <h4 className="text-sm font-medium text-gray-700">最近のファイル</h4>
                               <div className="space-y-1 max-h-32 overflow-y-auto">
                                 {project.box_items.slice(0, 5).map((item) => (
-                                  <div key={item.id} className="flex items-center gap-2 p-1 text-xs">
+                                  <div
+                                    key={item.id}
+                                    className={`flex items-center gap-2 p-1 text-xs ${item.type === 'folder' ? 'cursor-pointer hover:bg-gray-100 rounded' : ''}`}
+                                    onClick={() => item.type === 'folder' && handleFolderClick(item.id, item.name)}
+                                  >
                                     {getFileIcon(item.name, item.type)}
                                     <span className="truncate flex-1">{item.name}</span>
                                     {item.size && (
                                       <span className="text-gray-500">{formatFileSize(item.size)}</span>
+                                    )}
+                                    {item.type === 'folder' && (
+                                      <span className="text-xs text-blue-600">📁</span>
                                     )}
                                   </div>
                                 ))}
@@ -533,6 +577,106 @@ export default function ProjectFilesPage() {
               </p>
             </div>
           )}
+
+          {/* Folder Contents Modal */}
+          <AnimatePresence>
+            {selectedFolder && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                onClick={() => setSelectedFolder(null)}
+              >
+                <motion.div
+                  initial={{ scale: 0.9, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.9, opacity: 0 }}
+                  className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[80vh] overflow-hidden"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="p-6 border-b border-gray-200">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <FolderOpen className="w-6 h-6 text-blue-600" />
+                        <div>
+                          <h2 className="text-xl font-semibold text-gray-900">{selectedFolder.name}</h2>
+                          <p className="text-sm text-gray-600">フォルダID: {selectedFolder.id}</p>
+                        </div>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSelectedFolder(null)}
+                      >
+                        ✕ 閉じる
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="p-6 overflow-y-auto max-h-[60vh]">
+                    {loadingFolder ? (
+                      <div className="text-center py-8">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-engineering-blue mx-auto mb-4"></div>
+                        <p className="text-gray-600">フォルダ内容を読み込み中...</p>
+                      </div>
+                    ) : folderContents.length === 0 ? (
+                      <div className="text-center py-8">
+                        <FolderOpen className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                        <p className="text-gray-600">このフォルダは空です</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {folderContents.map((item) => (
+                          <Card key={item.id} className="hover-lift">
+                            <CardContent className="p-4">
+                              <div className="flex items-center gap-3">
+                                {getFileIcon(item.name, item.type)}
+                                <div className="min-w-0 flex-1">
+                                  <p className="font-medium text-sm truncate">{item.name}</p>
+                                  <p className="text-xs text-gray-500">
+                                    {item.type === 'folder' ? 'フォルダ' : formatFileSize(item.size)}
+                                  </p>
+                                  <p className="text-xs text-gray-400">
+                                    {new Date(item.modified_at).toLocaleDateString('ja-JP')}
+                                  </p>
+                                </div>
+                              </div>
+                              {item.type === 'folder' && (
+                                <div className="mt-2">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="w-full"
+                                    onClick={() => handleFolderClick(item.id, item.name)}
+                                  >
+                                    <FolderOpen className="w-3 h-3 mr-2" />
+                                    開く
+                                  </Button>
+                                </div>
+                              )}
+                              {item.type === 'file' && (
+                                <div className="mt-2">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="w-full"
+                                  >
+                                    <Download className="w-3 h-3 mr-2" />
+                                    ダウンロード
+                                  </Button>
+                                </div>
+                              )}
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </main>
       </div>
     </div>
