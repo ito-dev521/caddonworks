@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+// Box SDK経由ではなく、安定化のためHTTPのプロビジョナに委譲する
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -104,12 +105,52 @@ export async function POST(
 
     // 案件のステータスを更新
     const newStatus = action === 'approve' ? 'bidding' : 'rejected'
+    let boxFolderId: string | null = null
+    let boxSubfolders: Record<string, string> | null = null
+
+    // 承認の場合はBOXフォルダを作成（HTTPエンドポイントに委譲）
+    if (action === 'approve') {
+      try {
+        const parentId = process.env.BOX_PROJECTS_ROOT_FOLDER_ID
+        if (parentId) {
+          const name = `[PRJ-${project.id.slice(0,8)}] ${project.title}`
+          const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/box/provision`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, parentId, subfolders: ['受取','作業','納品','契約'] })
+          })
+          if (res.ok) {
+            const json = await res.json()
+            boxFolderId = json.folderId
+            boxSubfolders = json.subfolderIds || null
+          } else {
+            const text = await res.text()
+            console.warn('BOX provision failed:', text)
+          }
+        } else {
+          console.warn('BOX_PROJECTS_ROOT_FOLDER_ID not set')
+        }
+      } catch (e) {
+        console.error('BOX provision error:', e)
+      }
+    }
+
+    const updateData: any = {
+      status: newStatus,
+      approver_id: null // 承認後は承認者IDをクリア
+    }
+
+    // BOXフォルダが作成された場合は追加
+    if (boxFolderId) {
+      updateData.box_folder_id = boxFolderId
+      if (boxSubfolders) {
+        updateData.box_subfolders = boxSubfolders
+      }
+    }
+
     const { error: updateError } = await supabaseAdmin
       .from('projects')
-      .update({ 
-        status: newStatus,
-        approver_id: null // 承認後は承認者IDをクリア
-      })
+      .update(updateData)
       .eq('id', projectId)
 
     if (updateError) {
@@ -161,11 +202,19 @@ export async function POST(
       // 通知エラーは承認処理を妨げない
     }
 
+    const responseMessage = action === 'approve'
+      ? boxFolderId
+        ? '案件が承認され、BOXフォルダが作成されました'
+        : '案件が承認されました（BOXフォルダ作成は権限承認待ちです）'
+      : '案件が却下されました'
+
     return NextResponse.json({
-      message: action === 'approve' ? '案件が承認されました' : '案件が却下されました',
+      message: responseMessage,
       project: {
         id: projectId,
-        status: newStatus
+        status: newStatus,
+        box_folder_id: boxFolderId,
+        box_subfolders: boxSubfolders
       }
     }, { status: 200 })
 

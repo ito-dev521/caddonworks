@@ -206,17 +206,28 @@ export function ChatRoomList({
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 className={cn(
-                  "p-3 rounded-lg cursor-pointer transition-colors hover:bg-gray-50",
-                  selectedRoomId === room.id && "bg-engineering-blue/10 border border-engineering-blue/20"
+                  "p-3 rounded-lg cursor-pointer transition-colors",
+                  room.is_active ? "bg-green-50 hover:bg-green-100/60" : "bg-gray-50 hover:bg-gray-100/60",
+                  selectedRoomId === room.id && "ring-2 ring-engineering-blue/40"
                 )}
                 onClick={() => onRoomSelect(room.id)}
               >
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <h3 className="font-medium text-gray-900 truncate">
+                      <h3 className={cn("font-medium truncate", room.is_active ? "text-green-900" : "text-gray-700") }>
                         {room.name}
                       </h3>
+                      <Badge
+                        className={cn(
+                          "text-xxs px-1.5 py-0.5 rounded-full",
+                          room.is_active
+                            ? "bg-green-100 text-green-700 border border-green-200"
+                            : "bg-gray-100 text-gray-600 border border-gray-200"
+                        )}
+                      >
+                        {room.is_active ? '進行中' : '完了'}
+                      </Badge>
                       {(room.unread_count || 0) > 0 && (
                         <Badge variant="destructive" className="text-xs px-2 py-0.5">
                           {(room.unread_count || 0) > 99 ? '99+' : room.unread_count}

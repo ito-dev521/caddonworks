@@ -170,26 +170,57 @@ export async function POST(request: NextRequest) {
     // 表示用の請求書番号（列が存在しない環境もあるため保存は必須としない）
     const invoiceNumber = `INV-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`
 
-    // 請求書データを作成（実際のテーブル構造に合わせて）
+    // システム設定（サポート手数料％）を取得
+    const { data: sysSettings } = await supabaseAdmin
+      .from('system_settings')
+      .select('support_fee_percent')
+      .eq('id', 'global')
+      .maybeSingle()
+    const supportPercent = Number(sysSettings?.support_fee_percent ?? 8)
+
+    // 契約・プロジェクトのサポートフラグ
+    const projectSupport = !!project.support_enabled
+    let contractSupport = false
+    try {
+      const { data: contractSupportRow } = await supabaseAdmin
+        .from('contracts')
+        .select('support_enabled')
+        .eq('id', contract.id)
+        .maybeSingle()
+      contractSupport = !!contractSupportRow?.support_enabled
+    } catch (_) {
+      contractSupport = false
+    }
+
+    // 請求書データを作成（サポート％適用）
     const contractAmount = contract.bid_amount || project.budget || 0
-    const systemFee = 50000 // システム手数料（発注者側の手数料）
+    const supportFee = Math.round((contractAmount * supportPercent) / 100)
     
-    // 業務完了届（受注者向け）の場合は契約金額のみ、その他はシステム手数料込み
-    const totalAmount = type === 'completion' ? contractAmount : contractAmount + systemFee
+    // 仕様:
+    // - 発注者がサポート利用: 発注者へサポート手数料を請求（受注者金額は減らさない）
+    // - 受注者がサポート利用: 受注者への支払いからサポート手数料を控除
+    // 現在のAPIは completion = 受注者→運営 方向の完了届（to_operator）
+    // よって completion の場合は、受注者が利用時のみ控除（base_amount を減額）
+    const isCompletion = type === 'completion'
+    const applyContractorDeduct = isCompletion && contractSupport
+    const baseAmount = applyContractorDeduct ? Math.max(0, contractAmount - supportFee) : contractAmount
+    const systemFee = (!isCompletion && projectSupport) ? supportFee : 0
+    const totalAmount = baseAmount + systemFee
     
     const invoiceData: any = {
       project_id: effectiveProjectId,
       client_org_id: project.org_id,
-      base_amount: contractAmount,
-      fee_amount: 0, // 追加手数料（今回は0）
-      system_fee: type === 'completion' ? 0 : systemFee, // 業務完了届の場合はシステム手数料を0に
+      base_amount: baseAmount,
+      fee_amount: 0,
+      system_fee: systemFee,
       total_amount: totalAmount,
       status: type === 'completion' ? 'issued' : 'draft', // 業務完了届の場合は発行済み、その他は下書き
       issue_date: type === 'completion' ? new Date().toISOString().split('T')[0] : null, // 業務完了届の場合は発行日を設定
       due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30日後
       org_id: project.org_id,
       contractor_id: contract.contractor_id,
-      contract_id: contract.id
+      contract_id: contract.id,
+      memo: contractSupport ? `受注者サポート控除 ${supportPercent}%` : (projectSupport ? `発注者サポート手数料 ${supportPercent}%` : null)
     }
 
     // 一部環境で存在しない列のため、存在する場合のみ付与（冪等）

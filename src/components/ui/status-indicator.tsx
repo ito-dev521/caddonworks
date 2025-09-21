@@ -2,7 +2,7 @@
 
 import React from "react"
 import { motion } from "framer-motion"
-import { cn, getStatusColor, getStatusIcon } from "@/lib/utils"
+import { cn, getStatusColor, getStatusIcon, getStatusLabel } from "@/lib/utils"
 
 interface StatusIndicatorProps {
   status: string
@@ -60,7 +60,7 @@ export function StatusIndicator({
       />
       <span className="flex items-center gap-1">
         {getStatusIcon(status)}
-        {status.replace('_', ' ').toUpperCase()}
+        {getStatusLabel(status)}
       </span>
     </motion.div>
   )

@@ -263,7 +263,7 @@ export async function GET(request: NextRequest) {
         if (projectIds.length > 0) {
           const { data: projects } = await supabaseAdmin
             .from('projects')
-            .select('id, title')
+            .select('id, title, support_enabled')
             .in('id', projectIds)
           
           projectMap = projects?.reduce((acc: any, project: any) => {
@@ -297,6 +297,7 @@ export async function GET(request: NextRequest) {
         contractsData = contractsBasic?.map(contract => ({
           ...contract,
           projects: projectMap[contract.project_id],
+          project_support_enabled: projectMap[contract.project_id]?.support_enabled ?? false,
           organizations: orgData,
           contractors: contractorMap[contract.contractor_id]
         })) || []
@@ -330,7 +331,7 @@ export async function GET(request: NextRequest) {
         if (projectIds.length > 0) {
           const { data: projects } = await supabaseAdmin
             .from('projects')
-            .select('id, title')
+            .select('id, title, support_enabled')
             .in('id', projectIds)
           
           projectMap = projects?.reduce((acc: any, project: any) => {
@@ -364,6 +365,7 @@ export async function GET(request: NextRequest) {
         contractsData = contractsBasic?.map(contract => ({
           ...contract,
           projects: projectMap[contract.project_id],
+          project_support_enabled: projectMap[contract.project_id]?.support_enabled ?? false,
           organizations: orgMap[contract.org_id],
           contractors: contractorData
         })) || []

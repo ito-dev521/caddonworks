@@ -18,7 +18,8 @@ import {
   Users,
   FileText,
   Image,
-  Archive
+  Archive,
+  RefreshCw
 } from "lucide-react"
 import { Navigation } from "@/components/layouts/navigation"
 import { Button } from "@/components/ui/button"
@@ -36,6 +37,7 @@ interface BoxProject {
   status: string
   created_at: string
   box_items: BoxItem[]
+  recent_files?: BoxItem[]
   error?: string
 }
 
@@ -147,6 +149,46 @@ export default function ProjectFilesPage() {
     }
   }
 
+  const handleFileDownload = async (fileId: string, fileName: string) => {
+    try {
+      console.log(`Downloading file: ${fileName} (${fileId})`)
+
+      // Supabaseから現在のセッションを取得
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+
+      if (sessionError || !session?.access_token) {
+        throw new Error('認証に失敗しました')
+      }
+
+      // BOXファイルダウンロードAPIを呼び出し
+      const response = await fetch(`/api/box/download/${fileId}`, {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error(`ダウンロードに失敗しました: ${response.status}`)
+      }
+
+      // ファイルをダウンロード
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = fileName
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+
+      console.log(`✅ File downloaded: ${fileName}`)
+    } catch (err: any) {
+      console.error('Download error:', err)
+      alert(`ダウンロードに失敗しました: ${err.message}`)
+    }
+  }
+
   const getFileIcon = (name: string, type: string) => {
     if (type === 'folder') {
       return <FolderOpen className="w-6 h-6 text-blue-600" />
@@ -171,6 +213,38 @@ export default function ProjectFilesPage() {
     if (bytes === 0) return '0 Byte'
     const i = parseInt(Math.floor(Math.log(bytes) / Math.log(1024)).toString())
     return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i]
+  }
+
+  const formatRelativeTime = (dateString: string) => {
+    const date = new Date(dateString)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
+    const diffMinutes = Math.floor(diffMs / (1000 * 60))
+
+    if (diffDays > 0) {
+      return `${diffDays}日前`
+    } else if (diffHours > 0) {
+      return `${diffHours}時間前`
+    } else if (diffMinutes > 0) {
+      return `${diffMinutes}分前`
+    } else {
+      return 'たった今'
+    }
+  }
+
+  const getRecentFiles = (project: BoxProject) => {
+    // recent_files が利用可能な場合はそれを使用、そうでなければ従来の方法
+    if (project.recent_files && project.recent_files.length > 0) {
+      return project.recent_files.slice(0, 5)
+    }
+
+    // フォールバック: box_items から取得
+    return project.box_items
+      .filter(item => item.type === 'file')
+      .sort((a, b) => new Date(b.modified_at).getTime() - new Date(a.modified_at).getTime())
+      .slice(0, 5)
   }
 
   const getSubfolderName = (subfolderKey: string) => {
@@ -250,6 +324,16 @@ export default function ProjectFilesPage() {
                 <p className="text-gray-600">Box連携プロジェクトファイル管理システム</p>
               </div>
               <div className="flex items-center gap-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={fetchProjects}
+                  disabled={loading}
+                  className="flex items-center gap-2"
+                >
+                  <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                  更新
+                </Button>
                 <Badge variant="engineering" className="animate-pulse">
                   <Box className="w-3 h-3 mr-1" />
                   Box連携
@@ -282,7 +366,7 @@ export default function ProjectFilesPage() {
                   <div>
                     <p className="text-sm text-gray-600">総ファイル数</p>
                     <p className="text-3xl font-bold text-engineering-blue">
-                      {projects.reduce((total, project) => total + project.box_items.length, 0)}
+                      {projects.reduce((total, project) => total + (project.box_items?.length || 0), 0)}
                     </p>
                   </div>
                   <div className="p-3 bg-engineering-blue/10 rounded-lg">
@@ -379,7 +463,7 @@ export default function ProjectFilesPage() {
                                 {project.title}
                               </CardTitle>
                               <CardDescription className="text-sm">
-                                {project.box_items.length} ファイル
+                                {project.box_items?.length || 0} ファイル
                               </CardDescription>
                             </div>
                           </div>
@@ -388,7 +472,7 @@ export default function ProjectFilesPage() {
                         <div className="flex items-center gap-2 mt-2">
                           <StatusIndicator status={project.status} size="sm" />
                           <Badge variant="outline" className="text-xs">
-                            Box ID: {project.box_folder_id.slice(0, 8)}...
+                            Box ID: {project.box_folder_id ? project.box_folder_id.slice(0, 8) + '...' : '設定中'}
                           </Badge>
                         </div>
                       </CardHeader>
@@ -404,11 +488,15 @@ export default function ProjectFilesPage() {
                             <div className="space-y-2">
                               <h4 className="text-sm font-medium text-gray-700">サブフォルダ</h4>
                               <div className="grid grid-cols-2 gap-2">
-                                {Object.entries(project.subfolders || {}).map(([name, _id]) => (
-                                  <div key={name} className="flex items-center gap-2 p-2 bg-gray-50 rounded text-xs">
+                                {Object.entries(project.subfolders || {}).map(([name, folderId]) => (
+                                  <button
+                                    key={name}
+                                    onClick={() => handleFolderClick(folderId, getSubfolderName(name))}
+                                    className="flex items-center gap-2 p-2 bg-gray-50 hover:bg-gray-100 rounded text-xs transition-colors cursor-pointer"
+                                  >
                                     <FolderOpen className="w-3 h-3 text-blue-500" />
                                     <span className="truncate">{getSubfolderName(name)}</span>
-                                  </div>
+                                  </button>
                                 ))}
                               </div>
                             </div>
@@ -417,25 +505,47 @@ export default function ProjectFilesPage() {
                             <div className="space-y-2">
                               <h4 className="text-sm font-medium text-gray-700">最近のファイル</h4>
                               <div className="space-y-1 max-h-32 overflow-y-auto">
-                                {project.box_items.slice(0, 5).map((item) => (
+                                {getRecentFiles(project).map((item) => (
                                   <div
                                     key={item.id}
-                                    className={`flex items-center gap-2 p-1 text-xs ${item.type === 'folder' ? 'cursor-pointer hover:bg-gray-100 rounded' : ''}`}
-                                    onClick={() => item.type === 'folder' && handleFolderClick(item.id, item.name)}
+                                    className="flex items-center gap-2 p-1 text-xs hover:bg-gray-50 rounded"
                                   >
                                     {getFileIcon(item.name, item.type)}
-                                    <span className="truncate flex-1">{item.name}</span>
-                                    {item.size && (
-                                      <span className="text-gray-500">{formatFileSize(item.size)}</span>
-                                    )}
-                                    {item.type === 'folder' && (
-                                      <span className="text-xs text-blue-600">📁</span>
-                                    )}
+                                    <div className="min-w-0 flex-1">
+                                      <div className="truncate font-medium">{item.name}</div>
+                                      <div className="flex items-center gap-1 text-[10px] text-gray-500">
+                                        <span>{formatRelativeTime(item.modified_at)}</span>
+                                        {(item as any).subfolder && (
+                                          <>
+                                            <span>•</span>
+                                            <span className="text-blue-600">{(item as any).subfolder}</span>
+                                          </>
+                                        )}
+                                        {item.size && (
+                                          <>
+                                            <span>•</span>
+                                            <span>{formatFileSize(item.size)}</span>
+                                          </>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <button
+                                      onClick={() => handleFileDownload(item.id, item.name)}
+                                      className="ml-2 p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded"
+                                      title="ダウンロード"
+                                    >
+                                      <Download className="w-3 h-3" />
+                                    </button>
                                   </div>
                                 ))}
-                                {project.box_items.length > 5 && (
+                                {getRecentFiles(project).length === 0 && (
+                                  <p className="text-xs text-gray-500 text-center py-2">
+                                    ファイルはありません
+                                  </p>
+                                )}
+                                {(project.box_items?.filter(item => item.type === 'file').length || 0) > 5 && (
                                   <p className="text-xs text-gray-500 text-center">
-                                    他 {project.box_items.length - 5} ファイル
+                                    他 {(project.box_items?.filter(item => item.type === 'file').length || 0) - 5} ファイル
                                   </p>
                                 )}
                               </div>
@@ -489,7 +599,7 @@ export default function ProjectFilesPage() {
                             <CardContent className="p-4 bg-gray-50">
                               <h4 className="font-medium mb-3">全ファイル一覧</h4>
                               <div className="space-y-2 max-h-48 overflow-y-auto">
-                                {project.box_items.map((item) => (
+                                {(project.box_items || []).map((item) => (
                                   <div key={item.id} className="flex items-center gap-2 p-2 bg-white rounded text-sm">
                                     {getFileIcon(item.name, item.type)}
                                     <div className="flex-1 min-w-0">
@@ -537,8 +647,8 @@ export default function ProjectFilesPage() {
                           <div className="flex-1 min-w-0">
                             <h3 className="font-semibold text-gray-900 truncate">{project.title}</h3>
                             <p className="text-sm text-gray-600">
-                              {project.box_items.length} ファイル •
-                              Box ID: {project.box_folder_id.slice(0, 12)}...
+                              {project.box_items?.length || 0} ファイル •
+                              Box ID: {project.box_folder_id ? project.box_folder_id.slice(0, 12) + '...' : '設定中'}
                             </p>
                           </div>
                           <div className="flex items-center gap-2">
@@ -661,6 +771,7 @@ export default function ProjectFilesPage() {
                                     variant="outline"
                                     size="sm"
                                     className="w-full"
+                                    onClick={() => handleFileDownload(item.id, item.name)}
                                   >
                                     <Download className="w-3 h-3 mr-2" />
                                     ダウンロード

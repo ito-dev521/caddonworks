@@ -60,19 +60,19 @@ export async function GET(request: NextRequest) {
     let project, projectError
     
     try {
-      // まず created_by を含めて取得を試行
+      // まず created_by / support_enabled を含めて取得を試行
       const result = await supabaseAdmin
         .from('projects')
-        .select('id, title, org_id, contractor_id, created_by')
+        .select('id, title, org_id, contractor_id, created_by, support_enabled')
         .eq('id', projectId)
         .single()
       
       project = result.data
       projectError = result.error
     } catch (error) {
-      console.log('created_byカラムを含む取得に失敗、created_byなしで再試行')
+      console.log('拡張カラム付き取得に失敗、最小列で再試行')
       
-      // created_byカラムが存在しない場合の代替取得
+      // created_by / support_enabled が存在しない場合の代替取得
       const result = await supabaseAdmin
         .from('projects')
         .select('id, title, org_id, contractor_id')
@@ -144,7 +144,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // プロジェクトの基本参加者を取得（作成者・担当者・受注者）
+    // プロジェクトの基本参加者を取得（作成者・担当者・受注者・サポート）
     const basicParticipants = []
     console.log('チャット参加者取得 - 基本参加者の取得開始')
 
@@ -306,6 +306,57 @@ export async function GET(request: NextRequest) {
           role: assignee.memberships[0]?.role || 'Member',
           joined_at: new Date().toISOString(),
           is_basic: true
+        })
+      }
+    }
+
+    // 5. 運営サポートを追加（仕様：運営が作成するサポートメンバー）
+    //    - 条件: project.support_enabled=true または contract.support_enabled=true
+    //    - サポートメンバーの抽出: memberships.role IN ('Reviewer','Staff') のユーザー
+    let supportNeeded = false
+    try {
+      supportNeeded = !!project.support_enabled
+    } catch (_) {
+      supportNeeded = false
+    }
+
+    if (!supportNeeded) {
+      // 契約側のフラグも確認
+      const { data: latestContract } = await supabaseAdmin
+        .from('contracts')
+        .select('id, support_enabled')
+        .eq('project_id', projectId)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      supportNeeded = !!latestContract?.support_enabled
+    }
+
+    if (supportNeeded) {
+      const { data: supportMembers } = await supabaseAdmin
+        .from('users')
+        .select(`
+          id,
+          display_name,
+          email,
+          avatar_url,
+          memberships!inner ( role )
+        `)
+        .in('memberships.role', ['Reviewer', 'Staff'])
+
+      if (supportMembers && supportMembers.length > 0) {
+        supportMembers.forEach((u: any) => {
+          if (!basicParticipants.some(bp => bp.id === u.id)) {
+            basicParticipants.push({
+              id: u.id,
+              display_name: u.display_name || u.email,
+              email: u.email,
+              avatar_url: u.avatar_url,
+              role: 'Staff',
+              joined_at: new Date().toISOString(),
+              is_basic: true
+            })
+          }
         })
       }
     }

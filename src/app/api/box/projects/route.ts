@@ -69,7 +69,9 @@ async function getBoxFolderItems(folderId: string): Promise<any[]> {
     throw new Error(`Box folder items error ${res.status}: ${await res.text()}`)
   }
   const data: any = await res.json()
-  return data.entries || []
+  // フォルダのみを返す（発注者デモと同じ表示にするため）
+  const allItems = data.entries || []
+  return allItems.filter((item: any) => item.type === 'folder')
 }
 
 export async function GET(request: NextRequest) {
@@ -124,12 +126,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ message: '発注者権限が必要です' }, { status: 403 })
     }
 
-    // 組織の案件でBoxフォルダが作成されているものを取得
+    // 組織のすべての案件を取得（BOX連携の有無に関わらず）
     const { data: projects, error: projectsError } = await supabaseAdmin
       .from('projects')
       .select('id, title, box_folder_id, status, created_at')
       .eq('org_id', orgAdminMembership.org_id)
-      .not('box_folder_id', 'is', null)
       .order('created_at', { ascending: false })
 
     if (projectsError) {
@@ -151,19 +152,10 @@ export async function GET(request: NextRequest) {
               ...project,
               box_items: [
                 {
-                  id: 'mock1',
-                  name: 'サンプル図面.dwg',
-                  type: 'file',
-                  size: 1024000,
-                  modified_at: new Date().toISOString(),
-                  created_at: new Date().toISOString(),
-                  path_collection: { entries: [{ name: project.title }] }
-                },
-                {
-                  id: 'mock2',
-                  name: '契約書.pdf',
-                  type: 'file',
-                  size: 512000,
+                  id: 'mock_folder',
+                  name: 'テストフォルダ',
+                  type: 'folder',
+                  size: undefined,
                   modified_at: new Date().toISOString(),
                   created_at: new Date().toISOString(),
                   path_collection: { entries: [{ name: project.title }] }
@@ -178,19 +170,114 @@ export async function GET(request: NextRequest) {
             }
           }
 
-          const items = await getBoxFolderItems(project.box_folder_id)
-          // box_subfoldersカラムが存在しない場合のフォールバック
-          const subfolders = {
-            '受取': 'mock_folder_1',
-            '作業': 'mock_folder_2',
-            '納品': 'mock_folder_3',
-            '契約': 'mock_folder_4'
+          // BOXフォルダIDがない場合はモックデータを返す
+          if (!project.box_folder_id) {
+            return {
+              ...project,
+              box_items: [
+                {
+                  id: 'mock_folder_1',
+                  name: 'テストフォルダ',
+                  type: 'folder',
+                  size: undefined,
+                  modified_at: new Date().toISOString(),
+                  created_at: new Date().toISOString(),
+                  path_collection: { entries: [{ name: project.title }] }
+                }
+              ],
+              subfolders: {
+                '受取': 'pending_1',
+                '作業': 'pending_2',
+                '納品': 'pending_3',
+                '契約': 'pending_4'
+              }
+            }
           }
+
+          const items = await getBoxFolderItems(project.box_folder_id)
+
+          // 実際のサブフォルダIDを取得
+          const subfolders: Record<string, string> = {}
+
+          // BOXフォルダ内のアイテムからサブフォルダを特定
+          console.log(`Mapping subfolders for project ${project.title}...`)
+          items.forEach(item => {
+            if (item.type === 'folder') {
+              const name = item.name
+              console.log(`Checking folder: "${name}"`)
+              // フォルダ名に基づいてマッピング
+              if (name.includes('受取') || name === '01_受取データ') {
+                subfolders['受取'] = item.id
+                console.log(`Mapped: 受取 → ${item.id}`)
+              } else if (name.includes('作業') || name === '02_作業フォルダ') {
+                subfolders['作業'] = item.id
+                console.log(`Mapped: 作業 → ${item.id}`)
+              } else if (name.includes('納品') || name === '03_納品データ') {
+                subfolders['納品'] = item.id
+                console.log(`Mapped: 納品 → ${item.id}`)
+              } else if (name.includes('契約') || name === '04_契約資料') {
+                subfolders['契約'] = item.id
+                console.log(`Mapped: 契約 → ${item.id}`)
+              } else {
+                console.log(`No mapping for folder: "${name}"`)
+              }
+            }
+          })
+
+          // フォールバック（フォルダが見つからない場合）
+          if (Object.keys(subfolders).length === 0) {
+            Object.assign(subfolders, {
+              '受取': 'mock_folder_1',
+              '作業': 'mock_folder_2',
+              '納品': 'mock_folder_3',
+              '契約': 'mock_folder_4'
+            })
+          }
+
+          // サブフォルダ内のファイルも取得して最近のファイルに含める
+          const allRecentFiles: any[] = [...items.filter(item => item.type === 'file')]
+
+          // 各サブフォルダからファイルを取得
+          console.log(`Project ${project.title}: Found subfolders:`, subfolders)
+          for (const [folderName, folderId] of Object.entries(subfolders)) {
+            try {
+              if (!folderId.startsWith('mock_') && !folderId.startsWith('pending_')) {
+                console.log(`Accessing subfolder ${folderName} (${folderId})...`)
+                try {
+                  const subFolderItems = await getBoxFolderItems(folderId)
+                  console.log(`Subfolder ${folderName} has ${subFolderItems.length} items`)
+                  subFolderItems.forEach(item => {
+                    console.log(`  - ${item.name} (type: ${item.type})`)
+                  })
+                  const subFiles = subFolderItems
+                    .filter(item => item.type === 'file')
+                    .map(item => ({ ...item, subfolder: folderName })) // どのサブフォルダかを記録
+                  console.log(`Found ${subFiles.length} files in ${folderName}`)
+                  allRecentFiles.push(...subFiles)
+                } catch (subError) {
+                  console.error(`Error accessing subfolder ${folderName} (${folderId}):`, subError)
+                }
+              } else {
+                console.log(`Skipping mock/pending folder ${folderName} (${folderId})`)
+              }
+            } catch (error) {
+              console.log(`Could not access subfolder ${folderName} (${folderId}):`, error)
+            }
+          }
+
+          // 最新5件の時間順でソート
+          const recentFiles = allRecentFiles
+            .sort((a, b) => new Date(b.modified_at).getTime() - new Date(a.modified_at).getTime())
+            .slice(0, 10) // 少し多めに取得
+
+          console.log(`Project ${project.title}: Total recent files: ${recentFiles.length}`)
+          console.log(`Recent files:`, recentFiles.map(f => `${f.name} (${f.subfolder || 'root'})`))
 
           return {
             ...project,
             box_items: items,
-            subfolders: subfolders
+            subfolders: subfolders,
+            recent_files: recentFiles // 新しく追加
           }
         } catch (error) {
           console.error(`Box folder error for project ${project.id}:`, error)

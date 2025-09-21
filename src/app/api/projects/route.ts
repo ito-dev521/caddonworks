@@ -29,7 +29,8 @@ export async function POST(request: NextRequest) {
       assignee_name,
       required_contractors = 1,
       required_level = 'beginner',
-      approver_id
+      approver_id,
+      support_enabled
     } = body
 
     // バリデーション
@@ -171,7 +172,8 @@ export async function POST(request: NextRequest) {
       org_id: company.id,
       approver_id: approver_id || null,
       created_by: userProfile.id, // プロジェクト作成者を記録
-      status: approvalRequired ? 'pending_approval' : 'bidding' // 承認が必要な場合は承認待ち
+      status: approvalRequired ? 'pending_approval' : 'bidding', // 承認が必要な場合は承認待ち
+      support_enabled: !!support_enabled
     }
 
     // required_contractorsカラムが存在する場合のみ追加
@@ -338,21 +340,7 @@ export async function GET(request: NextRequest) {
     // 組織の案件データを取得（会社間分離）
     let query = supabaseAdmin
       .from('projects')
-      .select(`
-        id,
-        title,
-        description,
-        status,
-        budget,
-        start_date,
-        end_date,
-        contractor_id,
-        assignee_name,
-        category,
-        created_at,
-        bidding_deadline,
-        required_contractors
-      `)
+      .select('*')
       .eq('org_id', company.id) // 組織IDでフィルタリング
 
     // ステータスフィルタを適用

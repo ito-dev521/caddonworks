@@ -31,6 +31,7 @@ import { useAuth } from "@/contexts/auth-context"
 import { AuthGuard } from "@/components/auth/auth-guard"
 import { MEMBER_LEVELS, type MemberLevel } from "@/lib/member-level"
 import { supabase } from "@/lib/supabase"
+import { BoxAccountIntegration } from "@/components/settings/box-account-integration"
 
 interface OrganizationUser {
   id: string
@@ -627,6 +628,25 @@ function SettingsPageContent() {
                   </div>
                 </div>
               )}
+            </CardContent>
+          </Card>
+
+          {/* BOXアカウント連携セクション */}
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <svg className="w-5 h-5 text-blue-600" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M7.5 1L2 5.5V12L7.5 16.5L13 12V5.5L7.5 1ZM7.5 3.8L10.2 5.5V10.5L7.5 12.2L4.8 10.5V5.5L7.5 3.8Z"/>
+                  <path d="M15 9L22 5V12L15 16L8 12V19L15 23L22 19V12L15 16V9Z"/>
+                </svg>
+                BOXアカウント連携
+              </CardTitle>
+              <CardDescription>
+                BOXアカウントを連携してファイル共有機能を利用できます
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <BoxAccountIntegration />
             </CardContent>
           </Card>
 

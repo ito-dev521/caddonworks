@@ -73,4 +73,78 @@ export async function ensureProjectFolder(options: { name: string; parentFolderI
   return { id: json.id as string }
 }
 
+export async function createProjectFolderStructure(projectTitle: string, projectId: string): Promise<{
+  folderId: string;
+  subfolders: Record<string, string>;
+}> {
+  try {
+    const accessToken = await getAppAuthAccessToken()
+    const parentFolderId = getEnv('BOX_PROJECTS_ROOT_FOLDER_ID')
+
+    // メインプロジェクトフォルダを作成
+    const mainFolderName = `${projectTitle}_${projectId.slice(0, 8)}`
+    console.log(`Creating main folder: ${mainFolderName}`)
+
+    const mainFolderRes = await fetch('https://api.box.com/2.0/folders', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        name: mainFolderName,
+        parent: { id: parentFolderId }
+      })
+    })
+
+    if (!mainFolderRes.ok) {
+      const errorText = await mainFolderRes.text()
+      throw new Error(`Main folder creation failed ${mainFolderRes.status}: ${errorText}`)
+    }
+
+    const mainFolder: any = await mainFolderRes.json()
+    const mainFolderId = mainFolder.id as string
+
+    console.log(`✅ Main folder created: ${mainFolderId}`)
+
+    // サブフォルダを作成
+    const subfolderNames = ['受取', '作業', '納品', '契約']
+    const subfolders: Record<string, string> = {}
+
+    for (const subfolderName of subfolderNames) {
+      console.log(`Creating subfolder: ${subfolderName}`)
+
+      const subfolderRes = await fetch('https://api.box.com/2.0/folders', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          name: subfolderName,
+          parent: { id: mainFolderId }
+        })
+      })
+
+      if (!subfolderRes.ok) {
+        console.warn(`Subfolder creation failed for ${subfolderName}: ${subfolderRes.status}`)
+        continue
+      }
+
+      const subfolder: any = await subfolderRes.json()
+      subfolders[subfolderName] = subfolder.id as string
+      console.log(`✅ Subfolder created: ${subfolderName} (${subfolder.id})`)
+    }
+
+    return {
+      folderId: mainFolderId,
+      subfolders
+    }
+
+  } catch (error) {
+    console.error('❌ Project folder structure creation failed:', error)
+    throw error
+  }
+}
+
 

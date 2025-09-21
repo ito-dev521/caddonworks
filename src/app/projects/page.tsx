@@ -86,9 +86,23 @@ function ProjectsPageContent() {
     assignee_name: '',
     required_contractors: 1,
     required_level: 'beginner' as MemberLevel,
-    approver_id: ''
+    approver_id: '',
+    support_enabled: false
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [supportPercent, setSupportPercent] = useState<number>(8)
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await fetch('/api/settings/public')
+        const data = await res.json()
+        if (res.ok && typeof data.support_fee_percent === 'number') {
+          setSupportPercent(data.support_fee_percent)
+        }
+      } catch (_) {}
+    }
+    load()
+  }, [])
   const [chatMessages, setChatMessages] = useState<any[]>([])
   const [newMessage, setNewMessage] = useState('')
   const [isLoadingMessages, setIsLoadingMessages] = useState(false)
@@ -1391,9 +1405,9 @@ function ProjectsPageContent() {
                       )}
 
                       {/* アクションボタン */}
-                      <div className="flex justify-between items-center pt-3 border-t border-gray-100">
-                        <div className="text-xs text-gray-500">
-                          案件ID: {project.id.slice(0, 8).toUpperCase()}
+                          <div className="flex justify-between items-center pt-3 border-t border-gray-100">
+                        <div className="text-xs text-gray-500 font-mono">
+                          案件ID: {project.id}
                         </div>
                         <div className="flex gap-2">
                           <Button 
@@ -1545,6 +1559,17 @@ function ProjectsPageContent() {
                           <option value="構造物点検">構造物点検</option>
                           <option value="地下構造">地下構造</option>
                         </select>
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">サポート利用</label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={newProject.support_enabled}
+                            onChange={(e) => setNewProject({ ...newProject, support_enabled: e.target.checked })}
+                          />
+                          <span className="text-sm text-gray-600">有効にすると運営サポートがチャットに参加します（手数料は契約金の{supportPercent}%）</span>
+                        </div>
                       </div>
                     </div>
 
@@ -2334,9 +2359,7 @@ function ProjectsPageContent() {
                       <div className="pt-4 border-t border-gray-200">
                         <div className="flex justify-between items-center">
                           <span className="text-gray-600">案件ID:</span>
-                          <span className="font-mono text-sm text-gray-500">
-                            {project.id.slice(0, 8).toUpperCase()}
-                          </span>
+                          <span className="font-mono text-xs text-gray-500 break-all">{project.id}</span>
                         </div>
                       </div>
                     </div>

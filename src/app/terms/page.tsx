@@ -74,6 +74,24 @@ export default function TermsPage() {
             <CardHeader>
               <CardTitle className="flex items-center">
                 <Users className="w-5 h-5 mr-2 text-engineering-blue" />
+                第X条（サポート機能と手数料）
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="prose prose-gray max-w-none">
+              <ul>
+                <li>発注者は案件登録時にサポート機能を有効化できます。サポートが有効な案件では、運営のサポートメンバーがチャットに参加します。</li>
+                <li>受注者は落札後にサポート利用を有効化できます。ただし、発注者側で既にサポートが有効な場合、受注者側の有効化は不要です。</li>
+                <li>サポート機能の利用に伴う手数料率は、運営者がシステム設定で定めるパーセンテージとします（初期値8%）。</li>
+                <li>発注者がサポートを有効化した場合、発注者に対して手数料が請求されます。</li>
+                <li>受注者がサポートを有効化した場合、受注者への支払額から手数料が控除されます。</li>
+              </ul>
+            </CardContent>
+          </Card>
+
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <Users className="w-5 h-5 mr-2 text-engineering-blue" />
                 第2条（利用登録）
               </CardTitle>
             </CardHeader>

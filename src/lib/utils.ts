@@ -49,3 +49,16 @@ export function getStatusIcon(status: string): string {
   }
   return icons[status as keyof typeof icons] || '📄'
 }
+
+export function getStatusLabel(status: string): string {
+  const labels = {
+    draft: '下書き',
+    bidding: '入札中',
+    contracted: '契約済み',
+    in_progress: '進行中',
+    submitted: '提出済み',
+    completed: '完了',
+    cancelled: 'キャンセル',
+  }
+  return labels[status as keyof typeof labels] || status
+}

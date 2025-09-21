@@ -182,19 +182,7 @@ export async function GET(request: NextRequest) {
       }
       )
       const latestContract = sortedContracts[0]
-      
-        projectId,
-        projectTitle: latestContract.projects?.title,
-        contractsCount: contracts.length,
-        contracts: contracts.map(c => ({
-          status: c.status,
-          created_at: c.created_at,
-          updated_at: c.updated_at,
-          bid_amount: c.bid_amount
-        })),
-        latestStatus: latestContract.status,
-        latestUpdatedAt: latestContract.updated_at || latestContract.created_at
-      })
+      // ここでのサマリーオブジェクトは未使用のため削除（ビルドエラー回避）
       
       if (latestContract.status === 'signed' && latestContract.projects) {
         awardedJobs.push({

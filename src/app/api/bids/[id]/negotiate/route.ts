@@ -77,39 +77,38 @@ export async function PUT(
       )
     }
 
-    // 発注者権限をチェック
-    const { data: memberships, error: membershipError } = await supabaseAdmin
+    // 発注者権限をチェック（OrgAdmin もしくは Admin を許可）
+    const { data: allMemberships, error: membershipError } = await supabaseAdmin
       .from('memberships')
-      .select('role')
+      .select('role, org_id')
       .eq('user_id', userProfile.id)
-      .eq('organization_id', bid.projects.org_id)
-      .single()
 
-    if (membershipError || !memberships || memberships.role !== 'OrgAdmin') {
-      return NextResponse.json(
-        { message: 'この操作を実行する権限がありません' },
-        { status: 403 }
-      )
+    if (membershipError) {
+      return NextResponse.json({ message: 'メンバーシップ取得に失敗しました' }, { status: 500 })
+    }
+
+    const hasOrgAdmin = (allMemberships || []).some(m => m.role === 'OrgAdmin' && m.org_id === bid.projects.org_id)
+    const hasAdmin = (allMemberships || []).some(m => m.role === 'Admin')
+
+    if (!hasOrgAdmin && !hasAdmin) {
+      return NextResponse.json({
+        message: 'この操作を実行する権限がありません',
+        debug: { orgId: bid.projects.org_id }
+      }, { status: 403 })
     }
 
     // アクションに応じて処理
     if (action === 'approve') {
-      // 入札を承認
+      // 入札を承認（スキーマ互換: status を 'accepted' に更新）
       const { data: updatedBid, error: updateError } = await supabaseAdmin
         .from('bids')
-        .update({
-          negotiation_status: 'approved',
-          status: 'approved'
-        })
+        .update({ status: 'accepted' })
         .eq('id', bidId)
         .select()
         .single()
 
       if (updateError) {
-        return NextResponse.json(
-          { message: '入札の承認に失敗しました' },
-          { status: 500 }
-        )
+        return NextResponse.json({ message: '入札の承認に失敗しました', details: String(updateError.message || updateError) }, { status: 500 })
       }
 
       // Boxフォルダを作成（入札承認後）
@@ -171,21 +170,30 @@ export async function PUT(
 
     } else if (action === 'reject') {
       if (!rejection_reason) {
-        return NextResponse.json(
-          { message: '拒否理由を入力してください' },
-          { status: 400 }
-        )
+        return NextResponse.json({ message: '拒否理由を入力してください' }, { status: 400 })
       }
 
-      // 入札を拒否
-      const { data: updatedBid, error: updateError } = await supabaseAdmin
+      // 入札を拒否（まず status のみ、列互換のため）
+      const { error: statusErr } = await supabaseAdmin
         .from('bids')
-        .update({
-          negotiation_status: 'rejected',
-          rejection_reason: rejection_reason
-        })
+        .update({ status: 'rejected' })
         .eq('id', bidId)
-        .select()
+      if (statusErr) {
+        return NextResponse.json({ message: '入札の拒否に失敗しました', details: String(statusErr.message || statusErr) }, { status: 500 })
+      }
+
+      // rejection_reason 列があれば追記
+      try {
+        const probe = await supabaseAdmin.from('bids').select('rejection_reason').limit(1)
+        if (!probe.error) {
+          await supabaseAdmin.from('bids').update({ rejection_reason }).eq('id', bidId)
+        }
+      } catch (_) {}
+
+      const { data: updatedBid } = await supabaseAdmin
+        .from('bids')
+        .select('*')
+        .eq('id', bidId)
         .single()
 
       if (updateError) {

@@ -1,11 +1,11 @@
 {
   "/api/notifications/route": "app/api/notifications/route.js",
-  "/api/projects/route": "app/api/projects/route.js",
   "/api/chat/rooms/route": "app/api/chat/rooms/route.js",
   "/api/contracts/route": "app/api/contracts/route.js",
+  "/api/projects/route": "app/api/projects/route.js",
   "/project-files/page": "app/project-files/page.js",
-  "/api/organization/profile/route": "app/api/organization/profile/route.js",
-  "/api/box/projects/route": "app/api/box/projects/route.js",
-  "/api/box/folder/[folderId]/route": "app/api/box/folder/[folderId]/route.js",
-  "/projects/page": "app/projects/page.js"
+  "/auth/login/page": "app/auth/login/page.js",
+  "/projects/page": "app/projects/page.js",
+  "/contracts/create/page": "app/contracts/create/page.js",
+  "/contracts/page": "app/contracts/page.js"
 }

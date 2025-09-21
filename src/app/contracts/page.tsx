@@ -33,6 +33,8 @@ interface Contract {
   org_name?: string
   contractor_name?: string
   contractor_email?: string
+    support_enabled?: boolean
+    project_support_enabled?: boolean
 }
 
 interface Invoice {
@@ -81,6 +83,8 @@ function ContractsPageContent() {
   const [invoiceStatuses, setInvoiceStatuses] = useState<Map<string, any>>(new Map())
   // 完了済みプロジェクトID集合
   const completedProjectIdSet = React.useMemo(() => new Set(completedProjects.map((p:any) => p.id)), [completedProjects])
+  const [supportPercent, setSupportPercent] = useState<number>(8)
+  const [loadingSupport, setLoadingSupport] = useState<boolean>(false)
 
   // 契約一覧を取得
   const fetchContracts = async () => {
@@ -179,6 +183,22 @@ function ContractsPageContent() {
       }
     } catch (err: any) {
       console.error('完了案件取得エラー:', err)
+    }
+  }
+
+  // 公開設定（手数料％）取得
+  const fetchSupportPercent = async () => {
+    try {
+      setLoadingSupport(true)
+      const res = await fetch('/api/settings/public')
+      const data = await res.json()
+      if (res.ok && typeof data.support_fee_percent === 'number') {
+        setSupportPercent(data.support_fee_percent)
+      }
+    } catch (_) {
+      // ignore
+    } finally {
+      setLoadingSupport(false)
     }
   }
 
@@ -339,6 +359,32 @@ function ContractsPageContent() {
     setShowEvaluationForm(true)
   }
 
+  // 受注者: サポート利用トグル（落札後）
+  const toggleSupportForContractor = async (contract: Contract, enable: boolean) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return alert('認証が必要です')
+      if (enable) {
+        const ok = confirm(`サポートを利用すると契約金の${supportPercent}%が控除されます。よろしいですか？`)
+        if (!ok) return
+      }
+      const res = await fetch(`/api/contracts/${contract.id}/support`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+        body: JSON.stringify({ enable })
+      })
+      const data = await res.json()
+      if (res.ok) {
+        alert(enable ? 'サポートを有効化しました' : 'サポートを無効化しました')
+        fetchContracts()
+      } else {
+        alert(data.message || '更新に失敗しました')
+      }
+    } catch (e) {
+      alert('更新に失敗しました')
+    }
+  }
+
   // 評価成功時の処理
   const handleEvaluationSuccess = () => {
     setShowEvaluationForm(false)
@@ -416,6 +462,7 @@ function ContractsPageContent() {
       } else if (userRole === 'Contractor') {
         fetchInvoices()
       }
+      fetchSupportPercent()
     }
   }, [userProfile, userRole])
 
@@ -603,6 +650,19 @@ function ContractsPageContent() {
                                       受注者評価
                                     </Button>
                                   )}
+                                </div>
+                              )}
+                              {userRole === 'Contractor' && (
+                                <div className="col-span-2 flex justify-end">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => toggleSupportForContractor(contract, !contract.support_enabled)}
+                                    disabled={!!contract.support_enabled || !!contract.project_support_enabled}
+                                    title={contract.project_support_enabled ? '発注者側でサポートが有効なため、受注者側の有効化はできません' : (contract.support_enabled ? 'サポートは有効化済みです' : `有効化すると${supportPercent}%が控除されます`)}
+                                  >
+                                    {contract.project_support_enabled ? '発注者サポート有効' : (contract.support_enabled ? 'サポート有効化済み' : (loadingSupport ? '読み込み中...' : `サポート利用（${supportPercent}%）`))}
+                                  </Button>
                                 </div>
                               )}
                             </div>
