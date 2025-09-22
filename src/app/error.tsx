@@ -67,17 +67,3 @@ export default function Error({
     </div>
   )
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-

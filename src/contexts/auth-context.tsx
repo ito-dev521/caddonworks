@@ -180,7 +180,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const adminEmails = (process.env.NEXT_PUBLIC_ADMIN_EMAILS || 'admin@demo.com')
             .split(',')
             .map(e => e.trim().toLowerCase())
+          console.log('Admin check:', { email, adminEmails, includes: adminEmails.includes(email.toLowerCase()) })
           if (email && adminEmails.includes(email.toLowerCase())) {
+            console.log('Setting role to Admin for', email)
             resolvedRole = 'Admin'
           }
         }
@@ -188,6 +190,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // 取得失敗時は無視
       }
 
+      console.log('Final resolved role:', resolvedRole)
       setUserRole(resolvedRole || null)
       
       // 組織情報を取得
@@ -213,7 +216,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       // プロフィールがない場合（発注者の場合）は基本的な情報を作成
-      if (!profile && membership) {
+      if (!profile && pickedMembership) {
         const { data: authUser } = await supabase.auth.getUser()
         if (authUser.user) {
           setUserProfile({

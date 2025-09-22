@@ -4,12 +4,13 @@ import React, { useEffect, useState } from "react"
 import { Navigation } from "@/components/layouts/navigation"
 import { supabase } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
+import { AuthGuard } from "@/components/auth/auth-guard"
 
 interface Settings {
   support_fee_percent: number
 }
 
-export default function AdminSettingsPage() {
+function AdminSettingsPageContent() {
   const [settings, setSettings] = useState<Settings | null>(null)
   const [percent, setPercent] = useState<number>(8)
   const [loading, setLoading] = useState(false)
@@ -86,4 +87,10 @@ export default function AdminSettingsPage() {
   )
 }
 
-
+export default function AdminSettingsPage() {
+  return (
+    <AuthGuard allowedRoles={['Admin', 'OrgAdmin']}>
+      <AdminSettingsPageContent />
+    </AuthGuard>
+  )
+}

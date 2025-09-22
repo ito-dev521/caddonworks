@@ -27,7 +27,17 @@ export async function GET(request: NextRequest) {
       .eq('user_id', me.id)
 
     const isAdmin = (memberships || []).some(m => m.role === 'Admin')
-    if (!isAdmin) return NextResponse.json({ message: '権限がありません' }, { status: 403 })
+
+    // 管理者メールのフォールバック
+    let hasAdminAccess = isAdmin
+    if (!hasAdminAccess) {
+      const adminEmails = (process.env.NEXT_PUBLIC_ADMIN_EMAILS || 'admin@demo.com')
+        .split(',')
+        .map(e => e.trim().toLowerCase())
+      hasAdminAccess = adminEmails.includes(user.email?.toLowerCase() || '')
+    }
+
+    if (!hasAdminAccess) return NextResponse.json({ message: '権限がありません' }, { status: 403 })
 
     const { data: settings } = await supabase
       .from('system_settings')
@@ -64,7 +74,17 @@ export async function PUT(request: NextRequest) {
       .select('role')
       .eq('user_id', me.id)
     const isAdmin = (memberships || []).some(m => m.role === 'Admin')
-    if (!isAdmin) return NextResponse.json({ message: '権限がありません' }, { status: 403 })
+
+    // 管理者メールのフォールバック
+    let hasAdminAccess = isAdmin
+    if (!hasAdminAccess) {
+      const adminEmails = (process.env.NEXT_PUBLIC_ADMIN_EMAILS || 'admin@demo.com')
+        .split(',')
+        .map(e => e.trim().toLowerCase())
+      hasAdminAccess = adminEmails.includes(user.email?.toLowerCase() || '')
+    }
+
+    if (!hasAdminAccess) return NextResponse.json({ message: '権限がありません' }, { status: 403 })
 
     const body = await request.json()
     const { support_fee_percent } = body
@@ -86,7 +106,3 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ message: 'サーバーエラーが発生しました' }, { status: 500 })
   }
 }
-
-
-
-
