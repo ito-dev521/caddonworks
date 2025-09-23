@@ -3,8 +3,9 @@
 import React, { useEffect, useState } from "react"
 import { Navigation } from "@/components/layouts/navigation"
 import { motion } from "framer-motion"
-import { Building2, Search, CheckCircle2, XCircle, Clock, AlertTriangle, Folder, Play, Pause, Trash2 } from "lucide-react"
+import { Building2, Search, CheckCircle2, XCircle, Clock, AlertTriangle, Folder, Play, Pause, Trash2, Eye } from "lucide-react"
 import { AuthGuard } from "@/components/auth/auth-guard"
+import Link from "next/link"
 
 interface Org {
   id: string
@@ -16,7 +17,6 @@ interface Org {
   approved_at?: string
   rejection_reason?: string
   billing_email?: string
-  description?: string
   box_folder_id?: string
 }
 
@@ -180,15 +180,31 @@ function AdminOrganizationsPageContent() {
                         {org.billing_email && <div>請求先: {org.billing_email}</div>}
                         <div>システム手数料: {org.system_fee ?? 50000}円</div>
                         {org.box_folder_id && <div>BOXフォルダID: {org.box_folder_id}</div>}
-                        {org.description && <div>説明: {org.description}</div>}
+                        {/* 説明は登録情報に含めないため非表示 */}
                         {org.rejection_reason && <div className="text-red-600">却下理由: {org.rejection_reason}</div>}
                       </div>
                     </div>
 
                     <div className="flex flex-wrap gap-2">
-                      <div className="px-4 py-2 bg-blue-100 text-blue-800 rounded-lg text-sm">
-                        既存組織（承認済み）
-                      </div>
+                      {/* 承認状態表示（動的） */}
+                      {org.approval_status === 'approved' && (
+                        <div className="px-3 py-1 bg-green-100 text-green-800 rounded-lg text-sm">承認済み</div>
+                      )}
+                      {org.approval_status === 'pending' && (
+                        <div className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-lg text-sm">承認待ち</div>
+                      )}
+                      {org.approval_status === 'rejected' && (
+                        <div className="px-3 py-1 bg-red-100 text-red-700 rounded-lg text-sm">却下</div>
+                      )}
+
+                      {/* 詳細ボタン */}
+                      <Link
+                        href={`/admin/organizations/${org.id}`}
+                        className="px-3 py-1 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-lg text-sm font-medium flex items-center gap-1"
+                      >
+                        <Eye className="w-4 h-4" />
+                        詳細
+                      </Link>
 
                       {/* 稼働停止・有効化ボタン */}
                       <button

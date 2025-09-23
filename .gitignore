@@ -3,3 +3,8 @@ node_modules
 
 # Next.js build artifacts
 .next/
+
+# Environment files
+.env
+.env.*
+!.env.example

@@ -24,7 +24,6 @@ import { supabase } from "@/lib/supabase"
 interface OrganizationData {
   id: string
   name: string
-  description?: string
   address?: string
   phone?: string
   email?: string
@@ -46,7 +45,6 @@ export function OrganizationProfile() {
   const [formData, setFormData] = useState<OrganizationData>({
     id: '',
     name: '',
-    description: '',
     address: '',
     phone: '',
     email: '',
@@ -305,23 +303,6 @@ export function OrganizationProfile() {
               )}
             </div>
 
-            {/* 事業内容 */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                事業内容
-              </label>
-              {isEditing ? (
-                <textarea
-                  value={formData.description}
-                  onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
-                  rows={3}
-                  placeholder="土木設計、建設コンサルタント業務など"
-                />
-              ) : (
-                <p className="text-gray-900 whitespace-pre-wrap">{organization?.description || '未設定'}</p>
-              )}
-            </div>
           </CardContent>
         </Card>
       </motion.div>

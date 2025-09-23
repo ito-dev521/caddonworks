@@ -109,7 +109,6 @@ export async function POST(request: NextRequest) {
             .from('organizations')
             .insert({
               name: account.organizationName,
-              description: `${account.organizationName}のデモ組織`,
               billing_email: account.email,
               system_fee: 0,
               active: true

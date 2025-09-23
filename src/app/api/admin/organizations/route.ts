@@ -31,7 +31,6 @@ export async function GET() {
           approved_at,
           rejection_reason,
           billing_email,
-          description,
           box_folder_id
         `)
         .neq('name', '個人事業主（受注者）')
@@ -48,7 +47,6 @@ export async function GET() {
             system_fee,
             created_at,
             billing_email,
-            description
           `)
           .neq('name', '個人事業主（受注者）')
           .order('created_at', { ascending: false })

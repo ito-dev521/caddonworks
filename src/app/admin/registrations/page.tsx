@@ -39,7 +39,6 @@ interface OrganizationRegistration {
   phone: string
   billing_email: string
   website?: string
-  description?: string
   admin_name: string
   admin_email: string
   admin_phone: string
@@ -467,12 +466,6 @@ function AdminRegistrationsPageContent() {
                     <Label className="text-sm font-medium text-gray-700">ウェブサイト</Label>
                     <p className="text-gray-900">{selectedRegistration.website || '未設定'}</p>
                   </div>
-                  {selectedRegistration.description && (
-                    <div className="md:col-span-2">
-                      <Label className="text-sm font-medium text-gray-700">事業内容</Label>
-                      <p className="text-gray-900">{selectedRegistration.description}</p>
-                    </div>
-                  )}
                 </div>
               </div>
 

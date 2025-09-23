@@ -18,10 +18,10 @@ DELETE FROM organizations WHERE name IN ('デモ建設株式会社', '個人事�
 DELETE FROM users WHERE email IN ('admin@demo.com', 'contractor@demo.com', 'reviewer@demo.com');
 
 -- 2. デモ組織を作成
-INSERT INTO organizations (id, name, description, billing_email, system_fee, active, created_at, updated_at)
-VALUES 
-  (gen_random_uuid(), 'デモ建設株式会社', 'デモ用の建設会社', 'admin@demo.com', 0, true, NOW(), NOW()),
-  (gen_random_uuid(), '個人事業主（受注者）', '受注者用のダミー組織', 'contractor@demo.com', 0, true, NOW(), NOW());
+INSERT INTO organizations (id, name, billing_email, system_fee, active, created_at, updated_at)
+VALUES
+  (gen_random_uuid(), 'デモ建設株式会社', 'admin@demo.com', 0, true, NOW(), NOW()),
+  (gen_random_uuid(), '個人事業主（受注者）', 'contractor@demo.com', 0, true, NOW(), NOW());
 
 -- 3. デモユーザーを作成
 INSERT INTO users (id, auth_user_id, display_name, email, specialties, qualifications, created_at, updated_at)

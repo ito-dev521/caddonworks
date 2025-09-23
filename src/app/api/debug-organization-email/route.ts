@@ -86,7 +86,6 @@ export async function GET(request: NextRequest) {
       organization: {
         id: organization.id,
         name: organization.name,
-        description: organization.description,
         billing_email: organization.billing_email,
         system_fee: organization.system_fee,
         active: organization.active,

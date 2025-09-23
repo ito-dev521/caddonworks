@@ -58,7 +58,6 @@ interface NewUserData {
 interface OrganizationSettings {
   id: string
   name: string
-  description?: string
   billing_email: string
   system_fee: number
   active: boolean
@@ -90,7 +89,6 @@ interface OrganizationRegistration {
   phone: string
   billing_email: string
   website?: string
-  description?: string
   admin_name: string
   admin_email: string
   admin_phone: string
@@ -726,12 +724,6 @@ function SettingsPageContent() {
                         <p className="text-gray-900">{registrationInfo.website || '未設定'}</p>
                       </div>
 
-                      {registrationInfo.description && (
-                        <div className="md:col-span-2">
-                          <label className="block text-sm font-medium text-gray-700 mb-1">事業内容</label>
-                          <p className="text-gray-900">{registrationInfo.description}</p>
-                        </div>
-                      )}
 
                       <div className="md:col-span-2 border-t border-gray-200 pt-4">
                         <h4 className="font-medium text-gray-900 mb-3">管理者情報</h4>

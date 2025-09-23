@@ -8,30 +8,46 @@ export async function POST(request: NextRequest) {
       // Organization Info
       organizationName,
       organizationType,
+      businessType,
       taxId,
+      registrationNumber,
+      postalCode,
+      address1,
+      address2,
       address,
       phone,
       billingEmail,
       website,
-      description,
-      
+
       // Admin User Info
       adminName,
       adminEmail,
       adminPassword,
       adminPhone,
       adminDepartment,
-      
+
       // Billing Info
       systemFee,
       paymentMethod,
-      billingAddress
+      billingAddress,
+
+      // Agreement
+      agreedToTerms,
+      agreedToPrivacy
     } = body
 
     // バリデーション
     if (!organizationName || !adminName || !adminEmail || !adminPassword) {
       return NextResponse.json(
         { message: '必須項目が入力されていません' },
+        { status: 400 }
+      )
+    }
+
+    // 利用規約同意チェック
+    if (!agreedToTerms || !agreedToPrivacy) {
+      return NextResponse.json(
+        { message: '利用規約とプライバシーポリシーへの同意が必要です' },
         { status: 400 }
       )
     }
@@ -100,16 +116,31 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // 住所の組み立て（address1とaddress2が提供されている場合）
+    let fullAddress = address
+    if (address1 || address2) {
+      const addressParts = []
+      if (postalCode) addressParts.push(`〒${postalCode}`)
+      if (address1) addressParts.push(address1)
+      if (address2) addressParts.push(address2)
+      fullAddress = addressParts.join(' ')
+    }
+
     // 2. 組織を作成（承認待ち状態で作成）
     const { data: orgData, error: orgError } = await supabase
       .from('organizations')
       .insert({
         name: organizationName,
-        description: description || null,
+        address: fullAddress || null,
+        phone: phone || null,
+        website: website || null,
         billing_email: billingEmail || adminEmail,
         system_fee: systemFee || 50000,
         active: false,
-        approval_status: 'pending'
+        approval_status: 'pending',
+        business_type: businessType || organizationType || 'private_corp',
+        registration_number: registrationNumber || taxId || null,
+        tax_id: taxId || null
       })
       .select()
       .single()
@@ -131,6 +162,9 @@ export async function POST(request: NextRequest) {
         auth_user_id: authData.user.id,
         email: adminEmail,
         display_name: adminName,
+        formal_name: adminName,
+        phone_number: adminPhone || null,
+        department: adminDepartment || null,
         specialties: [],
         qualifications: []
       })
@@ -171,6 +205,27 @@ export async function POST(request: NextRequest) {
 
     // 5. 会社用BOXフォルダの作成は管理者による承認後に実行されるため、ここでは作成しない
     // （承認時に /api/admin/organizations/[id]/approval で自動作成される）
+
+    // 6. 発注者用申請受付メールを送信
+    try {
+      const emailResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/send-organization-application-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          organizationName: organizationName,
+          adminName: adminName,
+          adminEmail: adminEmail
+        })
+      })
+
+      if (!emailResponse.ok) {
+        console.warn('申請受付メールの送信に失敗しましたが、登録は完了しました')
+      } else {
+        console.log('組織申請受付メールを送信しました')
+      }
+    } catch (emailError) {
+      console.warn('申請受付メール送信でエラーが発生しましたが、登録は完了しました:', emailError)
+    }
 
     // 成功レスポンス（承認待ち状態）
     return NextResponse.json({

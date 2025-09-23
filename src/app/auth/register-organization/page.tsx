@@ -9,7 +9,6 @@ import {
   Mail,
   User,
   Phone,
-  MapPin,
   FileText,
   CreditCard,
   ArrowRight,
@@ -33,12 +32,16 @@ export default function OrganizationRegisterPage() {
     // Organization Info
     organizationName: "デモ建設株式会社",
     organizationType: "private_corp",
+    businessType: "建設業",
     taxId: "1234567890123",
+    registrationNumber: "1234567890123",
+    postalCode: "100-0001",
+    address1: "東京都千代田区千代田",
+    address2: "1-1-1 千代田ビル",
     address: "〒100-0001 東京都千代田区千代田1-1-1",
     phone: "03-1234-5678",
     billingEmail: "billing@demo-construction.co.jp",
     website: "https://www.demo-construction.co.jp",
-    description: "土木工事を中心とした総合建設会社",
 
     // Admin User Info
     adminName: "管理者デモ",
@@ -67,7 +70,23 @@ export default function OrganizationRegisterPage() {
   const router = useRouter()
 
   const organizationTypes = [
-    { value: "private_corp", label: "民間企業" }
+    { value: "private_corp", label: "民間企業" },
+    { value: "public_corp", label: "地方自治体" },
+    { value: "government", label: "国家機関" },
+    { value: "npo", label: "NPO法人" },
+    { value: "other", label: "その他" }
+  ]
+
+  const businessTypes = [
+    { value: "建設業", label: "建設業" },
+    { value: "土木業", label: "土木業" },
+    { value: "設計業", label: "設計業" },
+    { value: "測量業", label: "測量業" },
+    { value: "コンサルタント業", label: "コンサルタント業" },
+    { value: "不動産業", label: "不動産業" },
+    { value: "官公庁", label: "官公庁" },
+    { value: "地方自治体", label: "地方自治体" },
+    { value: "その他", label: "その他" }
   ]
 
   const handleInputChange = (field: string, value: string | boolean | number) => {
@@ -84,6 +103,62 @@ export default function OrganizationRegisterPage() {
         setEmailValidation(prev => ({ ...prev, [field]: null }))
       }
     }
+
+    // 郵便番号が変更された場合、住所を自動補完
+    if (field === 'postalCode' && typeof value === 'string') {
+      handlePostalCodeChange(value)
+    }
+
+    // 住所1または住所2が変更された場合、総合住所を更新
+    if (field === 'address1' || field === 'address2') {
+      updateCombinedAddress(field, value as string)
+    }
+  }
+
+  const handlePostalCodeChange = async (postalCode: string) => {
+    // 郵便番号のフォーマットを整える（ハイフンを除去）
+    const cleanPostalCode = postalCode.replace(/[^0-9]/g, '')
+
+    if (cleanPostalCode.length === 7) {
+      try {
+        // 郵便番号検索API（zipcloud.ibsnet.co.jp）を使用
+        const response = await fetch(`https://zipcloud.ibsnet.co.jp/api/search?zipcode=${cleanPostalCode}`)
+        const data = await response.json()
+
+        if (data.status === 200 && data.results && data.results.length > 0) {
+          const result = data.results[0]
+          const address = `${result.address1}${result.address2}${result.address3}`
+
+          setFormData(prev => ({
+            ...prev,
+            address1: address,
+            postalCode: cleanPostalCode.slice(0, 3) + '-' + cleanPostalCode.slice(3) // ハイフン付きで保存
+          }))
+
+          updateCombinedAddress('address1', address)
+        }
+      } catch (error) {
+        console.warn('郵便番号検索に失敗しました:', error)
+      }
+    }
+  }
+
+  const updateCombinedAddress = (changedField: string, newValue: string) => {
+    setFormData(prev => {
+      const address1 = changedField === 'address1' ? newValue : prev.address1
+      const address2 = changedField === 'address2' ? newValue : prev.address2
+      const postalCode = prev.postalCode
+
+      const addressParts = []
+      if (postalCode) addressParts.push(`〒${postalCode}`)
+      if (address1) addressParts.push(address1)
+      if (address2) addressParts.push(address2)
+
+      return {
+        ...prev,
+        address: addressParts.join(' ')
+      }
+    })
   }
 
   const generateSecurePassword = () => {
@@ -302,9 +377,38 @@ export default function OrganizationRegisterPage() {
                           placeholder="例: 株式会社○○建設"
                           required
                         />
-
                       </div>
 
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          組織種別 *
+                        </label>
+                        <select
+                          value={formData.organizationType}
+                          onChange={(e) => handleInputChange('organizationType', e.target.value)}
+                          className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
+                          required
+                        >
+                          {organizationTypes.map(type => (
+                            <option key={type.value} value={type.value}>{type.label}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          業種
+                        </label>
+                        <select
+                          value={formData.businessType}
+                          onChange={(e) => handleInputChange('businessType', e.target.value)}
+                          className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
+                        >
+                          {businessTypes.map(type => (
+                            <option key={type.value} value={type.value}>{type.label}</option>
+                          ))}
+                        </select>
+                      </div>
 
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -317,6 +421,7 @@ export default function OrganizationRegisterPage() {
                             const value = e.target.value.replace(/[^0-9]/g, ''); // 数字のみ
                             if (value.length <= 13) {
                               handleInputChange('taxId', value);
+                              handleInputChange('registrationNumber', value);
                             }
                           }}
                           className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
@@ -396,50 +501,94 @@ export default function OrganizationRegisterPage() {
                         )}
                       </div>
 
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          代表電話番号 *
-                        </label>
-                        <div className="relative">
-                          <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                          <input
-                            type="tel"
-                            value={formData.phone}
-                            onChange={(e) => handleInputChange('phone', e.target.value)}
-                            className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
-                            placeholder="03-1234-5678"
-                            required
-                          />
+                      {/* 左側：住所情報 */}
+                      <div className="md:col-span-1">
+                        <h4 className="text-lg font-medium text-gray-800 mb-4">住所情報</h4>
+
+                        <div className="space-y-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              郵便番号
+                            </label>
+                            <input
+                              type="text"
+                              value={formData.postalCode}
+                              onChange={(e) => {
+                                const value = e.target.value.replace(/[^0-9-]/g, ''); // 数字とハイフンのみ
+                                handleInputChange('postalCode', value);
+                              }}
+                              className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
+                              placeholder="100-0001"
+                              maxLength={8}
+                            />
+                            <p className="text-xs text-gray-500 mt-1">
+                              郵便番号を入力すると住所が自動入力されます
+                            </p>
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              都道府県・市区町村
+                            </label>
+                            <input
+                              type="text"
+                              value={formData.address1}
+                              onChange={(e) => handleInputChange('address1', e.target.value)}
+                              className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
+                              placeholder="東京都千代田区千代田"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              町名・番地・建物名
+                            </label>
+                            <input
+                              type="text"
+                              value={formData.address2}
+                              onChange={(e) => handleInputChange('address2', e.target.value)}
+                              className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
+                              placeholder="1-1-1 千代田ビル 3F"
+                            />
+                          </div>
                         </div>
                       </div>
 
-                      <div className="md:col-span-2">
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          所在地
-                        </label>
-                        <div className="relative">
-                          <MapPin className="absolute left-3 top-3 text-gray-400 w-5 h-5" />
-                          <textarea
-                            value={formData.address}
-                            onChange={(e) => handleInputChange('address', e.target.value)}
-                            className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
-                            placeholder="〒100-0001 東京都千代田区..."
-                            rows={2}
-                          />
-                        </div>
-                      </div>
+                      {/* 右側：連絡先情報 */}
+                      <div className="md:col-span-1">
+                        <h4 className="text-lg font-medium text-gray-800 mb-4">連絡先情報</h4>
 
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          ウェブサイト
-                        </label>
-                        <input
-                          type="url"
-                          value={formData.website}
-                          onChange={(e) => handleInputChange('website', e.target.value)}
-                          className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
-                          placeholder="https://www.company.co.jp"
-                        />
+                        <div className="space-y-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              代表電話番号 *
+                            </label>
+                            <div className="relative">
+                              <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                              <input
+                                type="tel"
+                                value={formData.phone}
+                                onChange={(e) => handleInputChange('phone', e.target.value)}
+                                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
+                                placeholder="03-1234-5678"
+                                required
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              ウェブサイト
+                            </label>
+                            <input
+                              type="url"
+                              value={formData.website}
+                              onChange={(e) => handleInputChange('website', e.target.value)}
+                              className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
+                              placeholder="https://www.company.co.jp"
+                            />
+                          </div>
+                        </div>
                       </div>
 
                     </div>

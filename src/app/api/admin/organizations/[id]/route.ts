@@ -7,6 +7,114 @@ const supabaseAdmin = createClient(
   { auth: { autoRefreshToken: false, persistSession: false } }
 )
 
+export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    const organizationId = params.id
+
+    // 組織詳細を取得（拡張フィールドは存在しない場合に備えてフォールバック）
+    let organization: any | null = null
+    let orgError: any | null = null
+
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('organizations')
+        .select(`
+          id,
+          name,
+          active,
+          approval_status,
+          system_fee,
+          created_at,
+          approved_at,
+          rejection_reason,
+          billing_email,
+          box_folder_id,
+          phone,
+          department,
+          website,
+          address,
+          registration_number,
+          tax_id,
+          business_type
+        `)
+        .eq('id', organizationId)
+        .single()
+
+      organization = data
+      orgError = error
+
+      // カラムが存在しない環境向けフォールバック
+      if (error && error.code === '42703') {
+        const { data: basicData, error: basicError } = await supabaseAdmin
+          .from('organizations')
+          .select(`
+            id,
+            name,
+            active,
+            approval_status,
+            system_fee,
+            created_at,
+            approved_at,
+            rejection_reason,
+            billing_email,
+            box_folder_id
+          `)
+          .eq('id', organizationId)
+          .single()
+        organization = basicData
+        orgError = basicError
+      }
+    } catch (e) {
+      orgError = e
+    }
+
+    if (orgError || !organization) {
+      return NextResponse.json({ message: '組織が見つかりません' }, { status: 404 })
+    }
+
+    // 組織管理者（OrgAdmin）の連絡先を取得（任意項目）
+    let adminContact: any | null = null
+    try {
+      const { data: orgAdmin, error: adminError } = await supabaseAdmin
+        .from('memberships')
+        .select(`
+          users!inner(
+            id,
+            display_name,
+            email,
+            formal_name,
+            phone_number,
+            department
+          )
+        `)
+        .eq('org_id', organizationId)
+        .eq('role', 'OrgAdmin')
+        .limit(1)
+        .single()
+
+      if (!adminError && orgAdmin) {
+        const u = (orgAdmin as any).users
+        adminContact = {
+          name: u.formal_name || u.display_name || null,
+          email: u.email || null,
+          phone: u.phone_number || null,
+          department: u.department || null
+        }
+      }
+    } catch (_e) {
+      // 取得失敗は致命的ではないため無視
+    }
+
+    return NextResponse.json({ organization: { ...organization, admin_contact: adminContact } }, { status: 200 })
+  } catch (error) {
+    console.error('組織詳細取得APIエラー:', error)
+    return NextResponse.json(
+      { message: 'サーバーエラーが発生しました', error: error instanceof Error ? error.message : '不明なエラー' },
+      { status: 500 }
+    )
+  }
+}
+
 export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const organizationId = params.id
