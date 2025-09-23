@@ -60,8 +60,6 @@ export async function POST(request: NextRequest) {
     // Generate BOX OAuth URL
     const authUrl = getBoxAuthUrl(state)
 
-    console.log(`Generated BOX auth URL for user ${userProfile.id}, account type: ${accountType}`)
-
     return NextResponse.json({
       authUrl,
       message: 'BOX認証URLを生成しました'

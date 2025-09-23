@@ -416,8 +416,7 @@ function SettingsPageContent() {
       const data = await response.json()
       setRegistrationInfo(data.registration)
     } catch (error) {
-      console.info('組織登録申請情報取得スキップまたは未設定:', error)
-      // エラーはコンソールに記録するが、UIには表示しない（404の場合は正常）
+      // 404や未設定は正常系として扱うため静かにスキップ
     } finally {
       setIsLoadingRegistration(false)
     }

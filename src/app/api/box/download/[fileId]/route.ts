@@ -12,18 +12,15 @@ const supabaseAdmin = createClient(
 
 export async function GET(request: NextRequest, { params }: { params: { fileId: string } }) {
   try {
-    console.log('Box download API called for file:', params.fileId)
-
+    
     // Authorizationヘッダーからユーザー情報を取得
     const authHeader = request.headers.get('authorization')
     if (!authHeader) {
-      console.log('No authorization header')
       return NextResponse.json({ message: '認証が必要です' }, { status: 401 })
     }
 
     const token = authHeader.replace('Bearer ', '')
-    console.log('Token received:', token.substring(0, 20) + '...')
-
+    
     const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
 
     if (authError || !user) {
@@ -34,11 +31,9 @@ export async function GET(request: NextRequest, { params }: { params: { fileId: 
       }, { status: 401 })
     }
 
-    console.log('User authenticated:', user.id)
-
+    
     // モックファイルの場合はサンプルコンテンツを返す
     if (params.fileId.startsWith('mock_')) {
-      console.log('Mock file download requested for fileId:', params.fileId)
       const mockContent = `これは${params.fileId}のテストファイル内容です。
 
 ファイルタイプ: サンプルドキュメント
@@ -72,12 +67,10 @@ export async function GET(request: NextRequest, { params }: { params: { fileId: 
     }
 
     // 実際のBOXファイルダウンロード
-    console.log('Downloading real file from BOX:', params.fileId)
-
+    
     // ファイル情報を取得
     const fileInfo = await getBoxFileInfo(params.fileId)
-    console.log('File info:', fileInfo.name, fileInfo.size)
-
+    
     // ファイル内容をダウンロード
     const downloadResponse = await downloadBoxFile(params.fileId)
     const fileBuffer = await downloadResponse.arrayBuffer()

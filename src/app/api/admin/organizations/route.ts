@@ -12,13 +12,13 @@ export async function GET() {
     // 管理者ページからのアクセスを前提とし、認証チェックは簡素化
     // （実際の認証はページレベルのAuthGuardで行われている前提）
 
-    // 全組織を取得
+    // 組織のみを取得（受注者を除外）
     // approval_statusカラムの存在チェックを行い、存在しない場合はエラーハンドリング
     let organizations: any[] = []
     let orgError: any = null
 
     try {
-      // まず新しいカラムを含めて取得を試行
+      // まず新しいカラムを含めて取得を試行（受注者を除外）
       const { data, error } = await supabaseAdmin
         .from('organizations')
         .select(`
@@ -34,11 +34,11 @@ export async function GET() {
           description,
           box_folder_id
         `)
+        .neq('name', '個人事業主（受注者）')
         .order('created_at', { ascending: false })
 
       if (error && error.code === '42703') {
-        // カラムが存在しない場合は基本カラムのみ取得
-        console.log('approval_statusカラムが存在しないため、基本カラムのみ取得します')
+        // カラムが存在しない場合は基本カラムのみ取得（受注者を除外）
         const { data: basicData, error: basicError } = await supabaseAdmin
           .from('organizations')
           .select(`
@@ -50,6 +50,7 @@ export async function GET() {
             billing_email,
             description
           `)
+          .neq('name', '個人事業主（受注者）')
           .order('created_at', { ascending: false })
 
         organizations = basicData || []

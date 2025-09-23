@@ -47,9 +47,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (error) {
           console.error('AuthProvider: セッション取得エラー:', error)
+          // セッションエラーの場合は完全にクリア
+          await supabase.auth.signOut()
+          setUser(null)
+          setUserProfile(null)
+          setUserRole(null)
+          setUserOrganization(null)
           setLoading(false)
           return
         }
+
+        // デバッグログ削除
 
         setUser(session?.user ?? null)
 
@@ -65,8 +73,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       } catch (error) {
         console.error('AuthProvider: 初期化エラー:', error)
-        // エラーが発生してもローディング状態を解除
+        // エラーが発生した場合は完全にクリア
         if (mounted) {
+          await supabase.auth.signOut()
           setUser(null)
           setUserProfile(null)
           setUserRole(null)
@@ -115,14 +124,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     fetchingRef.current = authUserId
+    // デバッグログ削除
 
     try {
+      // まず現在のセッションを確認
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session || session.user.id !== authUserId) {
+        setUser(null)
+        setUserProfile(null)
+        setUserRole(null)
+        setUserOrganization(null)
+        setLoading(false)
+        return
+      }
       // Fetch user profile
       const { data: profile, error: profileError } = await supabase
         .from('users')
         .select('*')
         .eq('auth_user_id', authUserId)
         .single()
+
+      // デバッグログ削除
 
       if (profileError && profileError.code !== 'PGRST116') {
         console.error('Error fetching user profile:', profileError)
@@ -148,11 +170,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Fetch user role and organization from memberships
       // プロフィールがある場合はprofile.id、ない場合はauthUserIdを使用
       const userId = profile?.id || authUserId
-      
+
       const { data: memberships, error: roleError } = await supabase
         .from('memberships')
         .select('role, org_id')
         .eq('user_id', userId)
+
+      // デバッグログ削除
 
       if (roleError && roleError.code !== 'PGRST116') {
         console.error('Error fetching user role:', roleError)
@@ -180,9 +204,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const adminEmails = (process.env.NEXT_PUBLIC_ADMIN_EMAILS || 'admin@demo.com')
             .split(',')
             .map(e => e.trim().toLowerCase())
-          console.log('Admin check:', { email, adminEmails, includes: adminEmails.includes(email.toLowerCase()) })
           if (email && adminEmails.includes(email.toLowerCase())) {
-            console.log('Setting role to Admin for', email)
             resolvedRole = 'Admin'
           }
         }
@@ -190,7 +212,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // 取得失敗時は無視
       }
 
-      console.log('Final resolved role:', resolvedRole)
       setUserRole(resolvedRole || null)
       
       // 組織情報を取得
@@ -238,6 +259,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // 実行完了後にfetchingRefをクリア
       fetchingRef.current = null
       setLoading(false) // ローディング状態を解除
+      // デバッグログ削除
     }
   }
 
@@ -277,6 +299,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signUp = async (email: string, password: string, userData: Partial<User>) => {
     setLoading(true)
+    // デバッグログ削除
     try {
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -289,27 +312,108 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         }
       })
+      // デバッグログ削除
       if (error) throw error
 
       // Create user profile after successful signup
       if (data.user) {
-        const { error: profileError } = await supabase
-          .from('users')
-          .insert({
-            auth_user_id: data.user.id,
-            email: data.user.email!,
-            display_name: userData.display_name || '',
-            specialties: userData.specialties || [],
-            qualifications: userData.qualifications || [],
-            experience_years: userData.experience_years
-          })
+        // デバッグログ削除
+        const profileData = {
+          auth_user_id: data.user.id,
+          email: data.user.email!,
+          display_name: userData.display_name || '',
+          formal_name: userData.formal_name || '',
+          organization: userData.organization || '',
+          specialties: userData.specialties || [],
+          qualifications: userData.qualifications || [],
+          experience_years: userData.experience_years
+        }
+        // デバッグログ削除
 
+        const { data: insertedProfile, error: profileError } = await supabase
+          .from('users')
+          .insert(profileData)
+          .select()
+          .single()
+
+        // デバッグログ削除
         if (profileError) {
           console.error('Error creating user profile:', profileError)
+          throw new Error(`プロフィール作成に失敗しました: ${profileError.message}`)
+        } else {
+          // デバッグログ削除
+
+          // メンバーシップ作成の内部関数
+          const createMembership = async (userId: string, orgId: string) => {
+            const { data: membership, error: membershipError } = await supabase
+              .from('memberships')
+              .insert({
+                user_id: userId,
+                org_id: orgId,
+                role: 'Contractor'
+              })
+              .select()
+              .single()
+
+            // デバッグログ削除
+            if (membershipError) {
+              console.error('Error creating membership:', membershipError)
+              throw new Error(`メンバーシップ作成に失敗しました: ${membershipError.message}`)
+            } else {
+            }
+          }
+
+          // 新規受注者を受注者向け組織にContractorとして追加
+          const { data: contractorOrg, error: orgError } = await supabase
+            .from('organizations')
+            .select('id, name')
+            .eq('name', '個人事業主（受注者）')
+            .single()
+
+          if (orgError) {
+            console.error('signUp: 受注者組織取得エラー', orgError)
+            // 受注者組織が見つからない場合は作成する
+            const { data: newOrg, error: createError } = await supabase
+              .from('organizations')
+              .insert({
+                name: '個人事業主（受注者）',
+                description: '受注者向けのデフォルト組織',
+                system_fee: 0.1,
+                active: true
+              })
+              .select()
+              .single()
+
+            if (createError) {
+              console.error('signUp: 受注者組織作成エラー', createError)
+              // 最終的に他の組織を使用
+              const { data: fallbackOrg } = await supabase
+                .from('organizations')
+                .select('id')
+                .limit(1)
+                .single()
+
+              if (fallbackOrg) {
+                await createMembership(insertedProfile.id, fallbackOrg.id)
+              } else {
+                // 組織が見つからない場合はスキップ
+              }
+            } else {
+              await createMembership(insertedProfile.id, newOrg.id)
+            }
+          } else {
+            await createMembership(insertedProfile.id, contractorOrg.id)
+          }
         }
+      } else {
+        // デバッグログ削除
       }
+    } catch (error) {
+      console.error('signUp: エラー', error)
+      throw error
     } finally {
       setLoading(false)
+      // デバッグログ削除
     }
   }
 

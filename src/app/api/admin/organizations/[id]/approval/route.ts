@@ -119,7 +119,6 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
               try {
                 const userEmail = (admin as any).users.email
                 await addBoxCollaborator(companyFolderId, userEmail, 'co-owner')
-                console.log(`✅ Added ${userEmail} as collaborator to company folder`)
               } catch (collabError) {
                 console.warn(`⚠️ Failed to add collaborator:`, collabError)
               }

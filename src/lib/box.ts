@@ -358,7 +358,7 @@ export async function createProjectFolderStructure(projectTitle: string, project
 
     // メインプロジェクトフォルダを作成（会社フォルダ下）
     const mainFolderName = `[PRJ-${projectId.slice(0, 8)}] ${projectTitle}`
-    console.log(`Creating main folder: ${mainFolderName}`)
+    
 
     const mainFolderRes = await fetch('https://api.box.com/2.0/folders', {
       method: 'POST',
@@ -380,14 +380,14 @@ export async function createProjectFolderStructure(projectTitle: string, project
     const mainFolder: any = await mainFolderRes.json()
     const mainFolderId = mainFolder.id as string
 
-    console.log(`✅ Main folder created: ${mainFolderId}`)
+    
 
     // サブフォルダを作成
     const subfolderNames = ['受取', '作業', '納品', '契約']
     const subfolders: Record<string, string> = {}
 
     for (const subfolderName of subfolderNames) {
-      console.log(`Creating subfolder: ${subfolderName}`)
+      
 
       const subfolderRes = await fetch('https://api.box.com/2.0/folders', {
         method: 'POST',
@@ -408,7 +408,7 @@ export async function createProjectFolderStructure(projectTitle: string, project
 
       const subfolder: any = await subfolderRes.json()
       subfolders[subfolderName] = subfolder.id as string
-      console.log(`✅ Subfolder created: ${subfolderName} (${subfolder.id})`)
+      
     }
 
     return {

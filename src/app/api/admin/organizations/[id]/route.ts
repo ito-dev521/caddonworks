@@ -78,7 +78,7 @@ export async function DELETE(_request: NextRequest, { params }: { params: { id: 
     const { data: projects, error: projectError } = await supabaseAdmin
       .from('projects')
       .select('id')
-      .eq('organization_id', organizationId)
+      .eq('org_id', organizationId)
       .limit(1)
 
     if (projectError) {
@@ -89,6 +89,24 @@ export async function DELETE(_request: NextRequest, { params }: { params: { id: 
     if (projects && projects.length > 0) {
       return NextResponse.json({
         message: 'この組織にはプロジェクトが存在するため削除できません。先にプロジェクトを削除してください。'
+      }, { status: 400 })
+    }
+
+    // 組織に関連するメンバーシップがあるかチェック
+    const { data: memberships, error: membershipError } = await supabaseAdmin
+      .from('memberships')
+      .select('id')
+      .eq('org_id', organizationId)
+      .limit(1)
+
+    if (membershipError) {
+      console.error('メンバーシップ確認エラー:', membershipError)
+      return NextResponse.json({ message: 'メンバーシップ確認に失敗しました' }, { status: 500 })
+    }
+
+    if (memberships && memberships.length > 0) {
+      return NextResponse.json({
+        message: 'この組織にはメンバーが存在するため削除できません。先にメンバーを削除してください。'
       }, { status: 400 })
     }
 
@@ -107,7 +125,6 @@ export async function DELETE(_request: NextRequest, { params }: { params: { id: 
     }
 
     // 注意: BOXフォルダは削除しない（データ保全のため）
-    console.log(`組織「${org.name}」を削除しました。BOXフォルダ（${org.box_folder_id}）は保持されています。`)
 
     return NextResponse.json({
       message: `組織「${org.name}」を削除しました`,

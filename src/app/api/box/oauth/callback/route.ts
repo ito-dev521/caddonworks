@@ -34,16 +34,14 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    console.log('BOX OAuth callback - exchanging code for tokens...')
-
+    
     // Exchange authorization code for tokens
     const tokens = await exchangeCodeForTokens(code)
 
     // Get BOX user information
     const boxUserInfo = await getBoxUserInfo(tokens.access_token)
 
-    console.log(`BOX user authenticated: ${boxUserInfo.login} (${boxUserInfo.id})`)
-
+    
     // Parse state to get user ID and account type
     const [userId, accountType] = state.split('|')
 
@@ -59,8 +57,7 @@ export async function GET(request: NextRequest) {
       accountType as 'new' | 'existing'
     )
 
-    console.log(`✅ BOX account linked for user ${userId}`)
-
+    
     // Redirect back to settings with success message
     return NextResponse.redirect(
       `${process.env.NEXTAUTH_URL}/settings?box_success=true`

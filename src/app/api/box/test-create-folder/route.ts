@@ -5,8 +5,6 @@ import { createProjectFolderStructure } from '@/lib/box'
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('🧪 Testing BOX folder creation...')
-
     const { projectTitle, projectId } = await request.json()
 
     if (!projectTitle || !projectId) {
@@ -15,11 +13,7 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
-    console.log(`Testing folder creation for: ${projectTitle} (${projectId})`)
-
-    const result = await createProjectFolderStructure(projectTitle, projectId)
-
-    console.log('✅ Test folder creation successful:', result)
+    const result = await createProjectFolderStructure(projectTitle, projectId, '342185697254')
 
     return NextResponse.json({
       message: 'テストフォルダが作成されました',

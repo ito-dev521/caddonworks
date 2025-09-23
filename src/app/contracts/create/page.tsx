@@ -160,9 +160,6 @@ function CreateContractPageContent() {
       }
 
       // Step 1: 入札承認（Boxフォルダ作成は別途実行）
-      console.log('🎯 Step 1: 入札承認処理開始')
-
-      // タイムアウト付きで入札承認を実行
       const bidApprovalPromise = fetch(`/api/bids/${bid.id}/negotiate`, {
         method: 'PUT',
         headers: {
@@ -189,10 +186,8 @@ function CreateContractPageContent() {
       }
 
       const bidApprovalResult = await bidApprovalResponse.json()
-      console.log('✅ 入札承認完了:', bidApprovalResult)
 
       // Step 2: 契約作成
-      console.log('🎯 Step 2: 契約作成処理開始')
       const contractResponse = await fetch('/api/contracts', {
         method: 'POST',
         headers: {
@@ -216,7 +211,6 @@ function CreateContractPageContent() {
       const contractResult = await contractResponse.json()
 
       if (contractResponse.ok) {
-        console.log('✅ 契約作成完了:', contractResult)
         // 契約一覧ページに遷移
         router.push('/contracts')
       } else {

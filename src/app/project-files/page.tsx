@@ -113,7 +113,7 @@ export default function ProjectFilesPage() {
         }
       })
 
-      console.log('API response status:', response.status)
+      
 
       if (!response.ok) {
         const errorText = await response.text()
@@ -183,7 +183,7 @@ export default function ProjectFilesPage() {
     try {
       for (let i = 0; i < files.length; i++) {
         const file = files[i]
-        console.log(`Uploading file: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`)
+        
 
         try {
           const { data: { session }, error: sessionError } = await supabase.auth.getSession()
@@ -205,7 +205,7 @@ export default function ProjectFilesPage() {
 
           if (response.ok) {
             uploadedFiles.push(file.name)
-            console.log(`✅ Uploaded: ${file.name}`)
+            
           } else {
             const errorData = await response.json()
             failedFiles.push(`${file.name}: ${errorData.message}`)
@@ -400,7 +400,7 @@ export default function ProjectFilesPage() {
   // 一括ダウンロード
   const handleBulkDownload = async (projectId: string, projectTitle: string) => {
     try {
-      console.log(`Bulk download for project: ${projectTitle} (${projectId})`)
+      
 
       const { data: { session }, error: sessionError } = await supabase.auth.getSession()
 
@@ -430,7 +430,7 @@ export default function ProjectFilesPage() {
       window.URL.revokeObjectURL(url)
       document.body.removeChild(a)
 
-      console.log(`✅ Bulk download completed: ${projectTitle}`)
+      
     } catch (err: any) {
       console.error('Bulk download error:', err)
       alert(`一括ダウンロードに失敗しました: ${err.message}`)

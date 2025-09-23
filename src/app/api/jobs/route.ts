@@ -116,7 +116,8 @@ export async function GET(request: NextRequest) {
         org_id,
         required_contractors,
         contractor_id,
-        required_level
+        required_level,
+        support_enabled
       `)
       .eq('status', 'bidding') // 入札中の案件のみ
       .order('created_at', { ascending: false })
@@ -128,6 +129,7 @@ export async function GET(request: NextRequest) {
         project_id,
         status,
         bid_amount,
+        support_enabled,
         created_at,
         updated_at,
         projects (
@@ -147,7 +149,8 @@ export async function GET(request: NextRequest) {
           org_id,
           required_contractors,
           contractor_id,
-          required_level
+          required_level,
+          support_enabled
         )
       `)
       .eq('contractor_id', userProfile.id)
@@ -188,6 +191,7 @@ export async function GET(request: NextRequest) {
         awardedJobs.push({
           ...latestContract.projects,
           contract_amount: latestContract.bid_amount,
+          contract_support_enabled: latestContract.support_enabled || false,
           status: 'awarded'
         })
       } else if (latestContract.status === 'declined') {
@@ -219,7 +223,8 @@ export async function GET(request: NextRequest) {
           org_id,
           required_contractors,
           contractor_id,
-          required_level
+          required_level,
+          support_enabled
         )
       `)
       .eq('contractor_id', userProfile.id)
@@ -228,7 +233,8 @@ export async function GET(request: NextRequest) {
     if (declinedError) {
     }
 
-    const declinedJobs = declinedInvitations?.map(invitation => invitation.projects).filter(Boolean) || []
+    const declinedJobs = declinedInvitations?.map(invitation => invitation.projects)
+      .filter(Boolean) || []
     
     // 入札可能な案件を会員レベルでフィルタリング
     const levelFilteredBiddingJobs = biddingJobs?.filter(job => {
@@ -351,7 +357,9 @@ export async function GET(request: NextRequest) {
         is_declined: isDeclined,
         can_bid: !isFull && !isExpired && job.status === 'bidding' && !isDeclined,
         advice: advice,
-        contract_amount: job.contract_amount // 契約金額を追加
+        contract_amount: job.contract_amount, // 契約金額を追加
+        support_enabled: job.support_enabled || false, // プロジェクトレベルのサポート
+        contract_support_enabled: job.contract_support_enabled || false // 契約レベルのサポート（落札済み案件のみ）
       }
     }) || []
 

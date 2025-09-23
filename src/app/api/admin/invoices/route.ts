@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     const to = searchParams.get('to')
 
     let query = supabase.from('invoices').select(`
-      id, invoice_number, status, issue_date, due_date, total_amount,
+      id, status, issue_date, due_date, total_amount,
       projects:project_id ( id, title ),
       organizations:org_id ( id, name )
     `)

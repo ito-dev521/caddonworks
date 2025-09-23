@@ -11,7 +11,7 @@ const supabaseAdmin = createClient(
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('🔧 Setting up BOX test project for orgadmin2@demo.com...')
+    
 
     // orgadmin2@demo.com のユーザーと組織を取得
     const { data: user, error: userError } = await supabaseAdmin
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     }
 
     const orgId = (user.memberships as any)[0].org_id
-    console.log(`Found orgadmin2 user: ${user.id}, org: ${orgId}`)
+    
 
     // 既存のBOXフォルダ付きプロジェクトを確認
     const { data: existingProjects } = await supabaseAdmin
@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
       .eq('org_id', orgId)
       .not('box_folder_id', 'is', null)
 
-    console.log(`Existing BOX projects: ${existingProjects?.length || 0}`)
+    
 
     // テストプロジェクトを作成（BOXフォルダID付き）
     const { data: newProject, error: projectError } = await supabaseAdmin
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
       }, { status: 500 })
     }
 
-    console.log(`✅ Created test project: ${newProject.id}`)
+    
 
     return NextResponse.json({
       message: 'orgadmin2@demo.com の組織にBOXテストプロジェクトを作成しました',

@@ -56,11 +56,13 @@ interface ProjectData {
   required_level?: MemberLevel
   is_expired?: boolean
   days_until_deadline?: number | null
+  support_enabled?: boolean
   contracts?: Array<{
     contractor_id: string
     contract_amount: number
     contractor_name: string
     contractor_email: string
+    support_enabled?: boolean
   }>
 }
 
@@ -288,10 +290,17 @@ function ProjectsPageContent() {
     if (lastFetchKeyRef.current === fetchKey) return
     lastFetchKeyRef.current = fetchKey
 
-    fetchProjects()
-    fetchFavoriteMembers()
-    fetchOrganizationSettings()
-    fetchOrganizationUsers()
+    // 重要なデータを優先的に読み込み
+    fetchProjects().then(() => {
+      // プロジェクトデータ読み込み後、他のデータを並列で読み込み
+      Promise.all([
+        fetchFavoriteMembers(),
+        fetchOrganizationSettings(),
+        fetchOrganizationUsers()
+      ]).catch(error => {
+        console.error('追加データ読み込みエラー:', error)
+      })
+    })
   }, [userProfile, userRole, fetchProjects, fetchFavoriteMembers, fetchOrganizationSettings, fetchOrganizationUsers])
 
   // URLパラメータからタブを読み取る
@@ -1263,6 +1272,16 @@ function ProjectsPageContent() {
                               期限間近
                             </Badge>
                           )}
+                          {project.support_enabled && (
+                            <Badge className="bg-blue-100 text-blue-800 border-blue-200">
+                              発注者サポート利用
+                            </Badge>
+                          )}
+                          {project.contracts && project.contracts.some(contract => contract.support_enabled) && (
+                            <Badge className="bg-green-100 text-green-800 border-green-200">
+                              受注者サポート利用
+                            </Badge>
+                          )}
                         </div>
                       </div>
                     </CardHeader>
@@ -2031,144 +2050,278 @@ function ProjectsPageContent() {
                 </CardHeader>
                 <CardContent>
                   <form onSubmit={handleEditProject} className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          案件名 *
-                        </label>
-                        <input
-                          type="text"
-                          value={editingProject.title}
-                          onChange={(e) => setEditingProject({ ...editingProject, title: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
-                          required
-                        />
+                    {editingProject.status === 'pending_approval' ? (
+                      // 承認待ちの場合は全項目編集可能
+                      <>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              案件名 *
+                            </label>
+                            <input
+                              type="text"
+                              value={editingProject.title}
+                              onChange={(e) => setEditingProject({ ...editingProject, title: e.target.value })}
+                              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
+                              required
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              カテゴリ *
+                            </label>
+                            <select
+                              value={editingProject.category}
+                              onChange={(e) => setEditingProject({ ...editingProject, category: e.target.value })}
+                              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
+                              required
+                            >
+                              <option value="">選択してください</option>
+                              <option value="道路設計">道路設計</option>
+                              <option value="橋梁設計">橋梁設計</option>
+                              <option value="河川工事">河川工事</option>
+                              <option value="構造物点検">構造物点検</option>
+                              <option value="地下構造">地下構造</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            案件説明 *
+                          </label>
+                          <textarea
+                            value={editingProject.description}
+                            onChange={(e) => setEditingProject({ ...editingProject, description: e.target.value })}
+                            rows={3}
+                            className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
+                            required
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              予算 *
+                            </label>
+                            <input
+                              type="number"
+                              value={editingProject.budget}
+                              onChange={(e) => setEditingProject({ ...editingProject, budget: Number(e.target.value) })}
+                              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
+                              required
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              開始日 *
+                            </label>
+                            <input
+                              type="date"
+                              value={editingProject.start_date}
+                              onChange={(e) => setEditingProject({ ...editingProject, start_date: e.target.value })}
+                              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
+                              required
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              納期 *
+                            </label>
+                            <input
+                              type="date"
+                              value={editingProject.end_date}
+                              onChange={(e) => setEditingProject({ ...editingProject, end_date: e.target.value })}
+                              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
+                              required
+                            />
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      // 承認済み・入札中・進行中の場合は納期のみ編集可能
+                      <>
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                          <p className="text-blue-800 text-sm">
+                            <strong>注意:</strong> 案件が既に入札中または進行中のため、納期のみ変更可能です。
+                            その他の変更が必要な場合は、新しい案件として作成することをお勧めします。
+                          </p>
+                        </div>
+
+                        {/* 読み取り専用項目 */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              案件名
+                            </label>
+                            <input
+                              type="text"
+                              value={editingProject.title}
+                              className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-600"
+                              disabled
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              カテゴリ
+                            </label>
+                            <input
+                              type="text"
+                              value={editingProject.category}
+                              className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-600"
+                              disabled
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            案件説明
+                          </label>
+                          <textarea
+                            value={editingProject.description}
+                            rows={3}
+                            className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-600"
+                            disabled
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              予算
+                            </label>
+                            <input
+                              type="text"
+                              value={`¥${editingProject.budget.toLocaleString()}`}
+                              className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-600"
+                              disabled
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              開始日
+                            </label>
+                            <input
+                              type="date"
+                              value={editingProject.start_date}
+                              className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-600"
+                              disabled
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              納期 *
+                            </label>
+                            <input
+                              type="date"
+                              value={editingProject.end_date}
+                              onChange={(e) => setEditingProject({ ...editingProject, end_date: e.target.value })}
+                              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
+                              required
+                            />
+                            <p className="text-sm text-orange-600 mt-1">
+                              納期の変更は関係者に通知されます
+                            </p>
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    {editingProject.status === 'pending_approval' ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            募集人数 *
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="10"
+                            value={editingProject.required_contractors || 1}
+                            onChange={(e) => setEditingProject({ ...editingProject, required_contractors: Number(e.target.value) })}
+                            className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
+                            required
+                          />
+                          <p className="text-sm text-gray-600 mt-1">この案件に必要な受注者の人数</p>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            担当者名
+                          </label>
+                          <select
+                            value={editingProject.assignee_name || ''}
+                            onChange={(e) => setEditingProject({ ...editingProject, assignee_name: e.target.value })}
+                            className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
+                          >
+                            <option value="">担当者を選択してください（任意）</option>
+                            {organizationUsers.map(user => (
+                              <option key={user.id} value={user.display_name}>
+                                {user.display_name} ({user.email})
+                              </option>
+                            ))}
+                          </select>
+                          <p className="text-sm text-gray-600 mt-1">案件の社内担当者を指定できます（任意）</p>
+                        </div>
                       </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            募集人数
+                          </label>
+                          <input
+                            type="text"
+                            value={`${editingProject.required_contractors || 1}名`}
+                            className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-600"
+                            disabled
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            担当者名
+                          </label>
+                          <input
+                            type="text"
+                            value={editingProject.assignee_name || '未設定'}
+                            className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-600"
+                            disabled
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {editingProject.status === 'pending_approval' ? (
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                          カテゴリ *
+                          必要な会員レベル *
                         </label>
                         <select
-                          value={editingProject.category}
-                          onChange={(e) => setEditingProject({ ...editingProject, category: e.target.value })}
+                          value={editingProject.required_level || 'beginner'}
+                          onChange={(e) => setEditingProject({ ...editingProject, required_level: e.target.value as MemberLevel })}
                           className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
                           required
                         >
-                          <option value="">選択してください</option>
-                          <option value="道路設計">道路設計</option>
-                          <option value="橋梁設計">橋梁設計</option>
-                          <option value="河川工事">河川工事</option>
-                          <option value="構造物点検">構造物点検</option>
-                          <option value="地下構造">地下構造</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        案件説明 *
-                      </label>
-                      <textarea
-                        value={editingProject.description}
-                        onChange={(e) => setEditingProject({ ...editingProject, description: e.target.value })}
-                        rows={3}
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
-                        required
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          予算 *
-                        </label>
-                        <input
-                          type="number"
-                          value={editingProject.budget}
-                          onChange={(e) => setEditingProject({ ...editingProject, budget: Number(e.target.value) })}
-                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          開始日 *
-                        </label>
-                        <input
-                          type="date"
-                          value={editingProject.start_date}
-                          onChange={(e) => setEditingProject({ ...editingProject, start_date: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          納期 *
-                        </label>
-                        <input
-                          type="date"
-                          value={editingProject.end_date}
-                          onChange={(e) => setEditingProject({ ...editingProject, end_date: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          募集人数 *
-                        </label>
-                        <input
-                          type="number"
-                          min="1"
-                          max="10"
-                          value={editingProject.required_contractors || 1}
-                          onChange={(e) => setEditingProject({ ...editingProject, required_contractors: Number(e.target.value) })}
-                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
-                          required
-                        />
-                        <p className="text-sm text-gray-600 mt-1">この案件に必要な受注者の人数</p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          担当者名
-                        </label>
-                        <select
-                          value={editingProject.assignee_name || ''}
-                          onChange={(e) => setEditingProject({ ...editingProject, assignee_name: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
-                        >
-                          <option value="">担当者を選択してください（任意）</option>
-                          {organizationUsers.map(user => (
-                            <option key={user.id} value={user.display_name}>
-                              {user.display_name} ({user.email})
+                          {Object.values(MEMBER_LEVELS).map(level => (
+                            <option key={level.level} value={level.level}>
+                              {level.label} - {level.description}
                             </option>
                           ))}
                         </select>
-                        <p className="text-sm text-gray-600 mt-1">案件の社内担当者を指定できます（任意）</p>
                       </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        必要な会員レベル *
-                      </label>
-                      <select
-                        value={editingProject.required_level || 'beginner'}
-                        onChange={(e) => setEditingProject({ ...editingProject, required_level: e.target.value as MemberLevel })}
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
-                        required
-                      >
-                        {Object.values(MEMBER_LEVELS).map(level => (
-                          <option key={level.level} value={level.level}>
-                            {level.label} - {level.description}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                    ) : (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          必要な会員レベル
+                        </label>
+                        <input
+                          type="text"
+                          value={MEMBER_LEVELS[editingProject.required_level as MemberLevel]?.label || '初級'}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-600"
+                          disabled
+                        />
+                      </div>
+                    )}
 
                     <div className="flex justify-end gap-3 pt-4">
                       <Button

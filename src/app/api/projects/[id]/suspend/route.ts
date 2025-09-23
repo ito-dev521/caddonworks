@@ -20,7 +20,7 @@ export async function POST(
     const projectId = params.id
     const { reason } = await request.json()
 
-    console.log('案件中止API開始:', { projectId, reason })
+    
 
     const authHeader = request.headers.get('authorization')
     if (!authHeader) {
@@ -130,11 +130,7 @@ export async function POST(
 
     // 入札者と受注者に通知を送信
     try {
-      console.log('通知送信開始:', {
-        projectId,
-        projectTitle: project.title,
-        suspendReason: reason
-      })
+      
 
       // 入札者を取得
       const { data: bidders, error: biddersError } = await supabaseAdmin
@@ -164,7 +160,7 @@ export async function POST(
           .from('notifications')
           .insert(bidderNotifications)
 
-        console.log('入札者への通知送信完了:', bidderIds.length)
+        
       }
 
       // 受注者を取得（契約済みの場合）
@@ -184,7 +180,7 @@ export async function POST(
             }
           })
 
-        console.log('受注者への通知送信完了:', project.contractor_id)
+        
       }
 
       // 複数受注者案件の場合
@@ -214,7 +210,7 @@ export async function POST(
           .from('notifications')
           .insert(contractorNotifications)
 
-        console.log('契約済み受注者への通知送信完了:', contractorIds.length)
+        
       }
 
     } catch (notificationError) {
@@ -222,12 +218,7 @@ export async function POST(
       // 通知エラーが発生しても案件中止は成功させる
     }
 
-    console.log('案件中止完了:', {
-      projectId,
-      projectTitle: project.title,
-      suspendReason: reason,
-      suspendedBy: userProfile.display_name
-    })
+    
 
     return NextResponse.json({
       message: '案件を中止しました',

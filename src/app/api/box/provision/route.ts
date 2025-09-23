@@ -69,6 +69,19 @@ async function createBoxFolder(name: string, parentId: string): Promise<string> 
 
 export async function POST(request: NextRequest) {
   try {
+
+    // 環境変数チェック
+    const requiredEnvs = ['BOX_CLIENT_ID', 'BOX_CLIENT_SECRET', 'BOX_ENTERPRISE_ID', 'BOX_JWT_PRIVATE_KEY', 'BOX_JWT_PRIVATE_KEY_PASSPHRASE', 'BOX_PUBLIC_KEY_ID']
+    const missingEnvs = requiredEnvs.filter(env => !process.env[env])
+
+    if (missingEnvs.length > 0) {
+      console.error('Missing BOX environment variables:', missingEnvs)
+      return NextResponse.json({
+        message: 'BOX環境変数が設定されていません',
+        missing: missingEnvs
+      }, { status: 500 })
+    }
+
     const { name, parentId, subfolders } = await request.json()
 
     if (!name) {
@@ -81,6 +94,7 @@ export async function POST(request: NextRequest) {
 
     // メインフォルダを作成
     const folderId = await createBoxFolder(name, parentId)
+    
 
     // サブフォルダも作成
     const subfolderIds: Record<string, string> = {}
@@ -90,15 +104,17 @@ export async function POST(request: NextRequest) {
         subfolderIds[subfolderName] = subfolderId
       }
     }
-
+    
     return NextResponse.json({
       folderId,
-      subfolderIds: Object.keys(subfolderIds).length > 0 ? subfolderIds : undefined
-    }, { status: 201 })
+      subfolderIds
+    }, { status: 200 })
   } catch (e: any) {
+    console.error('BOX provision error:', e)
     return NextResponse.json({
       message: 'Box APIエラー',
-      error: String(e?.message || e)
+      error: String(e?.message || e),
+      stack: e?.stack
     }, { status: 500 })
   }
 }

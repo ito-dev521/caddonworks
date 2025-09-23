@@ -604,9 +604,21 @@ function ContractsPageContent() {
                                   {contract.contract_title || contract.project_title}
                                 </h3>
                                 <p className="text-sm text-gray-600 mb-2">契約ID: {contract.id.slice(0, 8).toUpperCase()}</p>
-                                <Badge variant="default" className="bg-green-100 text-green-800">
-                                  署名完了
-                                </Badge>
+                                <div className="flex gap-2 flex-wrap">
+                                  <Badge variant="default" className="bg-green-100 text-green-800">
+                                    署名完了
+                                  </Badge>
+                                  {contract.project_support_enabled && (
+                                    <Badge className="bg-blue-100 text-blue-800 border-blue-200">
+                                      発注者サポート利用
+                                    </Badge>
+                                  )}
+                                  {contract.support_enabled && (
+                                    <Badge className="bg-green-100 text-green-800 border-green-200">
+                                      受注者サポート利用
+                                    </Badge>
+                                  )}
+                                </div>
                               </div>
                               <div className="text-right">
                                 <p className="text-2xl font-bold text-engineering-blue">
@@ -658,10 +670,28 @@ function ContractsPageContent() {
                                     variant="outline"
                                     size="sm"
                                     onClick={() => toggleSupportForContractor(contract, !contract.support_enabled)}
-                                    disabled={!!contract.support_enabled || !!contract.project_support_enabled}
-                                    title={contract.project_support_enabled ? '発注者側でサポートが有効なため、受注者側の有効化はできません' : (contract.support_enabled ? 'サポートは有効化済みです' : `有効化すると${supportPercent}%が控除されます`)}
+                                    disabled={!!contract.support_enabled || !!contract.project_support_enabled || completedProjectIdSet.has(contract.project_id)}
+                                    title={
+                                      completedProjectIdSet.has(contract.project_id)
+                                        ? '案件が完了済みのため、サポートの有効化はできません'
+                                        : contract.project_support_enabled
+                                        ? '発注者側でサポートが有効なため、受注者側の有効化はできません'
+                                        : contract.support_enabled
+                                        ? 'サポートは有効化済みです'
+                                        : `有効化すると${supportPercent}%が控除されます`
+                                    }
                                   >
-                                    {contract.project_support_enabled ? '発注者サポート有効' : (contract.support_enabled ? 'サポート有効化済み' : (loadingSupport ? '読み込み中...' : `サポート利用（${supportPercent}%）`))}
+                                    {
+                                      completedProjectIdSet.has(contract.project_id)
+                                        ? '案件完了済み'
+                                        : contract.project_support_enabled
+                                        ? '発注者サポート有効'
+                                        : contract.support_enabled
+                                        ? 'サポート有効化済み'
+                                        : loadingSupport
+                                        ? '読み込み中...'
+                                        : `サポート利用（${supportPercent}%）`
+                                    }
                                   </Button>
                                 </div>
                               )}
@@ -744,10 +774,22 @@ function ContractsPageContent() {
                                   {contract.contract_title || contract.project_title}
                                 </h3>
                                 <p className="text-sm text-gray-600 mb-2">契約ID: {contract.id.slice(0, 8).toUpperCase()}</p>
-                                <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-300">
-                                  {contract.status === 'pending_contractor' ? '受注者署名待ち' : 
-                                   contract.status === 'pending_org' ? '発注者署名待ち' : '署名待ち'}
-                                </Badge>
+                                <div className="flex gap-2 flex-wrap">
+                                  <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-300">
+                                    {contract.status === 'pending_contractor' ? '受注者署名待ち' :
+                                     contract.status === 'pending_org' ? '発注者署名待ち' : '署名待ち'}
+                                  </Badge>
+                                  {contract.project_support_enabled && (
+                                    <Badge className="bg-blue-100 text-blue-800 border-blue-200">
+                                      発注者サポート利用
+                                    </Badge>
+                                  )}
+                                  {contract.support_enabled && (
+                                    <Badge className="bg-green-100 text-green-800 border-green-200">
+                                      受注者サポート利用
+                                    </Badge>
+                                  )}
+                                </div>
                               </div>
                               <div className="text-right">
                                 <p className="text-2xl font-bold text-engineering-blue">

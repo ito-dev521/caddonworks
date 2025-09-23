@@ -125,6 +125,8 @@ export default function SignUpPage() {
     try {
       await signUp(formData.email, formData.password, {
         display_name: formData.displayName,
+        formal_name: formData.displayName, // 正式名称として表示名を使用
+        organization: formData.organization,
         specialties: formData.specialties,
         qualifications: formData.qualifications,
         experience_years: formData.experienceYears || undefined

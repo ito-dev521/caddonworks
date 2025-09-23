@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useState } from "react"
+import React, { useEffect, useMemo, useState } from "react"
 import { motion } from "framer-motion"
 import {
   Users,
@@ -14,7 +14,9 @@ import {
   Calendar,
   MapPin,
   Phone,
-  Building
+  Building,
+  Trash2,
+  Plus
 } from "lucide-react"
 import { Navigation } from "@/components/layouts/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -24,6 +26,8 @@ import { useAuth } from "@/contexts/auth-context"
 import { supabase } from "@/lib/supabase"
 import { AuthGuard } from "@/components/auth/auth-guard"
 import { MEMBER_LEVELS, type MemberLevel } from "@/lib/member-level"
+
+type OperatorRole = 'Admin' | 'Reviewer' | 'Auditor'
 
 interface AdminUser {
   id: string
@@ -38,11 +42,12 @@ interface AdminUser {
   address?: string
   created_at: string
   updated_at: string
+  role?: OperatorRole
 }
 
 export default function AdminUsersPage() {
   return (
-    <AuthGuard>
+    <AuthGuard requiredRole="Admin">
       <AdminUsersPageContent />
     </AuthGuard>
   )
@@ -57,6 +62,9 @@ function AdminUsersPageContent() {
   const [editingLevel, setEditingLevel] = useState<MemberLevel>('beginner')
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [newEmail, setNewEmail] = useState("")
+  const [newDisplayName, setNewDisplayName] = useState("")
+  const [newRole, setNewRole] = useState<OperatorRole>('Auditor')
 
   // 運営者権限チェック
   if (userRole !== 'Admin') {
@@ -73,7 +81,7 @@ function AdminUsersPageContent() {
     )
   }
 
-  // ユーザー一覧を取得
+  // ユーザー一覧を取得（運営者のみ: Admin/Reviewer/Auditor）
   const fetchUsers = async () => {
     try {
       setIsLoading(true)
@@ -105,6 +113,94 @@ function AdminUsersPageContent() {
     }
   }
 
+  // 役割や氏名の更新（PUT）
+  const updateOperator = async (userId: string, payload: { displayName?: string; role?: OperatorRole }) => {
+    try {
+      setIsSaving(true)
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('セッションが見つかりません')
+
+      const res = await fetch('/api/admin/users', {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ userId, ...payload })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.message || '更新に失敗しました')
+
+      // 反映
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, display_name: payload.displayName ?? u.display_name, role: payload.role ?? u.role } : u))
+      setFilteredUsers(prev => prev.map(u => u.id === userId ? { ...u, display_name: payload.displayName ?? u.display_name, role: payload.role ?? u.role } : u))
+    } catch (e: any) {
+      console.error('運営更新エラー:', e)
+      alert(e.message || '更新に失敗しました')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  // 運営ユーザー作成（POST）
+  const createOperator = async () => {
+    try {
+      if (!newEmail) return alert('メールアドレスを入力してください')
+      setIsSaving(true)
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('セッションが見つかりません')
+      const res = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ email: newEmail, displayName: newDisplayName || undefined, role: newRole })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.message || '作成に失敗しました')
+      // 反映
+      await fetchUsers()
+      setNewEmail("")
+      setNewDisplayName("")
+      setNewRole('Reviewer')
+      alert('ユーザーを作成しました。初回設定用のメールが送信されます。')
+    } catch (e: any) {
+      console.error('運営作成エラー:', e)
+      alert(e.message || '作成に失敗しました')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  // 運営ユーザー削除（DELETE）
+  const deleteOperator = async (userId: string) => {
+    try {
+      const ok = confirm('この運営ユーザーを削除します。よろしいですか？')
+      if (!ok) return
+      setIsSaving(true)
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('セッションが見つかりません')
+      const res = await fetch(`/api/admin/users?userId=${encodeURIComponent(userId)}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`
+        }
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.message || '削除に失敗しました')
+      setUsers(prev => prev.filter(u => u.id !== userId))
+      setFilteredUsers(prev => prev.filter(u => u.id !== userId))
+      alert('削除しました')
+    } catch (e: any) {
+      console.error('運営削除エラー:', e)
+      alert(e.message || '削除に失敗しました')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  // 旧：会員レベル更新は当面維持（必要なら運営に非表示化可）
   // 会員レベルを更新
   const updateMemberLevel = async (userId: string, newLevel: MemberLevel) => {
     try {
@@ -194,12 +290,46 @@ function AdminUsersPageContent() {
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-gray-900 mb-2 flex items-center gap-3">
               <Shield className="w-8 h-8 text-engineering-blue" />
-              ユーザー管理
+              運営ユーザー管理
             </h1>
             <p className="text-gray-600">
-              全ユーザーの会員レベルを管理できます
+              運営会社のスタッフ（Admin / Reviewer / Auditor）を追加・編集・削除できます
             </p>
           </div>
+
+          {/* 追加フォーム */}
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="text-lg">運営ユーザーの追加</CardTitle>
+              <CardDescription>メール送信で初期設定してもらいます</CardDescription>
+            </CardHeader>
+            <CardContent className="grid md:grid-cols-4 gap-3">
+              <input
+                type="email"
+                placeholder="メールアドレス"
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded"
+              />
+              <input
+                type="text"
+                placeholder="表示名（任意）"
+                value={newDisplayName}
+                onChange={(e) => setNewDisplayName(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded"
+              />
+              <select
+                value={newRole}
+                onChange={(e) => setNewRole(e.target.value as OperatorRole)}
+                className="w-full px-3 py-2 border border-gray-200 rounded"
+              >
+                <option value="Auditor">Auditor（監査）</option>
+              </select>
+              <Button onClick={createOperator} disabled={isSaving} className="bg-engineering-blue">
+                <Plus className="w-4 h-4 mr-1" /> 追加
+              </Button>
+            </CardContent>
+          </Card>
 
           {/* 検索バー */}
           <Card className="mb-6">
@@ -322,6 +452,19 @@ function AdminUsersPageContent() {
                               >
                                 <Edit className="w-4 h-4" />
                               </Button>
+                              {/* 運営ロールの編集 */}
+                              <select
+                                value={user.role || 'Reviewer'}
+                                onChange={(e) => updateOperator(user.id, { role: e.target.value as OperatorRole })}
+                                className="px-2 py-1 border border-gray-300 rounded text-sm"
+                              >
+                                <option value="Reviewer">Reviewer</option>
+                                <option value="Auditor">Auditor</option>
+                                <option value="Admin">Admin</option>
+                              </select>
+                              <Button size="sm" variant="outline" className="text-red-600 border-red-300 hover:bg-red-50" onClick={() => deleteOperator(user.id)}>
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -398,9 +541,7 @@ function AdminUsersPageContent() {
               <CardContent className="p-8 text-center">
                 <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                 <h3 className="text-lg font-medium text-gray-900 mb-2">ユーザーが見つかりません</h3>
-                <p className="text-gray-600">
-                  {searchTerm ? '検索条件に一致するユーザーがありません' : 'ユーザーが登録されていません'}
-                </p>
+                <p className="text-gray-600">{searchTerm ? '検索条件に一致するユーザーがありません' : 'ユーザーが登録されていません'}</p>
               </CardContent>
             </Card>
           )}

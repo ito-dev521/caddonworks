@@ -29,10 +29,7 @@ export default function LoginPage() {
 
   const { signIn, getRedirectPath, userRole, loading } = useAuth()
 
-  // デバッグ情報をコンソールに出力
-  useEffect(() => {
-    console.log('LoginPage: 認証状態', { userRole, loading })
-  }, [userRole, loading])
+  // デバッグログ削除
   const router = useRouter()
 
   // 認証状態の変更を監視してリダイレクト
@@ -56,7 +53,6 @@ export default function LoginPage() {
   // 既にログイン済みユーザーの自動リダイレクトを防ぐ
   useEffect(() => {
     if (!loading && userRole && !success) {
-      console.log('LoginPage: 既にログイン済みユーザーを検出、リダイレクトします')
       try {
         sessionStorage.removeItem('redirectAfterLogin')
         sessionStorage.removeItem('previousPage')

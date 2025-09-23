@@ -28,6 +28,7 @@ export interface User {
   auth_user_id: string
   display_name: string
   email: string
+  organization?: string
   specialties: string[]
   qualifications: string[]
   experience_years?: string

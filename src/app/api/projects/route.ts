@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { withOrganizationCheck } from '@/lib/api-organization-check'
 
 // Service roleキーでSupabaseクライアントを作成（RLSをバイパス）
 
@@ -14,7 +15,7 @@ const supabaseAdmin = createClient(
   }
 )
 
-export async function POST(request: NextRequest) {
+async function handlePOST(request: NextRequest) {
   try {
     const body = await request.json()
     const {
@@ -217,35 +218,38 @@ export async function POST(request: NextRequest) {
     }
 
     // 承認が必要な場合、承認者に通知を送信
-    if (approvalRequired && approver_ids) {
+    if (approvalRequired && approver_ids && Array.isArray(approver_ids)) {
       try {
-        // 承認者のメンバーシップを取得
-        const { data: approverMembership, error: approverMembershipError } = await supabaseAdmin
-          .from('memberships')
-          .select('user_id')
-          .eq('user_id', approver_ids)
-          .eq('org_id', company.id)
-          .single()
+        // 各承認者に個別に通知を送信
+        for (const approverId of approver_ids) {
+          // 承認者のメンバーシップを確認
+          const { data: approverMembership, error: approverMembershipError } = await supabaseAdmin
+            .from('memberships')
+            .select('user_id')
+            .eq('user_id', approverId)
+            .eq('org_id', company.id)
+            .single()
 
-        if (approverMembership && !approverMembershipError) {
-          // 承認通知を作成
-          const { error: notificationError } = await supabaseAdmin
-            .from('notifications')
-            .insert({
-              user_id: approver_ids,
-              type: 'project_approval_requested',
-              title: '案件承認依頼',
-              message: `案件「${title}」の承認をお願いします。`,
-              data: {
-                project_id: projectData.id,
-                project_title: title,
-                requester_id: userProfile.id,
-                requester_name: userProfile.display_name
-              }
-            })
+          if (approverMembership && !approverMembershipError) {
+            // 承認通知を作成
+            const { error: notificationError } = await supabaseAdmin
+              .from('notifications')
+              .insert({
+                user_id: approverId,
+                type: 'project_approval_requested',
+                title: '案件承認依頼',
+                message: `案件「${title}」の承認をお願いします。`,
+                data: {
+                  project_id: projectData.id,
+                  project_title: title,
+                  requester_id: userProfile.id,
+                  requester_name: userProfile.display_name
+                }
+              })
 
-          if (notificationError) {
-            console.error('承認通知の送信に失敗:', notificationError)
+            if (notificationError) {
+              console.error('承認通知の送信に失敗:', notificationError)
+            }
           }
         }
       } catch (notificationError) {
@@ -386,6 +390,7 @@ export async function GET(request: NextRequest) {
           contractor_id,
           bid_amount,
           status,
+          support_enabled,
           created_at,
           updated_at
         `)
@@ -425,6 +430,7 @@ export async function GET(request: NextRequest) {
             contract_amount: contract.bid_amount,
             contractor_name: contractorMap[contract.contractor_id]?.display_name || '不明な受注者',
             contractor_email: contractorMap[contract.contractor_id]?.email || '',
+            support_enabled: contract.support_enabled || false,
             created_at: contract.created_at,
             updated_at: contract.updated_at
           })
@@ -481,6 +487,7 @@ export async function GET(request: NextRequest) {
         required_contractors: project.required_contractors || 1,
         is_expired: isExpired,
         days_until_deadline: daysUntilDeadline,
+        support_enabled: project.support_enabled || false, // プロジェクトレベルのサポート
         contracts: contractMap[project.id] || [], // 複数受注者の契約情報
         approver_ids: project.approver_ids || null
       }
@@ -516,4 +523,9 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     )
   }
+}
+
+// 組織チェック付きのexport関数
+export async function POST(request: NextRequest) {
+  return withOrganizationCheck(request, handlePOST)
 }

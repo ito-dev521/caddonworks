@@ -114,9 +114,18 @@ export async function PUT(
       // Boxフォルダを作成（入札承認後）- skip_box_creationがtrueの場合はスキップ
       if (!skip_box_creation) {
         try {
-          const parentId = process.env.BOX_PROJECTS_ROOT_FOLDER_ID
+          // 組織のBOXフォルダIDを取得
+          const { data: organization, error: orgError } = await supabaseAdmin
+            .from('organizations')
+            .select('box_folder_id')
+            .eq('id', bid.projects.org_id)
+            .single()
 
-          if (parentId) {
+          const parentId = organization?.box_folder_id
+
+          if (orgError || !organization) {
+            console.error('組織情報の取得に失敗:', orgError)
+          } else if (parentId) {
             const folderName = `[PRJ-${bid.projects.id.slice(0, 8)}] ${bid.projects.title}`
             const subfolders = ['01_受取データ', '02_作業フォルダ', '03_納品データ', '04_契約資料']
 
@@ -150,7 +159,10 @@ export async function PUT(
                   // box_subfoldersカラムが存在しないため一時的に除外
                 })
                 .eq('id', bid.projects.id)
+              
             }
+          } else {
+            console.warn(`組織ID: ${bid.projects.org_id} のBOXフォルダIDが設定されていません`)
           }
         } catch (boxError) {
           console.warn('BOX フォルダ作成エラー（入札承認は続行）:', boxError)

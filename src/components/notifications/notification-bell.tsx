@@ -33,9 +33,6 @@ export function NotificationBell() {
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
   const modalRef = useRef<HTMLDivElement>(null)
 
-  // Early return if user is not authenticated - after all hooks
-  if (!user) return null
-
   // 通知を取得
   const fetchNotifications = useCallback(async () => {
     if (!user) return
@@ -318,6 +315,9 @@ export function NotificationBell() {
     // 通知モーダルを閉じる
     setIsOpen(false)
   }
+
+  // Early return if user is not authenticated - after all hooks
+  if (!user) return null
 
   return (
     <div className="relative">

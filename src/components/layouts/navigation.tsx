@@ -31,6 +31,7 @@ import { useRoleAccess } from "../auth/auth-guard"
 import { cn } from "@/lib/utils"
 import { NotificationBell } from "../notifications/notification-bell"
 import { useNavigationBadges } from "@/hooks/use-navigation-badges"
+import { getOrganizationDisplayName } from "@/lib/organization-utils"
 
 // interface NavigationProps {
 //   userRole?: "Admin" | "OrgAdmin" | "Staff" | "Contractor" | "Reviewer" | "Auditor"
@@ -42,6 +43,7 @@ const getNavigationItems = (userRole: string, badges: any) => {
       { icon: Home, label: "ダッシュボード", href: "/dashboard", badge: null },
       { icon: Users, label: "ユーザー管理", href: "/admin/users", badge: null },
       { icon: Building2, label: "会社管理・承認", href: "/admin/organizations", badge: badges.organizations || null },
+      { icon: User, label: "個人事業主管理", href: "/admin/contractors", badge: null },
       { icon: FileText, label: "請求書管理", href: "/admin/invoices", badge: null },
       { icon: BarChart3, label: "統計・レポート", href: "/admin/reports", badge: null },
       { icon: Settings, label: "システム設定", href: "/admin/settings", badge: null },
@@ -57,14 +59,11 @@ const getNavigationItems = (userRole: string, badges: any) => {
       { icon: Settings, label: "設定", href: "/settings", badge: null },
     ],
     Contractor: [
-      { icon: Home, label: "ダッシュボード", href: "/dashboard", badge: null },
       { icon: FolderOpen, label: "案件一覧", href: "/jobs", badge: badges.jobs || null },
       { icon: MessageCircle, label: "チャット", href: "/chat", badge: badges.chat || null },
       { icon: FileText, label: "契約管理", href: "/contracts", badge: badges.contracts || null },
       { icon: Star, label: "受注者評価", href: "/evaluations", badge: null },
-      { icon: FileText, label: "請求書管理", href: "/invoices", badge: null },
-      { icon: FileText, label: "提出物", href: "/deliverables", badge: badges.deliverables || null },
-      { icon: BarChart3, label: "報酬・支払", href: "/payouts", badge: null },
+      { icon: FileText, label: "請求書・報酬", href: "/invoices", badge: null },
     ],
     Reviewer: [
       { icon: Home, label: "ダッシュボード", href: "/dashboard", badge: null },
@@ -83,13 +82,22 @@ const getNavigationItems = (userRole: string, badges: any) => {
   return baseItems[userRole as keyof typeof baseItems] || baseItems.Admin
 }
 
-export function Navigation() {
+interface NavigationProps {
+  onExpandedChange?: (expanded: boolean) => void
+}
+
+export function Navigation({ onExpandedChange }: NavigationProps = {}) {
   const { user, userProfile, userRole, userOrganization, signOut } = useAuth()
   const { badges } = useNavigationBadges()
 
   const router = useRouter()
   const pathname = usePathname()
   const [isExpanded, setIsExpanded] = useState(true)
+
+  // 展開状態が変更されたときに親コンポーネントに通知
+  useEffect(() => {
+    onExpandedChange?.(isExpanded)
+  }, [isExpanded, onExpandedChange])
   const [isMobileOpen, setIsMobileOpen] = useState(false)
   const [organizationContactPerson, setOrganizationContactPerson] = useState<string | null>(null)
   const hasFetchedOrganization = useRef(false)
@@ -190,41 +198,52 @@ export function Navigation() {
         initial={{ x: -250 }}
         animate={{ x: 0 }}
         className={cn(
-          "hidden md:flex fixed left-0 top-0 h-full bg-white border-r border-gray-200 z-40 transition-all duration-300",
+          "hidden md:flex fixed left-0 top-0 h-full bg-white border-r border-gray-200 z-[1000] transition-all duration-300 shadow-lg",
           isExpanded ? "w-64" : "w-16"
         )}
       >
         <div className="flex flex-col w-full">
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-gray-200">
-            <motion.div
-              className="flex items-center gap-3"
-              animate={{ opacity: isExpanded ? 1 : 0 }}
-              transition={{ duration: 0.2 }}
-            >
-              <div className="w-8 h-8 bg-engineering-blue rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-sm">土</span>
-              </div>
-              {isExpanded && (
-                <div>
-                  <h1 className="font-bold text-lg text-engineering-blue">
-                    土木プラットフォーム
-                  </h1>
-                  <p className="text-xs text-gray-500">Civil Engineering</p>
+          <div className={cn(
+            "border-b border-gray-200 bg-white",
+            isExpanded ? "p-4" : "p-1 space-y-1"
+          )}>
+            {isExpanded ? (
+              <div className="flex items-center justify-between">
+                <motion.div
+                  className="flex items-center gap-3"
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <div>
+                    <h1 className="font-bold text-lg text-engineering-blue">
+                      CADDONプラットフォーム
+                    </h1>
+                    <p className="text-xs text-gray-500">Civil Engineering</p>
+                  </div>
+                </motion.div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setIsExpanded(!isExpanded)}
+                  >
+                    <Menu className="w-4 h-4" />
+                  </Button>
+                  <NotificationBell />
                 </div>
-              )}
-            </motion.div>
-            <div className="flex items-center gap-2">
-              <NotificationBell />
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setIsExpanded(!isExpanded)}
-                className="shrink-0"
-              >
-                <Menu className="w-4 h-4" />
-              </Button>
-            </div>
+              </div>
+            ) : (
+              <>
+                <div className="px-2 py-2 rounded-lg hover:bg-engineering-blue/10 text-gray-600 hover:text-engineering-blue flex items-center justify-center cursor-pointer"
+                     onClick={() => setIsExpanded(!isExpanded)}>
+                  <Menu className="w-5 h-5" />
+                </div>
+                <div className="px-2 py-2 rounded-lg hover:bg-engineering-blue/10 text-gray-600 hover:text-engineering-blue flex items-center justify-center">
+                  <NotificationBell />
+                </div>
+              </>
+            )}
           </div>
 
           {/* Navigation Items */}
@@ -260,7 +279,7 @@ export function Navigation() {
 
                     {/* Tooltip for collapsed state */}
                     {!isExpanded && (
-                      <div className="absolute left-full ml-2 px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">
+                      <div className="absolute left-full ml-2 px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-[1001]">
                         {item.label}
                       </div>
                     )}
@@ -301,11 +320,14 @@ export function Navigation() {
                         {getDisplayName()}
                       </p>
                       <p className="text-xs text-gray-500">{getSubLabel()}</p>
-                      {userOrganization && (
-                        <p className="text-xs text-gray-400 truncate">
-                          {userOrganization.name}
-                        </p>
-                      )}
+                      <p className="text-xs text-gray-400 truncate">
+                        {userRole === 'Contractor'
+                          ? getOrganizationDisplayName(userProfile?.organization, userRole)
+                          : userRole === 'OrgAdmin' || userRole === 'Staff'
+                          ? userOrganization?.name || '未設定'
+                          : userProfile?.organization || '未設定'
+                        }
+                      </p>
                     </div>
                   )}
                 </motion.div>
@@ -316,7 +338,7 @@ export function Navigation() {
 
               {/* User Dropdown Menu */}
               {isExpanded && (
-                <div className="absolute bottom-full left-0 right-0 mb-2 opacity-0 group-hover:opacity-100 transition-opacity bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
+                <div className="absolute bottom-full left-0 right-0 mb-2 opacity-0 group-hover:opacity-100 transition-opacity bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-[1001]">
                   <Link href="/profile">
                     <div className="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 transition-colors">
                       <User className="w-4 h-4 text-gray-600" />
@@ -345,13 +367,18 @@ export function Navigation() {
 
               {/* Tooltip for collapsed state */}
               {!isExpanded && (
-                <div className="absolute left-full ml-2 px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">
+                <div className="absolute left-full ml-2 px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-[1001]">
                   <div>
                     <div>{getDisplayName()}</div>
                     <div className="text-gray-300">{userRole}</div>
-                    {userOrganization && (
-                      <div className="text-gray-400">{userOrganization.name}</div>
-                    )}
+                    <div className="text-gray-400">
+                      {userRole === 'Contractor'
+                        ? getOrganizationDisplayName(userProfile?.organization, userRole)
+                        : userRole === 'OrgAdmin' || userRole === 'Staff'
+                        ? userOrganization?.name || '未設定'
+                        : userProfile?.organization || '未設定'
+                      }
+                    </div>
                   </div>
                 </div>
               )}
@@ -364,7 +391,7 @@ export function Navigation() {
       <Button
         variant="ghost"
         size="icon"
-        className="md:hidden fixed top-4 left-4 z-50"
+        className="md:hidden fixed top-4 left-4 z-[1000]"
         onClick={() => setIsMobileOpen(true)}
       >
         <Menu className="w-5 h-5" />
@@ -376,7 +403,7 @@ export function Navigation() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="md:hidden fixed inset-0 bg-black/50 z-50"
+          className="md:hidden fixed inset-0 bg-black/50 z-[1000]"
           onClick={() => setIsMobileOpen(false)}
         >
           <motion.div

@@ -16,7 +16,7 @@ export async function POST(
   { params }: { params: { folderId: string } }
 ) {
   try {
-    console.log('Box upload API called for folder:', params.folderId)
+    
 
     // 認証チェック
     const authHeader = request.headers.get('authorization')
@@ -65,7 +65,6 @@ export async function POST(
 
     // モックフォルダの場合は成功レスポンスを返す
     if (params.folderId.startsWith('mock_') || params.folderId.startsWith('pending_')) {
-      console.log('Mock folder upload, returning success response')
       return NextResponse.json({
         success: true,
         message: 'ファイルをアップロードしました（テスト環境）',
@@ -79,8 +78,7 @@ export async function POST(
 
     // 実際のBOXにアップロード
     const result = await uploadFileToBox(params.folderId, file.name, arrayBuffer)
-
-    console.log('File uploaded successfully:', file.name)
+    
 
     return NextResponse.json({
       success: true,

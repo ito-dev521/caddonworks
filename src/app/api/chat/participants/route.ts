@@ -15,12 +15,11 @@ export async function GET(request: NextRequest) {
 
     // ルームIDからプロジェクトIDを抽出
     const projectId = roomId.replace('project_', '')
-    console.log('チャット参加者取得 - roomId:', roomId, 'projectId:', projectId)
+    
 
     // ユーザーの認証
     const authHeader = request.headers.get('authorization')
     if (!authHeader) {
-      console.log('チャット参加者取得エラー: 認証ヘッダーなし')
       return NextResponse.json(
         { message: '認証が必要です' },
         { status: 401 }
@@ -32,7 +31,6 @@ export async function GET(request: NextRequest) {
     const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
 
     if (authError || !user) {
-      console.log('チャット参加者取得エラー: 認証失敗', authError)
       return NextResponse.json(
         { message: '認証に失敗しました' },
         { status: 401 }
@@ -47,14 +45,12 @@ export async function GET(request: NextRequest) {
       .single()
 
     if (userError || !userProfile) {
-      console.log('チャット参加者取得エラー: ユーザープロフィール取得失敗', userError)
       return NextResponse.json(
         { message: 'ユーザープロフィールが見つかりません' },
-        { status: 403 }
+        { status: 404 }
       )
     }
-
-    console.log('チャット参加者取得 - ユーザープロフィール:', userProfile.id, userProfile.email)
+    
 
     // プロジェクトの存在確認（created_byカラムが存在しない場合に備えて段階的に取得）
     let project, projectError
@@ -70,7 +66,6 @@ export async function GET(request: NextRequest) {
       project = result.data
       projectError = result.error
     } catch (error) {
-      console.log('拡張カラム付き取得に失敗、最小列で再試行')
       
       // created_by / support_enabled が存在しない場合の代替取得
       const result = await supabaseAdmin
@@ -89,14 +84,6 @@ export async function GET(request: NextRequest) {
     }
 
     if (projectError || !project) {
-      console.log('チャット参加者取得エラー: プロジェクト取得失敗', {
-        projectId,
-        error: projectError,
-        project,
-        errorMessage: projectError?.message,
-        errorDetails: projectError?.details,
-        errorHint: projectError?.hint
-      })
       return NextResponse.json(
         { 
           message: 'プロジェクトが見つかりません',
@@ -109,14 +96,7 @@ export async function GET(request: NextRequest) {
         { status: 404 }
       )
     }
-
-    console.log('チャット参加者取得 - プロジェクト情報:', {
-      id: project.id,
-      title: project.title,
-      org_id: project.org_id,
-      contractor_id: project.contractor_id,
-      created_by: (project as any).created_by
-    })
+    
 
     // アクセス権限をチェック
     const { data: membership } = await supabaseAdmin
@@ -146,11 +126,11 @@ export async function GET(request: NextRequest) {
 
     // プロジェクトの基本参加者を取得（作成者・担当者・受注者・サポート）
     const basicParticipants: any[] = []
-    console.log('チャット参加者取得 - 基本参加者の取得開始')
+    
 
     // 1. プロジェクト作成者を追加
     if ((project as any).created_by) {
-      console.log('チャット参加者取得 - プロジェクト作成者を取得:', (project as any).created_by)
+      
       const { data: creator } = await supabaseAdmin
         .from('users')
         .select(`
@@ -168,7 +148,6 @@ export async function GET(request: NextRequest) {
         .single()
 
       if (creator) {
-        console.log('チャット参加者取得 - プロジェクト作成者取得成功:', creator.display_name, creator.email)
         basicParticipants.push({
           id: creator.id,
           display_name: creator.display_name || creator.email,
@@ -179,10 +158,9 @@ export async function GET(request: NextRequest) {
           is_basic: true
         })
       } else {
-        console.log('チャット参加者取得 - プロジェクト作成者が見つかりません')
       }
     } else {
-      console.log('チャット参加者取得 - プロジェクト作成者IDがありません。組織管理者を代替として取得します。')
+      
       // created_byがない場合は、組織の管理者を代替として追加
       const { data: orgAdmin } = await supabaseAdmin
         .from('users')
@@ -202,7 +180,6 @@ export async function GET(request: NextRequest) {
         .single()
 
       if (orgAdmin) {
-        console.log('チャット参加者取得 - 組織管理者を代替として追加:', orgAdmin.display_name, orgAdmin.email)
         basicParticipants.push({
           id: orgAdmin.id,
           display_name: orgAdmin.display_name || orgAdmin.email,
@@ -213,7 +190,6 @@ export async function GET(request: NextRequest) {
           is_basic: true
         })
       } else {
-        console.log('チャット参加者取得 - 組織管理者も見つかりません')
       }
     }
 
@@ -429,17 +405,7 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    console.log('チャット参加者取得 - 最終結果:', {
-      basicParticipantsCount: basicParticipants.length,
-      invitedParticipantsCount: invitedParticipants.length,
-      totalParticipants: allParticipants.length,
-      participants: allParticipants.map(p => ({
-        id: p.id,
-        email: p.email,
-        role: p.role,
-        is_basic: p.is_basic
-      }))
-    })
+    
 
     return NextResponse.json({
       participants: allParticipants

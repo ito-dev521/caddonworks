@@ -13,18 +13,15 @@ const supabaseAdmin = createClient(
 
 export async function GET(request: NextRequest, { params }: { params: { folderId: string } }) {
   try {
-    console.log('Box folder API called for folder:', params.folderId)
-
+    
     // Authorizationヘッダーからユーザー情報を取得
     const authHeader = request.headers.get('authorization')
     if (!authHeader) {
-      console.log('No authorization header')
       return NextResponse.json({ message: '認証が必要です' }, { status: 401 })
     }
 
     const token = authHeader.replace('Bearer ', '')
-    console.log('Token received:', token.substring(0, 20) + '...')
-
+    
     const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
 
     if (authError || !user) {
@@ -35,11 +32,9 @@ export async function GET(request: NextRequest, { params }: { params: { folderId
       }, { status: 401 })
     }
 
-    console.log('User authenticated:', user.id)
-
+    
     // モックフォルダIDの場合はモックデータを返す（すべての発注者で統一）
     if (params.folderId.startsWith('mock_') || params.folderId.startsWith('pending_')) {
-      console.log('Mock folder requested, returning mock data')
       const now = new Date()
       const mockItems = [
         {
@@ -97,8 +92,7 @@ export async function GET(request: NextRequest, { params }: { params: { folderId
     // 実際のBOXフォルダの内容を取得
     const items = await getBoxFolderItems(params.folderId)
 
-    console.log(`Retrieved ${items.length} items from folder ${params.folderId}`)
-
+    
     return NextResponse.json({
       items: items,
       folder_id: params.folderId

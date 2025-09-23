@@ -11,7 +11,7 @@ const supabaseAdmin = createClient(
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('🔧 Setting up BOX folders for all projects...')
+    
 
     // BOXフォルダIDがnullのすべてのプロジェクトを取得
     const { data: projects, error: projectsError } = await supabaseAdmin
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
       }, { status: 500 })
     }
 
-    console.log(`Found ${projects?.length || 0} projects without BOX folders`)
+    
 
     if (!projects || projects.length === 0) {
       return NextResponse.json({
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
             title: project.title,
             box_folder_id: testFolderId
           })
-          console.log(`✅ Updated project: ${project.title}`)
+          
         }
       } catch (error: any) {
         failed.push({

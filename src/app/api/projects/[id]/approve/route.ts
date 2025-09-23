@@ -101,29 +101,38 @@ export async function POST(
     // 案件のステータスを更新
     const newStatus = action === 'approve' ? 'bidding' : 'rejected'
     let boxFolderId: string | null = null
-    let boxSubfolders: Record<string, string> | null = null
 
     // 承認の場合はBOXフォルダを作成（HTTPエンドポイントに委譲）
     if (action === 'approve') {
       try {
-        const parentId = process.env.BOX_PROJECTS_ROOT_FOLDER_ID
-        if (parentId) {
-          const name = `[PRJ-${project.id.slice(0,8)}] ${project.title}`
-          const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/box/provision`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, parentId, subfolders: ['受取','作業','納品','契約'] })
-          })
-          if (res.ok) {
-            const json = await res.json()
-            boxFolderId = json.folderId
-            boxSubfolders = json.subfolderIds || null
-          } else {
-            const text = await res.text()
-            console.warn('BOX provision failed:', text)
-          }
+        // 組織のBOXフォルダIDを取得
+        const { data: organization, error: orgError } = await supabaseAdmin
+          .from('organizations')
+          .select('box_folder_id')
+          .eq('id', project.org_id)
+          .single()
+
+        if (orgError || !organization) {
+          console.error('組織情報の取得に失敗:', orgError)
         } else {
-          console.warn('BOX_PROJECTS_ROOT_FOLDER_ID not set')
+          const parentId = organization.box_folder_id
+          if (parentId) {
+            const name = `[PRJ-${project.id.slice(0,8)}] ${project.title}`
+            const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/box/provision`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name, parentId, subfolders: ['受取','作業','納品','契約'] })
+            })
+            if (res.ok) {
+              const json = await res.json()
+              boxFolderId = json.folderId
+            } else {
+              const text = await res.text()
+              console.warn('BOX provision failed:', text)
+            }
+          } else {
+            console.warn(`組織ID: ${project.org_id} のBOXフォルダIDが設定されていません`)
+          }
         }
       } catch (e) {
         console.error('BOX provision error:', e)
@@ -138,9 +147,6 @@ export async function POST(
     // BOXフォルダが作成された場合は追加
     if (boxFolderId) {
       updateData.box_folder_id = boxFolderId
-      if (boxSubfolders) {
-        updateData.box_subfolders = boxSubfolders
-      }
     }
 
     const { error: updateError } = await supabaseAdmin
@@ -208,8 +214,7 @@ export async function POST(
       project: {
         id: projectId,
         status: newStatus,
-        box_folder_id: boxFolderId,
-        box_subfolders: boxSubfolders
+        box_folder_id: boxFolderId
       }
     }, { status: 200 })
 

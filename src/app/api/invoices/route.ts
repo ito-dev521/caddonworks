@@ -439,7 +439,6 @@ export async function GET(request: NextRequest) {
       .from('invoices')
       .select(`
         id,
-        invoice_number,
         status,
         issue_date,
         due_date,

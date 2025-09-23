@@ -13,8 +13,7 @@ export async function POST(request: NextRequest) {
   try {
     const { projectId, boxFolderId } = await request.json()
 
-    console.log(`🔄 Updating project ${projectId} with BOX folder ID: ${boxFolderId}`)
-
+    
     const { data, error } = await supabaseAdmin
       .from('projects')
       .update({
@@ -30,7 +29,7 @@ export async function POST(request: NextRequest) {
       }, { status: 500 })
     }
 
-    console.log('✅ Project updated successfully:', data)
+    
 
     return NextResponse.json({
       message: 'BOXフォルダIDが正常に設定されました',

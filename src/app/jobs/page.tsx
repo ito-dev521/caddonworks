@@ -54,6 +54,8 @@ interface JobData {
   required_level?: MemberLevel
   is_declined?: boolean
   contract_amount?: number // 契約金額（落札案件の場合）
+  support_enabled?: boolean // プロジェクトレベルのサポート
+  contract_support_enabled?: boolean // 契約レベルのサポート
 }
 
 interface BidData {
@@ -124,17 +126,7 @@ function JobsPageContent() {
     const diffTime = endOfDeadlineDay.getTime() - now.getTime()
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
     
-    // デバッグ用ログ（当日の案件の場合）
-    if (diffDays === 0 || diffDays === 1) {
-      console.log('締切日チェック:', {
-        deadline: deadline,
-        now: now.toISOString(),
-        endOfDeadlineDay: endOfDeadlineDay.toISOString(),
-        diffTime: diffTime,
-        diffDays: diffDays,
-        isValid: diffTime > 0
-      })
-    }
+    // デバッグログ削除
     
     return diffDays
   }
@@ -177,16 +169,6 @@ function JobsPageContent() {
       const result = await response.json()
 
       if (response.ok) {
-        console.log('jobs page: 受信したデータ', {
-          totalJobs: result.jobs?.length || 0,
-          jobs: result.jobs?.map((job: any) => ({
-            id: job.id,
-            title: job.title,
-            status: job.status,
-            is_declined: job.is_declined,
-            contract_amount: job.contract_amount
-          }))
-        })
         setJobs(result.jobs)
         setFilteredJobs(result.jobs)
       } else {
@@ -664,6 +646,16 @@ function JobsPageContent() {
                           {job.is_full && !job.is_declined && !job.contract_amount && (
                             <Badge variant="outline" className="border-orange-300 text-orange-700 bg-orange-100">
                               募集完了
+                            </Badge>
+                          )}
+                          {job.support_enabled && (
+                            <Badge className="bg-blue-100 text-blue-800 border-blue-200">
+                              発注者サポート利用
+                            </Badge>
+                          )}
+                          {job.contract_support_enabled && (
+                            <Badge className="bg-green-100 text-green-800 border-green-200">
+                              受注者サポート利用
                             </Badge>
                           )}
                         </div>
