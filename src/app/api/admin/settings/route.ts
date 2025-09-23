@@ -106,3 +106,4 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ message: 'サーバーエラーが発生しました' }, { status: 500 })
   }
 }
+
