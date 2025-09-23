@@ -164,12 +164,25 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
   }
 }
 
-export async function DELETE(_request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const organizationId = params.id
 
-    // 管理ページからのアクセスを前提とし、認証チェックは簡素化
-    // （実際の認証はページレベルのAuthGuardで行われている前提）
+    // 認証ヘッダーを確認（管理者権限が必要）
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return NextResponse.json({ message: '認証が必要です' }, { status: 401 })
+    }
+
+    const token = authHeader.replace('Bearer ', '')
+
+    // トークンを使用してユーザー認証を確認
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
+
+    if (authError || !user) {
+      console.error('認証エラー:', authError)
+      return NextResponse.json({ message: '認証に失敗しました' }, { status: 401 })
+    }
 
     // 組織を削除前に存在確認
     const { data: org, error: fetchError } = await supabaseAdmin

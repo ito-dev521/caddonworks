@@ -80,12 +80,14 @@ export async function GET(request: NextRequest) {
       postal_code: org.postal_code || '',
       address: org.address || '',
       phone_number: org.phone || '',
-      representative_name: org.contact_person || '',
+      email: userProfile.email || '',
+      representative_name: userProfile.display_name || '',
       department: org.department || '',
       position: org.position || '',
       website: org.website || '',
       business_registration_number: org.registration_number || '',
       business_type: org.business_type || '',
+      employee_count: org.employee_count || 0,
       updated_at: org.updated_at || new Date().toISOString()
     }
 
@@ -173,6 +175,7 @@ export async function PUT(request: NextRequest) {
     if (incoming.business_type !== undefined) updateData.business_type = incoming.business_type
     if (incoming.business_registration_number !== undefined) updateData.registration_number = incoming.business_registration_number
     if (incoming.registration_number !== undefined) updateData.registration_number = incoming.registration_number
+    if (incoming.employee_count !== undefined) updateData.employee_count = incoming.employee_count
     if (incoming.representative_name !== undefined) updateData.contact_person = incoming.representative_name
     if (incoming.contact_person !== undefined) updateData.contact_person = incoming.contact_person
     // postal_code, department, position は現状のスキーマに存在しないため無視
@@ -199,12 +202,14 @@ export async function PUT(request: NextRequest) {
       postal_code: updatedOrg.postal_code || '',
       address: updatedOrg.address || '',
       phone_number: updatedOrg.phone || '',
-      representative_name: updatedOrg.contact_person || '',
+      email: userProfile.email || '',
+      representative_name: userProfile.display_name || '',
       department: updatedOrg.department || '',
       position: updatedOrg.position || '',
       website: updatedOrg.website || '',
       business_registration_number: updatedOrg.registration_number || '',
       business_type: updatedOrg.business_type || '',
+      employee_count: updatedOrg.employee_count || 0,
       updated_at: updatedOrg.updated_at || new Date().toISOString()
     }
 

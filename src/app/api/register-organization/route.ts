@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { supabase, createSupabaseAdmin } from '@/lib/supabase'
 
 export async function POST(request: NextRequest) {
   try {
@@ -28,8 +28,6 @@ export async function POST(request: NextRequest) {
 
       // Billing Info
       systemFee,
-      paymentMethod,
-      billingAddress,
 
       // Agreement
       agreedToTerms,
@@ -89,15 +87,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 1. Supabase Authでユーザーを作成
-    const { data: authData, error: authError } = await supabase.auth.signUp({
+    // 1. Supabase Authでユーザーを作成（管理者権限で確認メールなし）
+    const supabaseAdmin = createSupabaseAdmin()
+    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email: adminEmail,
       password: adminPassword,
-      options: {
-        data: {
-          display_name: adminName,
-          role: 'OrgAdmin'
-        }
+      email_confirm: true, // メール確認を自動的に完了状態にする
+      user_metadata: {
+        display_name: adminName,
+        role: 'OrgAdmin'
       }
     })
 
@@ -139,8 +137,7 @@ export async function POST(request: NextRequest) {
         active: false,
         approval_status: 'pending',
         business_type: businessType || organizationType || 'private_corp',
-        registration_number: registrationNumber || taxId || null,
-        tax_id: taxId || null
+        registration_number: taxId || registrationNumber || null
       })
       .select()
       .single()
@@ -148,7 +145,7 @@ export async function POST(request: NextRequest) {
     if (orgError) {
       console.error('Organization creation error:', orgError)
       // Authユーザーを削除（ロールバック）
-      await supabase.auth.admin.deleteUser(authData.user.id)
+      await supabaseAdmin.auth.admin.deleteUser(authData.user.id)
       return NextResponse.json(
         { message: '組織作成に失敗しました: ' + orgError.message },
         { status: 400 }
@@ -175,7 +172,7 @@ export async function POST(request: NextRequest) {
       console.error('User profile creation error:', userError)
       // 組織とAuthユーザーを削除（ロールバック）
       await supabase.from('organizations').delete().eq('id', orgData.id)
-      await supabase.auth.admin.deleteUser(authData.user.id)
+      await supabaseAdmin.auth.admin.deleteUser(authData.user.id)
       return NextResponse.json(
         { message: 'ユーザープロフィール作成に失敗しました: ' + userError.message },
         { status: 400 }
@@ -196,7 +193,7 @@ export async function POST(request: NextRequest) {
       // ユーザー、組織、Authユーザーを削除（ロールバック）
       await supabase.from('users').delete().eq('id', userData.id)
       await supabase.from('organizations').delete().eq('id', orgData.id)
-      await supabase.auth.admin.deleteUser(authData.user.id)
+      await supabaseAdmin.auth.admin.deleteUser(authData.user.id)
       return NextResponse.json(
         { message: '権限設定に失敗しました: ' + membershipError.message },
         { status: 400 }

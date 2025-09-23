@@ -108,6 +108,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: 'email と role は必須です' }, { status: 400 })
     }
 
+    // 既存ユーザーのチェック
+    const { data: existingUser } = await supabaseAdmin
+      .from('users')
+      .select('id, email')
+      .eq('email', email.toLowerCase())
+      .maybeSingle()
+
+    if (existingUser) {
+      return NextResponse.json({
+        message: 'このメールアドレスは既に登録されています'
+      }, { status: 400 })
+    }
+
     // 認証ユーザー作成（確認メールを送付）
     const { data: created, error: authErr } = await supabaseAdmin.auth.admin.createUser({
       email,

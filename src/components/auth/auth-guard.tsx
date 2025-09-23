@@ -8,6 +8,8 @@ import { useAuth } from "@/contexts/auth-context"
 import { UserRole } from "@/lib/supabase"
 import { checkOrganizationStatus, getOrganizationStatusMessage, OrganizationStatus } from "@/lib/organization-status"
 import { OrganizationSuspended } from "@/components/org/organization-suspended"
+import { isMaintenanceMode, isAdminEmail } from "@/lib/maintenance"
+import { MaintenancePage } from "@/components/maintenance/maintenance-page"
 
 interface AuthGuardProps {
   children: React.ReactNode
@@ -30,6 +32,8 @@ export function AuthGuard({
   const isRedirectingRef = useRef(false)
   const [organizationStatus, setOrganizationStatus] = useState<OrganizationStatus | null>(null)
   const [organizationLoading, setOrganizationLoading] = useState(false)
+  const [maintenanceActive, setMaintenanceActive] = useState(false)
+  const [maintenanceLoading, setMaintenanceLoading] = useState(true)
 
   useEffect(() => {
     // ローディング中は何もしない
@@ -87,6 +91,36 @@ export function AuthGuard({
     }
   }, [user, userRole, loading, requiredRole, allowedRoles, router, redirectTo, pathname])
 
+  // メンテナンスモードチェック
+  useEffect(() => {
+    const checkMaintenance = async () => {
+      try {
+        // 管理者ログインページは常に除外
+        if (pathname === '/auth/admin-login') {
+          setMaintenanceActive(false)
+          setMaintenanceLoading(false)
+          return
+        }
+
+        if (!loading) {
+          const maintenance = await isMaintenanceMode()
+          setMaintenanceActive(maintenance)
+        }
+      } catch (error) {
+        console.error('メンテナンスモード確認エラー:', error)
+        setMaintenanceActive(false)
+      } finally {
+        setMaintenanceLoading(false)
+      }
+    }
+
+    if (!loading) {
+      checkMaintenance()
+    } else {
+      setMaintenanceLoading(true)
+    }
+  }, [loading, pathname])
+
   // 組織状態チェック
   useEffect(() => {
     const checkOrgStatus = async () => {
@@ -115,7 +149,7 @@ export function AuthGuard({
     checkOrgStatus()
   }, [user, userOrganization, skipOrganizationCheck, loading, pathname])
 
-  if (loading) {
+  if (loading || maintenanceLoading) {
     return (
       <div className="min-h-screen bg-gradient-mesh flex items-center justify-center">
         <motion.div
@@ -126,11 +160,20 @@ export function AuthGuard({
           <div className="w-16 h-16 bg-engineering-blue rounded-xl flex items-center justify-center mx-auto mb-4">
             <Loader2 className="w-8 h-8 text-white animate-spin" />
           </div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">認証確認中...</h2>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">
+            {maintenanceLoading ? 'システム状態確認中...' : '認証確認中...'}
+          </h2>
           <p className="text-gray-600">しばらくお待ちください</p>
         </motion.div>
       </div>
     )
+  }
+
+  // メンテナンスモードが有効で、管理者でない場合はメンテナンス画面を表示
+  if (maintenanceActive) {
+    if (!user?.email || !isAdminEmail(user.email)) {
+      return <MaintenancePage />
+    }
   }
 
   if (!user) {

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ログアウト処理</title>
+</head>
+<body>
+    <h1>ログアウト中...</h1>
+    <script>
+        // LocalStorageをクリア
+        localStorage.clear();
+
+        // SessionStorageをクリア
+        sessionStorage.clear();
+
+        // Supabaseのセッションをクリア
+        if (window.supabase) {
+            window.supabase.auth.signOut();
+        }
+
+        // IndexedDBの関連データもクリア
+        if ('indexedDB' in window) {
+            indexedDB.deleteDatabase('supabase-auth-token');
+            indexedDB.deleteDatabase('sb-local-auth');
+        }
+
+        // Cookieもクリア
+        document.cookie.split(";").forEach(function(c) {
+            document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+        });
+
+        alert('ログアウト処理が完了しました。ブラウザを更新してください。');
+
+        // ページを自動更新
+        setTimeout(() => {
+            window.location.href = 'http://localhost:3000';
+        }, 2000);
+    </script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useRef } from "react"
+import React, { useState, useRef, useEffect } from "react"
 import { motion } from "framer-motion"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
@@ -30,29 +30,29 @@ export default function OrganizationRegisterPage() {
   const [currentStep, setCurrentStep] = useState(1)
   const [formData, setFormData] = useState({
     // Organization Info
-    organizationName: "デモ建設株式会社",
+    organizationName: "",
     organizationType: "private_corp",
-    businessType: "建設業",
-    taxId: "1234567890123",
-    registrationNumber: "1234567890123",
-    postalCode: "100-0001",
-    address1: "東京都千代田区千代田",
-    address2: "1-1-1 千代田ビル",
-    address: "〒100-0001 東京都千代田区千代田1-1-1",
-    phone: "03-1234-5678",
-    billingEmail: "billing@demo-construction.co.jp",
-    website: "https://www.demo-construction.co.jp",
+    businessType: "",
+    taxId: "",
+    registrationNumber: "",
+    postalCode: "",
+    address1: "",
+    address2: "",
+    address: "",
+    phone: "",
+    billingEmail: "",
+    website: "",
 
     // Admin User Info
-    adminName: "管理者デモ",
-    adminEmail: "orgadmin@demo.com",
-    adminPassword: "demo123",
-    confirmPassword: "demo123",
-    adminPhone: "03-1234-5678",
-    adminDepartment: "システム管理部",
+    adminName: "",
+    adminEmail: "",
+    adminPassword: "",
+    confirmPassword: "",
+    adminPhone: "",
+    adminDepartment: "",
 
     // Billing Info
-    systemFee: 50000,
+    systemFee: 50000, // 初期値、useEffectで更新
     paymentMethod: "",
     billingAddress: "",
 
@@ -69,22 +69,38 @@ export default function OrganizationRegisterPage() {
 
   const router = useRouter()
 
+  // システム料金を動的に取得
+  useEffect(() => {
+    const fetchSystemFee = async () => {
+      try {
+        const response = await fetch('/api/system-settings?key=default_system_fee')
+        if (response.ok) {
+          const data = await response.json()
+          setFormData(prev => ({
+            ...prev,
+            systemFee: data.value || 50000
+          }))
+        }
+      } catch (error) {
+        // エラーの場合はデフォルト値を使用
+      }
+    }
+
+    fetchSystemFee()
+  }, [])
+
   const organizationTypes = [
     { value: "private_corp", label: "民間企業" },
     { value: "public_corp", label: "地方自治体" },
-    { value: "government", label: "国家機関" },
     { value: "npo", label: "NPO法人" },
     { value: "other", label: "その他" }
   ]
 
   const businessTypes = [
     { value: "建設業", label: "建設業" },
-    { value: "土木業", label: "土木業" },
-    { value: "設計業", label: "設計業" },
+    { value: "建設コンサルタント", label: "建設コンサルタント" },
     { value: "測量業", label: "測量業" },
-    { value: "コンサルタント業", label: "コンサルタント業" },
-    { value: "不動産業", label: "不動産業" },
-    { value: "官公庁", label: "官公庁" },
+    { value: "設計業", label: "設計業" },
     { value: "地方自治体", label: "地方自治体" },
     { value: "その他", label: "その他" }
   ]
@@ -760,7 +776,7 @@ export default function OrganizationRegisterPage() {
                             <div className="text-sm opacity-80">利用額に対する手数料</div>
                           </div>
                           <div className="text-center">
-                            <div className="text-2xl font-bold">¥50,000</div>
+                            <div className="text-2xl font-bold">¥{formData.systemFee.toLocaleString()}</div>
                             <div className="text-sm opacity-80">月額システム利用料</div>
                           </div>
                           <div className="text-center">
@@ -770,7 +786,7 @@ export default function OrganizationRegisterPage() {
                         </div>
                         <div className="mt-4 p-3 bg-white/20 rounded-lg">
                           <p className="text-sm">
-                            請求額 = 利用額合計 + (利用額合計 × 30%) + ¥50,000/月
+                            請求額 = 利用額合計 + (利用額合計 × 30%) + ¥{formData.systemFee.toLocaleString()}/月
                           </p>
                         </div>
                       </CardContent>

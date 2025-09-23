@@ -5,6 +5,7 @@ import { Navigation } from "@/components/layouts/navigation"
 import { motion } from "framer-motion"
 import { Building2, Search, CheckCircle2, XCircle, Clock, AlertTriangle, Folder, Play, Pause, Trash2, Eye } from "lucide-react"
 import { AuthGuard } from "@/components/auth/auth-guard"
+import { supabase } from "@/lib/supabase"
 import Link from "next/link"
 
 interface Org {
@@ -78,9 +79,16 @@ function AdminOrganizationsPageContent() {
 
     setActionLoading(orgId)
     try {
+      // 認証トークンを取得
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token || ''
+
       const res = await fetch(`/api/admin/organizations/${orgId}`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' }
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
       })
 
       if (res.ok) {
@@ -260,7 +268,7 @@ function AdminOrganizationsPageContent() {
 
 export default function AdminOrganizationsPage() {
   return (
-    <AuthGuard>
+    <AuthGuard allowedRoles={['Admin', 'OrgAdmin']}>
       <AdminOrganizationsPageContent />
     </AuthGuard>
   )

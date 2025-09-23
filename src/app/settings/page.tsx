@@ -8,8 +8,6 @@ import {
   UserPlus,
   Edit,
   Trash2,
-  Save,
-  X,
   Mail,
   Building,
   Shield,
@@ -65,20 +63,6 @@ interface OrganizationSettings {
   created_at: string
 }
 
-interface CompanyInfo {
-  id: string
-  name: string
-  postal_code: string
-  address: string
-  phone_number: string
-  representative_name: string
-  department?: string
-  position?: string
-  business_registration_number?: string
-  business_type?: string
-  website?: string
-  updated_at: string
-}
 
 interface OrganizationRegistration {
   id: string
@@ -109,7 +93,7 @@ export default function SettingsPage() {
 }
 
 function SettingsPageContent() {
-  const { userProfile, userRole, loading } = useAuth()
+  const { userProfile, loading } = useAuth()
   const [users, setUsers] = useState<OrganizationUser[]>([])
   const [filteredUsers, setFilteredUsers] = useState<OrganizationUser[]>([])
   const [searchTerm, setSearchTerm] = useState('')
@@ -120,10 +104,6 @@ function SettingsPageContent() {
   const [organizationDomain, setOrganizationDomain] = useState('')
   const [organizationSettings, setOrganizationSettings] = useState<OrganizationSettings | null>(null)
   const [isLoadingSettings, setIsLoadingSettings] = useState(false)
-  const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null)
-  const [isLoadingCompanyInfo, setIsLoadingCompanyInfo] = useState(false)
-  const [isEditingCompanyInfo, setIsEditingCompanyInfo] = useState(false)
-  const [editingCompanyInfo, setEditingCompanyInfo] = useState<Partial<CompanyInfo>>({})
   const [registrationInfo, setRegistrationInfo] = useState<OrganizationRegistration | null>(null)
   const [isLoadingRegistration, setIsLoadingRegistration] = useState(false)
 
@@ -286,7 +266,7 @@ function SettingsPageContent() {
         throw new Error(errorData.message || '組織設定の更新に失敗しました')
       }
 
-      const data = await response.json()
+      await response.json()
       setOrganizationSettings(prev => prev ? { ...prev, approval_required } : null)
       alert('組織設定が更新されました')
     } catch (error) {
@@ -297,90 +277,7 @@ function SettingsPageContent() {
     }
   }
 
-  // 会社情報を取得
-  const fetchCompanyInfo = async () => {
-    try {
-      setIsLoadingCompanyInfo(true)
-      const { data: { session } } = await supabase.auth.getSession()
 
-      if (!session) {
-        throw new Error('セッションが見つかりません')
-      }
-
-      const response = await fetch('/api/organization/profile', {
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json'
-        }
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        if (response.status === 404) {
-          setCompanyInfo(null)
-          return
-        }
-        throw new Error(errorData.message || '会社情報の取得に失敗しました')
-      }
-
-      const data = await response.json()
-      setCompanyInfo(data.organization)
-    } catch (error) {
-      console.error('会社情報取得エラー:', error)
-      alert(error instanceof Error ? error.message : '会社情報の取得に失敗しました')
-    } finally {
-      setIsLoadingCompanyInfo(false)
-    }
-  }
-
-  // 会社情報を更新
-  const updateCompanyInfo = async () => {
-    try {
-      setIsSaving(true)
-      const { data: { session } } = await supabase.auth.getSession()
-
-      if (!session) {
-        throw new Error('セッションが見つかりません')
-      }
-
-      const response = await fetch('/api/organization/profile', {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ organizationData: editingCompanyInfo })
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.message || '会社情報の更新に失敗しました')
-      }
-
-      const data = await response.json()
-      setCompanyInfo(data.organization)
-      setIsEditingCompanyInfo(false)
-      setEditingCompanyInfo({})
-      alert('会社情報が更新されました')
-    } catch (error) {
-      console.error('会社情報更新エラー:', error)
-      alert(error instanceof Error ? error.message : '会社情報の更新に失敗しました')
-    } finally {
-      setIsSaving(false)
-    }
-  }
-
-  // 編集開始
-  const startEditingCompanyInfo = () => {
-    setEditingCompanyInfo(companyInfo || {})
-    setIsEditingCompanyInfo(true)
-  }
-
-  // 編集キャンセル
-  const cancelEditingCompanyInfo = () => {
-    setEditingCompanyInfo({})
-    setIsEditingCompanyInfo(false)
-  }
 
   // 組織登録申請情報を取得
   const fetchRegistrationInfo = async () => {
@@ -529,19 +426,23 @@ function SettingsPageContent() {
         throw new Error('セッションが見つかりません')
       }
 
+      const updateData = {
+        userId: editingUserId,
+        display_name: editingUser.display_name,
+        formal_name: editingUser.formal_name,
+        department: editingUser.department,
+        newRole: editingRole
+      }
+
+      console.log('ユーザー更新データ:', updateData)
+
       const response = await fetch('/api/settings/users', {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          userId: editingUserId,
-          display_name: editingUser.display_name,
-          formal_name: editingUser.formal_name,
-          department: editingUser.department,
-          newRole: editingRole
-        })
+        body: JSON.stringify(updateData)
       })
 
       if (!response.ok) {
@@ -616,7 +517,6 @@ function SettingsPageContent() {
   useEffect(() => {
     fetchUsers()
     fetchOrganizationSettings()
-    fetchCompanyInfo()
     if (SHOW_REGISTRATION_INFO) {
       fetchRegistrationInfo()
     }
@@ -820,231 +720,6 @@ function SettingsPageContent() {
             </CardContent>
           </Card>
 
-          {/* 会社情報セクション */}
-          <Card className="mb-6">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2">
-                    <Building className="w-5 h-5" />
-                    会社情報
-                  </CardTitle>
-                  <CardDescription>
-                    組織の詳細情報を管理します
-                  </CardDescription>
-                </div>
-                {!isEditingCompanyInfo && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={startEditingCompanyInfo}
-                    className="bg-engineering-blue text-white hover:bg-engineering-blue/90"
-                  >
-                    <Edit className="w-4 h-4 mr-2" />
-                    {companyInfo ? '編集' : '登録'}
-                  </Button>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent>
-              {isLoadingCompanyInfo ? (
-                <div className="flex items-center justify-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {isEditingCompanyInfo ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="md:col-span-2">
-                        <Label htmlFor="company_name">会社名 *</Label>
-                        <Input
-                          id="company_name"
-                          value={editingCompanyInfo.name || ''}
-                          onChange={(e) => setEditingCompanyInfo({ ...editingCompanyInfo, name: e.target.value })}
-                          placeholder="株式会社○○"
-                          className="mt-1"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="postal_code">郵便番号 *</Label>
-                        <Input
-                          id="postal_code"
-                          value={editingCompanyInfo.postal_code || ''}
-                          onChange={(e) => setEditingCompanyInfo({ ...editingCompanyInfo, postal_code: e.target.value })}
-                          placeholder="123-4567"
-                          className="mt-1"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="phone_number">電話番号 *</Label>
-                        <Input
-                          id="phone_number"
-                          value={editingCompanyInfo.phone_number || ''}
-                          onChange={(e) => setEditingCompanyInfo({ ...editingCompanyInfo, phone_number: e.target.value })}
-                          placeholder="03-1234-5678"
-                          className="mt-1"
-                        />
-                      </div>
-                      <div className="md:col-span-2">
-                        <Label htmlFor="address">住所 *</Label>
-                        <Input
-                          id="address"
-                          value={editingCompanyInfo.address || ''}
-                          onChange={(e) => setEditingCompanyInfo({ ...editingCompanyInfo, address: e.target.value })}
-                          placeholder="東京都○○区○○ 1-2-3"
-                          className="mt-1"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="representative_name">管理者名 *</Label>
-                        <Input
-                          id="representative_name"
-                          value={editingCompanyInfo.representative_name || ''}
-                          onChange={(e) => setEditingCompanyInfo({ ...editingCompanyInfo, representative_name: e.target.value })}
-                          placeholder="田中 太郎"
-                          className="mt-1"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="department">部署</Label>
-                        <Input
-                          id="department"
-                          value={editingCompanyInfo.department || ''}
-                          onChange={(e) => setEditingCompanyInfo({ ...editingCompanyInfo, department: e.target.value })}
-                          placeholder="技術部"
-                          className="mt-1"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="position">役職</Label>
-                        <Input
-                          id="position"
-                          value={editingCompanyInfo.position || ''}
-                          onChange={(e) => setEditingCompanyInfo({ ...editingCompanyInfo, position: e.target.value })}
-                          placeholder="部長"
-                          className="mt-1"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="business_registration_number">法人番号</Label>
-                        <Input
-                          id="business_registration_number"
-                          value={editingCompanyInfo.business_registration_number || ''}
-                          onChange={(e) => setEditingCompanyInfo({ ...editingCompanyInfo, business_registration_number: e.target.value })}
-                          placeholder="1234567890123"
-                          className="mt-1"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="business_type">事業内容</Label>
-                        <Input
-                          id="business_type"
-                          value={editingCompanyInfo.business_type || ''}
-                          onChange={(e) => setEditingCompanyInfo({ ...editingCompanyInfo, business_type: e.target.value })}
-                          placeholder="土木設計・建設コンサルタント"
-                          className="mt-1"
-                        />
-                      </div>
-                      <div className="md:col-span-2">
-                        <Label htmlFor="website">会社URL</Label>
-                        <Input
-                          id="website"
-                          type="url"
-                          value={editingCompanyInfo.website || ''}
-                          onChange={(e) => setEditingCompanyInfo({ ...editingCompanyInfo, website: e.target.value })}
-                          placeholder="https://example.co.jp"
-                          className="mt-1"
-                        />
-                      </div>
-                      <div className="md:col-span-2 flex justify-end gap-3 pt-4">
-                        <Button
-                          variant="outline"
-                          onClick={cancelEditingCompanyInfo}
-                          disabled={isSaving}
-                        >
-                          <X className="w-4 h-4 mr-2" />
-                          キャンセル
-                        </Button>
-                        <Button
-                          onClick={updateCompanyInfo}
-                          disabled={isSaving || !editingCompanyInfo.name || !editingCompanyInfo.postal_code || !editingCompanyInfo.address || !editingCompanyInfo.phone_number || !editingCompanyInfo.representative_name}
-                          className="bg-engineering-green hover:bg-engineering-green/90"
-                        >
-                          <Save className="w-4 h-4 mr-2" />
-                          {isSaving ? '保存中...' : '保存'}
-                        </Button>
-                      </div>
-                    </div>
-                  ) : companyInfo ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="md:col-span-2">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">会社名</label>
-                        <p className="text-gray-900 font-medium">{companyInfo.name}</p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">郵便番号</label>
-                        <p className="text-gray-900">{companyInfo.postal_code}</p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">電話番号</label>
-                        <p className="text-gray-900">{companyInfo.phone_number}</p>
-                      </div>
-                      <div className="md:col-span-2">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">住所</label>
-                        <p className="text-gray-900">{companyInfo.address}</p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">管理者名</label>
-                        <p className="text-gray-900">{companyInfo.representative_name}</p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">部署</label>
-                        <p className="text-gray-900">{companyInfo.department || '未設定'}</p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">役職</label>
-                        <p className="text-gray-900">{companyInfo.position || '未設定'}</p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">法人番号</label>
-                        <p className="text-gray-900">{companyInfo.business_registration_number || '未設定'}</p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">事業内容</label>
-                        <p className="text-gray-900">{companyInfo.business_type || '未設定'}</p>
-                      </div>
-                      <div className="md:col-span-2">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">会社URL</label>
-                        <p className="text-gray-900">{companyInfo.website || '未設定'}</p>
-                      </div>
-                      <div className="md:col-span-2 pt-2 border-t border-gray-200">
-                        <p className="text-sm text-gray-500">
-                          最終更新: {new Date(companyInfo.updated_at).toLocaleDateString('ja-JP')}
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-center py-8">
-                      <Building className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                      <h3 className="text-lg font-medium text-gray-900 mb-2">
-                        会社情報が未登録です
-                      </h3>
-                      <p className="text-gray-500 mb-4">
-                        会社の基本情報を登録してください
-                      </p>
-                      <Button
-                        onClick={startEditingCompanyInfo}
-                        className="bg-engineering-blue hover:bg-engineering-blue/90"
-                      >
-                        <Building className="w-4 h-4 mr-2" />
-                        会社情報を登録
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
 
           {/* 組織設定セクション */}
           <Card className="mb-6">
@@ -1193,7 +868,7 @@ function SettingsPageContent() {
                                 <p className="text-sm text-gray-600">{user.email}</p>
                                 <div className="flex items-center gap-2 mt-1">
                                   <Badge className={user.role === 'OrgAdmin' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}>
-                                    {user.role === 'OrgAdmin' ? '管理者' : '一般ユーザー'}
+                                    {user.role === 'OrgAdmin' ? '管理者' : user.role === 'Staff' ? 'スタッフ' : '一般ユーザー'}
                                   </Badge>
                                 </div>
                               </div>

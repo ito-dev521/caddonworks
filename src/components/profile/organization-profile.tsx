@@ -79,8 +79,23 @@ export function OrganizationProfile() {
       }
 
       const data = await response.json()
-      setOrganization(data.organization)
-      setFormData(data.organization)
+      // APIのレスポンスをコンポーネント用フォーマットに変換
+      const orgData = {
+        id: data.organization.id,
+        name: data.organization.name,
+        address: data.organization.address,
+        phone: data.organization.phone_number,
+        email: data.organization.email || '',
+        website: data.organization.website,
+        employee_count: data.organization.employee_count || 0,
+        business_type: data.organization.business_type,
+        registration_number: data.organization.business_registration_number,
+        contact_person: data.organization.representative_name,
+        created_at: data.organization.created_at || '',
+        updated_at: data.organization.updated_at
+      }
+      setOrganization(orgData)
+      setFormData(orgData)
     } catch (error) {
       console.error('組織情報取得エラー:', error)
       alert('組織情報の取得に失敗しました')
@@ -106,7 +121,17 @@ export function OrganizationProfile() {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          organizationData: formData
+          organizationData: {
+            name: formData.name,
+            address: formData.address,
+            phone_number: formData.phone,
+            email: formData.email,
+            website: formData.website,
+            employee_count: formData.employee_count,
+            business_type: formData.business_type,
+            business_registration_number: formData.registration_number,
+            representative_name: formData.contact_person
+          }
         })
       })
 
@@ -115,7 +140,22 @@ export function OrganizationProfile() {
       }
 
       const data = await response.json()
-      setOrganization(data.organization)
+      // APIのレスポンスをコンポーネント用フォーマットに変換
+      const orgData = {
+        id: data.organization.id,
+        name: data.organization.name,
+        address: data.organization.address,
+        phone: data.organization.phone_number,
+        email: data.organization.email || '',
+        website: data.organization.website,
+        employee_count: data.organization.employee_count || 0,
+        business_type: data.organization.business_type,
+        registration_number: data.organization.business_registration_number,
+        contact_person: data.organization.representative_name,
+        created_at: data.organization.created_at || '',
+        updated_at: data.organization.updated_at
+      }
+      setOrganization(orgData)
       setIsEditing(false)
       alert('組織情報が正常に更新されました')
     } catch (error) {
@@ -265,10 +305,10 @@ export function OrganizationProfile() {
               )}
             </div>
 
-            {/* 担当者名 */}
+            {/* 管理者名 */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                担当者名
+                管理者名
               </label>
               {isEditing ? (
                 <input
@@ -291,11 +331,10 @@ export function OrganizationProfile() {
               </label>
               {isEditing ? (
                 <input
-                  type="number"
-                  min="0"
-                  value={formData.employee_count}
-                  onChange={(e) => setFormData(prev => ({ ...prev, employee_count: Number(e.target.value) }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
+                  type="text"
+                  value={formData.employee_count || ''}
+                  onChange={(e) => setFormData(prev => ({ ...prev, employee_count: Number(e.target.value) || 0 }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   placeholder="50"
                 />
               ) : (
