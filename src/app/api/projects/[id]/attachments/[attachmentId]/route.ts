@@ -19,7 +19,18 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
       return NextResponse.json({ message: '認証に失敗しました' }, { status: 401 })
     }
 
-    // 添付資料の存在確認と権限チェック
+    // ユーザープロフィールを取得
+    const { data: userProfile, error: userError } = await supabase
+      .from('users')
+      .select('id, email, display_name')
+      .eq('auth_user_id', user.id)
+      .single()
+
+    if (userError || !userProfile) {
+      return NextResponse.json({ message: 'ユーザープロフィールが見つかりません' }, { status: 403 })
+    }
+
+    // 添付資料の存在確認
     const { data: attachment, error: attachmentError } = await supabase
       .from('project_attachments')
       .select(`
@@ -27,20 +38,32 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
         file_path,
         project_id,
         projects!inner (
-          org_id,
-          memberships!inner (
-            user_id,
-            role
-          )
+          org_id
         )
       `)
       .eq('id', attachmentId)
       .eq('project_id', projectId)
-      .eq('projects.memberships.user_id', user.id)
       .single()
 
     if (attachmentError || !attachment) {
-      return NextResponse.json({ message: '添付資料が見つからないか、削除権限がありません' }, { status: 404 })
+      return NextResponse.json({ message: '添付資料が見つかりません' }, { status: 404 })
+    }
+
+    // ユーザーの権限チェック（発注者または受注者）
+    const { data: membership, error: membershipError } = await supabase
+      .from('memberships')
+      .select('role, org_id')
+      .eq('user_id', userProfile.id)
+      .eq('org_id', (attachment.projects as any).org_id)
+      .single()
+
+    if (membershipError || !membership) {
+      return NextResponse.json({ message: 'この案件へのアクセス権限がありません' }, { status: 403 })
+    }
+
+    // 権限チェック（発注者または受注者）
+    if (!['OrgAdmin', 'Staff', 'Contractor'].includes(membership.role)) {
+      return NextResponse.json({ message: '添付資料の削除権限がありません' }, { status: 403 })
     }
 
     // Supabase Storageからファイルを削除

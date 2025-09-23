@@ -483,46 +483,72 @@ function ProfilePageContent() {
                             {userRole}
                           </Badge>
                         </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            会員レベル
-                          </label>
-                          {(() => {
-                            const level = calculateMemberLevel(formData.experience_years, formData.specialties)
-                            const levelInfo = getMemberLevelInfo(level)
-                            return (
-                              <Badge className={levelInfo.color}>
-                                {levelInfo.label}
-                              </Badge>
-                            )
-                          })()}
-                        </div>
-                      </div>
-                      <div className="mt-4">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          屋号及び所属組織
-                        </label>
-                        {isEditing ? (
-                          <input
-                            type="text"
-                            value={formData.organization}
-                            onChange={(e) => setFormData(prev => ({ ...prev, organization: e.target.value }))}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
-                            placeholder="例: 田中建設事務所"
-                          />
-                        ) : (
-                          <p className="text-gray-900">
-                            {getOrganizationDisplayName(userProfile?.organization, userRole)}
-                          </p>
+                        {/* 受注者の場合のみ会員レベルを表示 */}
+                        {userRole === 'Contractor' && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              会員レベル
+                            </label>
+                            {(() => {
+                              const level = calculateMemberLevel(formData.experience_years, formData.specialties)
+                              const levelInfo = getMemberLevelInfo(level)
+                              return (
+                                <Badge className={levelInfo.color}>
+                                  {levelInfo.label}
+                                </Badge>
+                              )
+                            })()}
+                          </div>
+                        )}
+                        {/* 組織内ユーザーの場合は氏名を表示 */}
+                        {(userRole === 'Admin' || userRole === 'Staff') && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              氏名
+                            </label>
+                            {isEditing ? (
+                              <input
+                                type="text"
+                                value={formData.formal_name}
+                                onChange={(e) => setFormData(prev => ({ ...prev, formal_name: e.target.value }))}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
+                                placeholder="田中 太郎"
+                              />
+                            ) : (
+                              <p className="text-gray-900">{userProfile?.formal_name || '未設定'}</p>
+                            )}
+                          </div>
                         )}
                       </div>
+                      {/* 受注者の場合のみ屋号及び所属組織を表示 */}
+                      {userRole === 'Contractor' && (
+                        <div className="mt-4">
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            屋号及び所属組織
+                          </label>
+                          {isEditing ? (
+                            <input
+                              type="text"
+                              value={formData.organization}
+                              onChange={(e) => setFormData(prev => ({ ...prev, organization: e.target.value }))}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
+                              placeholder="例: 田中建設事務所"
+                            />
+                          ) : (
+                            <p className="text-gray-900">
+                              {getOrganizationDisplayName(userProfile?.organization, userRole)}
+                            </p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </CardContent>
               </Card>
             </motion.div>
 
-            {/* Professional Information */}
+            {/* Professional Information - 受注者のみ表示 */}
+            {userRole === 'Contractor' && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -664,8 +690,10 @@ function ProfilePageContent() {
                 </CardContent>
               </Card>
             </motion.div>
+            )}
 
-            {/* Personal Information */}
+            {/* Personal Information - 受注者のみ表示 */}
+            {userRole === 'Contractor' && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -841,7 +869,7 @@ function ProfilePageContent() {
                 </CardContent>
               </Card>
             </motion.div>
-
+            )}
 
             {/* 受注者評価表示 */}
             {userRole === 'Contractor' && (

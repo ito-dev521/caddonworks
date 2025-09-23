@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/contexts/auth-context"
+import { AuthGuard } from "@/components/auth/auth-guard"
 import { StatusIndicator } from "@/components/ui/status-indicator"
 import { supabase } from "@/lib/supabase"
 import {
@@ -99,39 +100,44 @@ export default function ProjectFilesPage() {
     try {
       setLoading(true)
 
+      // Box API連携を一時的に無効化（実装時に有効化）
+      setProjects([])
+      setError(null)
+      setLoading(false)
+      return
+
+      // 以下は実装時に有効化する
       // Supabaseから現在のセッションを取得
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      // const { data: { session }, error: sessionError } = await supabase.auth.getSession()
 
-      if (sessionError || !session?.access_token) {
-        throw new Error('認証に失敗しました')
-      }
+      // if (sessionError || !session?.access_token) {
+      //   throw new Error('認証に失敗しました')
+      // }
 
-      const response = await fetch('/api/box/projects', {
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json'
-        }
-      })
+      // const response = await fetch('/api/box/projects', {
+      //   headers: {
+      //     'Authorization': `Bearer ${session.access_token}`,
+      //     'Content-Type': 'application/json'
+      //   }
+      // })
 
-      
+      // if (!response.ok) {
+      //   const errorText = await response.text()
+      //   console.error('API error response:', errorText)
+      //   throw new Error(`プロジェクト取得に失敗しました: ${response.status}`)
+      // }
 
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error('API error response:', errorText)
-        throw new Error(`プロジェクト取得に失敗しました: ${response.status}`)
-      }
-
-      const data = await response.json()
-      const projectsWithArchive = (data.projects || []).map((project: BoxProject) => {
-        const archiveStatus = getProjectArchiveStatus(project, archiveSettings)
-        const visibleFiles = filterVisibleFiles(project.box_items || [], archiveStatus)
-        return {
-          ...project,
-          archive_status: archiveStatus,
-          box_items: visibleFiles
-        }
-      })
-      setProjects(projectsWithArchive)
+      // const data = await response.json()
+      // const projectsWithArchive = (data.projects || []).map((project: BoxProject) => {
+      //   const archiveStatus = getProjectArchiveStatus(project, archiveSettings)
+      //   const visibleFiles = filterVisibleFiles(project.box_items || [], archiveStatus)
+      //   return {
+      //     ...project,
+      //     archive_status: archiveStatus,
+      //     box_items: visibleFiles
+      //   }
+      // })
+      // setProjects(projectsWithArchive)
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -140,6 +146,11 @@ export default function ProjectFilesPage() {
   }
 
   const handleFolderClick = async (folderId: string, folderName: string) => {
+    // 認証が完了していない場合は何もしない
+    if (authLoading || !user) {
+      return
+    }
+
     try {
       setLoadingFolder(true)
       setSelectedFolder({id: folderId, name: folderName})
@@ -175,6 +186,11 @@ export default function ProjectFilesPage() {
 
   const handleFileUpload = async (folderId: string, files: FileList) => {
     if (!files || files.length === 0) return
+
+    // 認証が完了していない場合は何もしない
+    if (authLoading || !user) {
+      return
+    }
 
     setUploadingFile(true)
     const uploadedFiles: string[] = []
@@ -357,6 +373,11 @@ export default function ProjectFilesPage() {
 
   // フォルダの展開/折りたたみ
   const toggleFolder = async (projectId: string, itemPath: string, folderId: string) => {
+    // 認証が完了していない場合は何もしない
+    if (authLoading || !user) {
+      return
+    }
+
     const key = `${projectId}-${itemPath}`
     const isCurrentlyExpanded = expandedFolders[key] || false
 
@@ -399,6 +420,11 @@ export default function ProjectFilesPage() {
 
   // 一括ダウンロード
   const handleBulkDownload = async (projectId: string, projectTitle: string) => {
+    // 認証が完了していない場合は何もしない
+    if (authLoading || !user) {
+      return
+    }
+
     try {
       
 
@@ -466,49 +492,56 @@ export default function ProjectFilesPage() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-gradient-mesh">
-        <Navigation />
-        <div className="md:ml-64 flex items-center justify-center h-screen">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-engineering-blue mx-auto"></div>
-            <p className="mt-4 text-gray-600">認証状態を確認中...</p>
+      <AuthGuard allowedRoles={['OrgAdmin', 'Staff']}>
+        <div className="min-h-screen bg-gradient-mesh">
+          <Navigation />
+          <div className="md:ml-64 flex items-center justify-center h-screen">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-engineering-blue mx-auto"></div>
+              <p className="mt-4 text-gray-600">認証状態を確認中...</p>
+            </div>
           </div>
         </div>
-      </div>
+      </AuthGuard>
     )
   }
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-mesh">
-        <Navigation />
-        <div className="md:ml-64 flex items-center justify-center h-screen">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-engineering-blue mx-auto"></div>
-            <p className="mt-4 text-gray-600">プロジェクトファイルを読み込み中...</p>
+      <AuthGuard allowedRoles={['OrgAdmin', 'Staff']}>
+        <div className="min-h-screen bg-gradient-mesh">
+          <Navigation />
+          <div className="md:ml-64 flex items-center justify-center h-screen">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-engineering-blue mx-auto"></div>
+              <p className="mt-4 text-gray-600">プロジェクトファイルを読み込み中...</p>
+            </div>
           </div>
         </div>
-      </div>
+      </AuthGuard>
     )
   }
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-mesh">
-        <Navigation />
-        <div className="md:ml-64 flex items-center justify-center h-screen">
-          <div className="text-center">
-            <p className="text-red-600 mb-4">{error}</p>
-            <Button onClick={fetchProjects}>再試行</Button>
+      <AuthGuard allowedRoles={['OrgAdmin', 'Staff']}>
+        <div className="min-h-screen bg-gradient-mesh">
+          <Navigation />
+          <div className="md:ml-64 flex items-center justify-center h-screen">
+            <div className="text-center">
+              <p className="text-red-600 mb-4">{error}</p>
+              <Button onClick={fetchProjects}>再試行</Button>
+            </div>
           </div>
         </div>
-      </div>
+      </AuthGuard>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-mesh">
-      <Navigation />
+    <AuthGuard allowedRoles={['OrgAdmin', 'Staff']}>
+      <div className="min-h-screen bg-gradient-mesh">
+        <Navigation />
 
       <div className="md:ml-64 transition-all duration-300">
         {/* Header */}
@@ -1082,5 +1115,6 @@ export default function ProjectFilesPage() {
         </main>
       </div>
     </div>
+    </AuthGuard>
   )
 }

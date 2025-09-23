@@ -39,6 +39,15 @@ interface ProjectCardProps {
     priority: string
     tags: string[]
     lastActivity: string
+    has_active_priority_invitation?: boolean
+    has_priority_invitation?: boolean
+    priority_invitations?: Array<{
+      contractor_id: string
+      contractor_name: string
+      response: string
+      expires_at: string
+      is_expired: boolean
+    }>
   }
   index?: number
 }
@@ -46,6 +55,15 @@ interface ProjectCardProps {
 export function ProjectCard({ project, index = 0 }: ProjectCardProps) {
   const isOverdue = new Date(project.dueDate) < new Date() && project.status !== 'completed'
   const daysUntilDue = Math.ceil((new Date(project.dueDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+
+  // 優先招待の状態をチェック
+  const isPriorityInvitation = project.status === 'priority_invitation' || project.has_active_priority_invitation
+  const hasPriorityInvitation = project.has_priority_invitation
+
+  // 優先招待の期限をチェック
+  const activePriorityInvitation = project.priority_invitations?.find(inv =>
+    inv.response === 'pending' && !inv.is_expired
+  )
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -60,6 +78,22 @@ export function ProjectCard({ project, index = 0 }: ProjectCardProps) {
     }
   }
 
+  const getCardStyle = () => {
+    if (isPriorityInvitation) {
+      return 'border-amber-300 bg-gradient-to-r from-amber-50 to-orange-50 shadow-amber-100'
+    }
+    if (hasPriorityInvitation) {
+      return 'border-blue-200 bg-blue-50/30'
+    }
+    if (isOverdue) {
+      return 'border-red-200 bg-red-50/50'
+    }
+    if (project.priority === 'critical') {
+      return 'ring-2 ring-red-200'
+    }
+    return ''
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -68,9 +102,7 @@ export function ProjectCard({ project, index = 0 }: ProjectCardProps) {
       whileHover={{ y: -5 }}
       className="group"
     >
-      <Card className={`h-full hover-lift transition-all duration-300 ${
-        isOverdue ? 'border-red-200 bg-red-50/50' : ''
-      } ${project.priority === 'critical' ? 'ring-2 ring-red-200' : ''}`}>
+      <Card className={`h-full hover-lift transition-all duration-300 ${getCardStyle()}`}>
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between mb-2">
             <div className="flex-1">
@@ -92,8 +124,22 @@ export function ProjectCard({ project, index = 0 }: ProjectCardProps) {
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <StatusIndicator status={project.status} size="sm" />
+
+            {/* 優先招待バッジ */}
+            {isPriorityInvitation && (
+              <Badge className="bg-amber-100 text-amber-800 border-amber-200">
+                ⭐ 優先招待中
+              </Badge>
+            )}
+
+            {hasPriorityInvitation && !isPriorityInvitation && (
+              <Badge variant="outline" className="border-blue-200 text-blue-700">
+                📨 招待済み
+              </Badge>
+            )}
+
             <Badge className={getPriorityColor(project.priority)}>
               {project.priority === 'critical' && '🔥 '}
               {project.priority === 'high' && '⚡ '}
@@ -184,6 +230,26 @@ export function ProjectCard({ project, index = 0 }: ProjectCardProps) {
               )}
             </div>
           </div>
+
+          {/* 優先招待情報 */}
+          {activePriorityInvitation && (
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-md">
+              <div className="flex items-center gap-2 mb-1">
+                <div className="w-2 h-2 bg-amber-400 rounded-full animate-pulse"></div>
+                <span className="text-sm font-medium text-amber-800">
+                  {activePriorityInvitation.contractor_name}さんに優先招待中
+                </span>
+              </div>
+              <div className="text-xs text-amber-600">
+                期限: {new Date(activePriorityInvitation.expires_at).toLocaleDateString('ja-JP', {
+                  month: 'short',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Tags */}
           <div className="flex flex-wrap gap-1">

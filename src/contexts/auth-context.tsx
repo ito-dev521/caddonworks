@@ -266,21 +266,62 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signIn = async (email: string, password: string) => {
     setLoading(true)
     try {
-      
+
       // タイムアウト処理を追加
       const authPromise = supabase.auth.signInWithPassword({
         email,
         password,
       })
-      
+
       const timeoutPromise = new Promise((_, reject) => {
         setTimeout(() => reject(new Error('認証タイムアウト（30秒）')), 30000)
       })
-      
+
       const { data, error } = await Promise.race([authPromise, timeoutPromise]) as any
-      
-      if (error) throw error
-      
+
+      if (error) {
+        console.error('認証エラー詳細:', {
+          message: error.message,
+          status: error.status,
+          code: error.code,
+          email: email
+        })
+
+        // より詳細なエラーメッセージを提供
+        if (error.message?.includes('Invalid login credentials')) {
+          // デバッグ用API呼び出し（本番では削除推奨）
+          try {
+            const debugResponse = await fetch('/api/debug-user', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email })
+            })
+            const debugData = await debugResponse.json()
+            console.log('ユーザーデバッグ情報:', debugData)
+
+            if (!debugData.auth_user) {
+              throw new Error('このメールアドレスは登録されていません')
+            } else if (!debugData.user_profile && !debugData.user_profile_by_auth_id) {
+              throw new Error('ユーザープロフィールが作成されていません。管理者にお問い合わせください。')
+            } else if (debugData.memberships_count === 0) {
+              throw new Error('組織メンバーシップが設定されていません。管理者にお問い合わせください。')
+            } else {
+              const inactiveOrgs = debugData.organizations?.filter((org: any) => !org.active || org.approval_status !== 'approved')
+              if (inactiveOrgs && inactiveOrgs.length > 0) {
+                throw new Error('所属組織が承認されていません。運営者による承認をお待ちください。')
+              }
+            }
+          } catch (debugError) {
+            console.error('デバッグエラー:', debugError)
+            if (debugError instanceof Error && debugError.message !== 'このメールアドレスは登録されていません') {
+              throw debugError
+            }
+          }
+        }
+
+        throw error
+      }
+
       // 認証成功後、ユーザープロフィールを手動で取得
       if (data?.user) {
         // fetchUserProfileを直接呼び出さず、setTimeoutで遅延実行
@@ -288,7 +329,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           fetchUserProfile(data.user.id)
         }, 50)
       }
-      
+
     } catch (error) {
       console.error('signIn: 認証エラー', error)
       throw error

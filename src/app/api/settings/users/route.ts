@@ -56,8 +56,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ users: [] }, { status: 200 })
     }
 
-    // OrgAdmin権限をチェック
-    const orgMembership = userMemberships.find(m => m.role === 'OrgAdmin')
+    // OrgAdmin または Staff 権限をチェック
+    const orgMembership = userMemberships.find(m => m.role === 'OrgAdmin' || m.role === 'Staff')
     if (!orgMembership) {
       return NextResponse.json({ users: [] }, { status: 200 })
     }
@@ -190,11 +190,11 @@ export async function POST(request: NextRequest) {
       .select('role, org_id')
       .eq('user_id', userProfile.id)
 
-    if (membershipError || !userMemberships || !userMemberships.some(m => m.role === 'OrgAdmin')) {
-      return NextResponse.json({ message: 'この操作を実行する権限がありません（発注者権限が必要です）' }, { status: 403 })
+    if (membershipError || !userMemberships || !userMemberships.some(m => m.role === 'OrgAdmin' || m.role === 'Staff' || m.role === 'Staff')) {
+      return NextResponse.json({ message: 'この操作を実行する権限がありません（管理者権限が必要です）' }, { status: 403 })
     }
 
-    const orgId = userMemberships.find(m => m.role === 'OrgAdmin')?.org_id
+    const orgId = userMemberships.find(m => m.role === 'OrgAdmin' || m.role === 'Staff' || m.role === 'Staff')?.org_id
 
     if (!orgId) {
       console.error('組織IDが見つかりません。ユーザーメンバーシップ:', userMemberships)
@@ -243,10 +243,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: 'ユーザープロフィールの作成に失敗しました' }, { status: 500 })
     }
 
-    // メンバーシップ作成
-    // 一時的にStaffをOrgAdminに変更してテスト
-    const actualRole = role === 'Staff' ? 'OrgAdmin' : role
-    console.log('メンバーシップ作成データ:', { user_id: userData.id, org_id: orgId, role: actualRole, originalRole: role })
+    // メンバーシップ作成（指定されたロールをそのまま使用）
+    const actualRole = role
+    console.log('メンバーシップ作成データ:', { user_id: userData.id, org_id: orgId, role: actualRole })
     const { error: membershipCreateError } = await supabaseAdmin
       .from('memberships')
       .insert({
@@ -257,7 +256,7 @@ export async function POST(request: NextRequest) {
 
     if (membershipCreateError) {
       console.error('メンバーシップ作成エラー:', membershipCreateError)
-      console.error('作成しようとしたデータ:', { user_id: userData.id, org_id: orgId, role })
+      console.error('作成しようとしたデータ:', { user_id: userData.id, org_id: orgId, role: actualRole })
       // ユーザーとプロフィールを削除
       await supabaseAdmin.from('users').delete().eq('auth_user_id', authUser.user.id)
       await supabaseAdmin.auth.admin.deleteUser(authUser.user.id)
@@ -320,8 +319,8 @@ export async function PUT(request: NextRequest) {
       .select('role, org_id')
       .eq('user_id', userProfile.id)
 
-    if (membershipError || !memberships || !memberships.some(m => m.role === 'OrgAdmin')) {
-      return NextResponse.json({ message: 'この操作を実行する権限がありません（発注者権限が必要です）' }, { status: 403 })
+    if (membershipError || !memberships || !memberships.some(m => m.role === 'OrgAdmin' || m.role === 'Staff')) {
+      return NextResponse.json({ message: 'この操作を実行する権限がありません（管理者権限が必要です）' }, { status: 403 })
     }
 
     // ユーザー情報を更新
@@ -343,52 +342,36 @@ export async function PUT(request: NextRequest) {
 
     // 役割変更（任意）
     if (newRole) {
-      console.log('ロール更新開始:', { userId, newRole })
-
-      // 一時的にStaffをOrgAdminに変更してテスト
-      const actualRole = newRole === 'Staff' ? 'OrgAdmin' : newRole
-      console.log('実際に使用するロール:', { originalRole: newRole, actualRole })
-
-      // 対象ユーザーの現在の membership を取得
-      const { data: targetMembership, error: membershipFetchError } = await supabaseAdmin
-        .from('memberships')
-        .select('id, org_id, role')
-        .eq('user_id', userId)
-        .maybeSingle()
-
-      if (membershipFetchError) {
-        console.error('メンバーシップ取得エラー:', membershipFetchError)
-      }
-
-      console.log('現在のメンバーシップ:', targetMembership)
-
-      const orgId = memberships.find(m => m.role === 'OrgAdmin')?.org_id
-      console.log('組織ID:', orgId)
+      // 指定されたロールをそのまま使用
+      const actualRole = newRole
+      const orgId = memberships.find(m => m.role === 'OrgAdmin' || m.role === 'Staff')?.org_id
 
       if (orgId) {
-        if (targetMembership) {
-          console.log('メンバーシップ更新中...')
-          const { error: updateError } = await supabaseAdmin
+        // より安全な更新：UPDATEを試してから、失敗した場合のみ削除→挿入
+        const { error: updateError } = await supabaseAdmin
+          .from('memberships')
+          .update({ role: actualRole })
+          .eq('user_id', userId)
+          .eq('org_id', orgId)
+
+        if (updateError) {
+          // 削除→挿入方式（フォールバック）
+          const { error: deleteError } = await supabaseAdmin
             .from('memberships')
-            .update({ role: actualRole })
+            .delete()
             .eq('user_id', userId)
             .eq('org_id', orgId)
-
-          if (updateError) {
-            console.error('メンバーシップ更新エラー:', updateError)
-          } else {
-            console.log('メンバーシップ更新成功')
+          
+          if (deleteError) {
+            return NextResponse.json({ message: 'メンバーシップの削除に失敗しました' }, { status: 500 })
           }
-        } else {
-          console.log('新規メンバーシップ作成中...')
+
           const { error: insertError } = await supabaseAdmin
             .from('memberships')
             .insert({ user_id: userId, org_id: orgId, role: actualRole })
 
           if (insertError) {
-            console.error('新規メンバーシップ作成エラー:', insertError)
-          } else {
-            console.log('新規メンバーシップ作成成功')
+            return NextResponse.json({ message: 'メンバーシップの作成に失敗しました' }, { status: 500 })
           }
         }
       }
@@ -446,8 +429,8 @@ export async function DELETE(request: NextRequest) {
       .select('role, org_id')
       .eq('user_id', userProfile.id)
 
-    if (membershipError || !memberships || !memberships.some(m => m.role === 'OrgAdmin')) {
-      return NextResponse.json({ message: 'この操作を実行する権限がありません（発注者権限が必要です）' }, { status: 403 })
+    if (membershipError || !memberships || !memberships.some(m => m.role === 'OrgAdmin' || m.role === 'Staff')) {
+      return NextResponse.json({ message: 'この操作を実行する権限がありません（管理者権限が必要です）' }, { status: 403 })
     }
 
     // 自分自身は削除できない

@@ -48,9 +48,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ message: 'メンバーシップが見つかりません' }, { status: 403 })
     }
 
-    const orgMembership = userMemberships.find(m => m.role === 'OrgAdmin')
+    const orgMembership = userMemberships.find(m => m.role === 'OrgAdmin' || m.role === 'Staff')
     if (!orgMembership) {
-      return NextResponse.json({ message: 'OrgAdmin権限がありません' }, { status: 403 })
+      return NextResponse.json({ message: 'OrgAdminまたはStaff権限がありません' }, { status: 403 })
     }
 
     // 組織情報を取得

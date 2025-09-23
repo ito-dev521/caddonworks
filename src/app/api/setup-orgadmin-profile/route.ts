@@ -37,11 +37,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: 'プロフィールは既に存在します' }, { status: 200 })
     }
 
-    // メンバーシップをチェック
+    // メンバーシップをチェック（users.id を user_id に使用）
+    // まず、該当する users.id を取得
+    const { data: profileForMembership } = await supabaseAdmin
+      .from('users')
+      .select('id')
+      .eq('auth_user_id', user.id)
+      .single()
+
+    const userIdForMembership = profileForMembership?.id || user.id
+
     const { data: membership, error: membershipError } = await supabaseAdmin
       .from('memberships')
       .select('role, org_id')
-      .eq('user_id', user.id)
+      .eq('user_id', userIdForMembership)
       .single()
 
 
@@ -78,7 +87,7 @@ export async function POST(request: NextRequest) {
       const { data: newMembership, error: createMembershipError } = await supabaseAdmin
         .from('memberships')
         .insert({
-          user_id: user.id,
+          user_id: userIdForMembership,
           org_id: orgId,
           role: 'OrgAdmin'
         })

@@ -218,6 +218,7 @@ export default function SignUpPage() {
                             onChange={(e) => handleInputChange('email', e.target.value)}
                             className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
                             placeholder="example@company.com"
+                            autoComplete="off"
                             required
                           />
                         </div>
@@ -236,6 +237,7 @@ export default function SignUpPage() {
                             onChange={(e) => handleInputChange('displayName', e.target.value)}
                             className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
                             placeholder="田中 太郎"
+                            autoComplete="off"
                             required
                           />
                         </div>
@@ -249,6 +251,7 @@ export default function SignUpPage() {
                         onChange={(value) => handleInputChange('password', value)}
                         label="パスワード *"
                         placeholder="••••••••"
+                        autoComplete="new-password"
                         required
                         showStrengthIndicator={true}
                       />
@@ -266,6 +269,7 @@ export default function SignUpPage() {
                             onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
                             className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
                             placeholder="••••••••"
+                            autoComplete="new-password"
                             required
                           />
                           <button
@@ -292,6 +296,7 @@ export default function SignUpPage() {
                           onChange={(e) => handleInputChange('organization', e.target.value)}
                           className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
                           placeholder="株式会社 土木設計"
+                          autoComplete="organization"
                         />
                       </div>
                     </div>
@@ -388,6 +393,7 @@ export default function SignUpPage() {
                         onChange={(e) => handleInputChange('experienceYears', e.target.value)}
                         className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
                         placeholder="5"
+                        autoComplete="off"
                         required={formData.specialties.some(s => s !== '未経験')}
                       />
                       {formData.specialties.some(s => s !== '未経験') && (

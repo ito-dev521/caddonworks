@@ -43,13 +43,13 @@ export async function GET(request: NextRequest) {
       .eq('user_id', userProfile.id)
       .single()
 
-    if (membershipError || !memberships || memberships.role !== 'OrgAdmin') {
-      return NextResponse.json({ message: 'OrgAdmin権限が必要です' }, { status: 403 })
+    if (membershipError || !memberships || (memberships.role !== 'OrgAdmin' && memberships.role !== 'Staff')) {
+      return NextResponse.json({ message: 'OrgAdminまたはStaff権限が必要です' }, { status: 403 })
     }
 
     const orgId = memberships.org_id
 
-    // 組織内のOrgAdminを取得
+    // 組織内のOrgAdminとStaffを取得（承認者として選択可能）
     const { data: orgAdmins, error: orgAdminsError } = await supabaseAdmin
       .from('memberships')
       .select(`
@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
         )
       `)
       .eq('org_id', orgId)
-      .eq('role', 'OrgAdmin')
+      .in('role', ['OrgAdmin', 'Staff'])
 
     if (orgAdminsError) {
       return NextResponse.json({ message: 'OrgAdmin一覧の取得に失敗しました' }, { status: 500 })

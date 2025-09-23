@@ -22,6 +22,7 @@ import {
   Bell
 } from "lucide-react"
 import { Navigation } from "@/components/layouts/navigation"
+import { AuthGuard } from "@/components/auth/auth-guard"
 import { MetricCard } from "@/components/ui/metric-card"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
@@ -84,6 +85,14 @@ interface FavoriteContractor {
 }
 
 export default function DashboardPage() {
+  return (
+    <AuthGuard allowedRoles={["OrgAdmin", "Admin"]}>
+      <DashboardPageContent />
+    </AuthGuard>
+  )
+}
+
+function DashboardPageContent() {
   const { userProfile, userRole, loading } = useAuth()
   const [companyData, setCompanyData] = useState<CompanyData | null>(null)
   const [projects, setProjects] = useState<ProjectData[]>([])

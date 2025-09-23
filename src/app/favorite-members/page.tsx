@@ -89,7 +89,7 @@ function FavoriteMembersPageContent() {
   }, [])
 
   useEffect(() => {
-    if (!userProfile || userRole !== 'OrgAdmin') {
+    if (!userProfile || (userRole !== 'OrgAdmin' && userRole !== 'Staff')) {
       setDataLoading(false)
       return
     }
@@ -167,14 +167,14 @@ function FavoriteMembersPageContent() {
   }
 
   // 権限チェック
-  if (userRole !== 'OrgAdmin') {
+  if (userRole !== 'OrgAdmin' && userRole !== 'Staff') {
     return (
       <div className="min-h-screen bg-gradient-mesh flex items-center justify-center">
         <Card className="w-full max-w-md">
           <CardContent className="p-6 text-center">
             <Building className="w-12 h-12 text-red-500 mx-auto mb-4" />
             <h2 className="text-xl font-semibold text-gray-900 mb-2">アクセス権限がありません</h2>
-            <p className="text-gray-600">このページは発注者（組織管理者）のみアクセス可能です。</p>
+            <p className="text-gray-600">このページは発注者（組織管理者・スタッフ）のみアクセス可能です。</p>
           </CardContent>
         </Card>
       </div>
@@ -380,7 +380,7 @@ function FavoriteMembersPageContent() {
 
 export default function FavoriteMembersPage() {
   return (
-    <AuthGuard requiredRole="OrgAdmin">
+    <AuthGuard allowedRoles={["OrgAdmin", "Staff"]}>
       <FavoriteMembersPageContent />
     </AuthGuard>
   )

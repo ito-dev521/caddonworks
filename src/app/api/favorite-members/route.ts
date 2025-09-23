@@ -55,8 +55,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ message: '組織情報が見つかりません' }, { status: 403 })
     }
 
-    // OrgAdminのメンバーシップを探す
-    const membership = memberships.find(m => m.role === 'OrgAdmin')
+    // OrgAdminまたはStaffのメンバーシップを探す
+    const membership = memberships.find(m => m.role === 'OrgAdmin' || m.role === 'Staff')
     if (!membership) {
       return NextResponse.json({ message: 'この操作を実行する権限がありません' }, { status: 403 })
     }
@@ -153,8 +153,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: '組織情報が見つかりません' }, { status: 403 })
     }
 
-    // OrgAdminのメンバーシップを探す
-    const membership = memberships.find(m => m.role === 'OrgAdmin')
+    // OrgAdminまたはStaffのメンバーシップを探す
+    const membership = memberships.find(m => m.role === 'OrgAdmin' || m.role === 'Staff')
     if (!membership) {
       return NextResponse.json({ message: 'この操作を実行する権限がありません' }, { status: 403 })
     }

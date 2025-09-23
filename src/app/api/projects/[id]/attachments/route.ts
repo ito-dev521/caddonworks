@@ -54,7 +54,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     }
 
     // 権限チェック（発注者または受注者）
-    if (!['OrgAdmin', 'Contractor'].includes(membership.role)) {
+    if (!['OrgAdmin', 'Staff', 'Contractor'].includes(membership.role)) {
       return NextResponse.json({ message: '添付資料の閲覧権限がありません' }, { status: 403 })
     }
 
@@ -147,7 +147,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     }
 
     // 権限チェック（発注者または受注者）
-    if (!['OrgAdmin', 'Contractor'].includes(membership.role)) {
+    if (!['OrgAdmin', 'Staff', 'Contractor'].includes(membership.role)) {
       return NextResponse.json({ message: 'ファイルアップロードの権限がありません' }, { status: 403 })
     }
 

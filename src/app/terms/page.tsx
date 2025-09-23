@@ -51,7 +51,7 @@ export default function TermsPage() {
               土木設計業務プラットフォームの利用規約をご確認ください
             </p>
             <p className="text-sm text-gray-500 mt-2">
-              最終更新日: 2024年9月14日
+              最終更新日: 2025年9月22日
             </p>
           </div>
 
@@ -353,8 +353,7 @@ export default function TermsPage() {
             </p>
             <div className="bg-gray-50 p-6 rounded-lg">
               <p className="font-semibold">土木設計業務プラットフォーム運営事務局</p>
-              <p>Email: support@civil-engineering-platform.com</p>
-              <p>Tel: 03-1234-5678</p>
+              <p>Email: <a href="mailto:support@caddon.jp?subject=利用規約について" className="text-engineering-blue hover:underline">support@caddon.jp</a></p>
             </div>
           </div>
         </motion.div>

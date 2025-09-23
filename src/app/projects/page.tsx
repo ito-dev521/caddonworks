@@ -57,6 +57,15 @@ interface ProjectData {
   is_expired?: boolean
   days_until_deadline?: number | null
   support_enabled?: boolean
+  has_active_priority_invitation?: boolean
+  has_priority_invitation?: boolean
+  priority_invitations?: Array<{
+    contractor_id: string
+    contractor_name: string
+    response: string
+    expires_at: string
+    is_expired: boolean
+  }>
   contracts?: Array<{
     contractor_id: string
     contract_amount: number
@@ -140,6 +149,7 @@ function ProjectsPageContent() {
   const [showProjectActionsModal, setShowProjectActionsModal] = useState<string | null>(null)
   const lastFetchKeyRef = useRef<string | null>(null)
 
+
   // 予算のフォーマット処理
   const formatBudget = (value: string) => {
     // 数字以外を除去
@@ -178,7 +188,7 @@ function ProjectsPageContent() {
 
   // 組織設定とOrgAdmin一覧を取得
   const fetchOrganizationSettings = useCallback(async () => {
-    if (!userProfile || userRole !== 'OrgAdmin') return
+    if (!userProfile || (userRole !== 'OrgAdmin' && userRole !== 'Staff')) return
 
     try {
       const { data: { session } } = await supabase.auth.getSession()
@@ -256,9 +266,10 @@ function ProjectsPageContent() {
 
       if (response.ok) {
         const projectsData = result.projects || []
+        console.log('取得した案件とステータス:', projectsData.map((p: any) => ({ title: p.title, status: p.status })))
         setProjects(projectsData)
         setFilteredProjects(projectsData)
-        
+
         // 期限切れ案件の通知設定
         const expiredCount = projectsData.filter((p: ProjectData) => p.is_expired).length
         setExpiredProjectsCount(expiredCount)
@@ -280,7 +291,7 @@ function ProjectsPageContent() {
 
   // 会社間の情報分離を確実にするため、組織IDでデータをフィルタリング
   useEffect(() => {
-    if (!userProfile || userRole !== 'OrgAdmin') {
+    if (!userProfile || (userRole !== 'OrgAdmin' && userRole !== 'Staff')) {
       setDataLoading(false)
       return
     }
@@ -314,6 +325,11 @@ function ProjectsPageContent() {
   // フィルタリング
   useEffect(() => {
     let filtered = projects
+    console.log('フィルタリング実行:', {
+      selectedTab,
+      totalProjects: projects.length,
+      projectStatuses: projects.map((p: any) => ({ title: p.title, status: p.status }))
+    })
 
     // ステータスフィルタ
     if (selectedTab === 'active') {
@@ -322,6 +338,7 @@ function ProjectsPageContent() {
       filtered = filtered.filter(p => p.status === 'completed' || p.status === 'suspended')
     } else if (selectedTab === 'pending_approval') {
       filtered = filtered.filter(p => p.status === 'pending_approval')
+      console.log('承認待ちフィルタ結果:', filtered.length, filtered.map((p: any) => ({ title: p.title, status: p.status })))
     }
 
     // 検索フィルタ

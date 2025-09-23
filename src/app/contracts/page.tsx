@@ -1077,7 +1077,7 @@ function ContractsPageContent() {
 
 export default function ContractsPage() {
   return (
-    <AuthGuard allowedRoles={['OrgAdmin', 'Contractor']}>
+    <AuthGuard allowedRoles={['OrgAdmin', 'Staff', 'Contractor']}>
       <ContractsPageContent />
     </AuthGuard>
   )

@@ -86,14 +86,15 @@ interface OrganizationRegistration {
 
 export default function SettingsPage() {
   return (
-    <AuthGuard requiredRole="OrgAdmin">
+    <AuthGuard allowedRoles={["OrgAdmin", "Staff"]}>
       <SettingsPageContent />
     </AuthGuard>
   )
 }
 
 function SettingsPageContent() {
-  const { userProfile, loading } = useAuth()
+  const { userProfile, userRole, loading } = useAuth()
+  const isOrgAdmin = userRole === 'OrgAdmin'
   const [users, setUsers] = useState<OrganizationUser[]>([])
   const [filteredUsers, setFilteredUsers] = useState<OrganizationUser[]>([])
   const [searchTerm, setSearchTerm] = useState('')
@@ -721,7 +722,8 @@ function SettingsPageContent() {
           </Card>
 
 
-          {/* 組織設定セクション */}
+          {/* 組織設定セクション - OrgAdminのみ */}
+          {isOrgAdmin && (
           <Card className="mb-6">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -787,9 +789,10 @@ function SettingsPageContent() {
               )}
             </CardContent>
           </Card>
+          )}
 
-
-          {/* ユーザー管理セクション */}
+          {/* ユーザー管理セクション - OrgAdminのみ */}
+          {isOrgAdmin && (
           <Card className="mb-6">
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -857,31 +860,33 @@ function SettingsPageContent() {
                       <CardContent className="p-6">
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-3">
-                              <div className="w-12 h-12 bg-engineering-blue rounded-full flex items-center justify-center text-white font-bold text-lg">
-                                {user.display_name.charAt(0).toUpperCase()}
-                              </div>
+                            <div className="space-y-3">
+                              {/* 表示名 */}
                               <div>
-                                <h3 className="text-lg font-semibold text-gray-900">
-                                  {user.display_name}
-                                </h3>
+                                <label className="block text-sm font-medium text-gray-700">表示名</label>
+                                <p className="text-lg font-semibold text-gray-900">{user.display_name}</p>
+                              </div>
+
+                              {/* メールアドレス */}
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700">メールアドレス</label>
                                 <p className="text-sm text-gray-600">{user.email}</p>
-                                <div className="flex items-center gap-2 mt-1">
-                                  <Badge className={user.role === 'OrgAdmin' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}>
-                                    {user.role === 'OrgAdmin' ? '管理者' : user.role === 'Staff' ? 'スタッフ' : '一般ユーザー'}
-                                  </Badge>
-                                </div>
+                              </div>
+
+                              {/* ロール */}
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700">ロール</label>
+                                <Badge className={user.role === 'OrgAdmin' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}>
+                                  {user.role === 'OrgAdmin' ? '管理者' : user.role === 'Staff' ? 'スタッフ' : '一般ユーザー'}
+                                </Badge>
+                              </div>
+
+                              {/* 氏名 */}
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700">氏名</label>
+                                <p className="text-sm text-gray-900">{user.formal_name || '未設定'}</p>
                               </div>
                             </div>
-
-                            {user.formal_name && (
-                              <p className="text-sm text-gray-600 mb-2">
-                                <span className="font-medium">氏名:</span> {user.formal_name}
-                              </p>
-                            )}
-                            <p className="text-sm text-gray-500">
-                              登録日: {new Date(user.created_at).toLocaleDateString('ja-JP')}
-                            </p>
                           </div>
 
                           <div className="flex gap-2">
@@ -909,16 +914,6 @@ function SettingsPageContent() {
                                   disabled={isSaving}
                                 >
                                   <Trash2 className="w-4 h-4" />
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => fixAuthUser(user.id)}
-                                  className="text-blue-600 hover:text-blue-700"
-                                  disabled={isSaving}
-                                  title="認証ユーザーを修正"
-                                >
-                                  🔧
                                 </Button>
                                 {(!(process.env.NEXT_PUBLIC_ENV === 'production' || process.env.NODE_ENV === 'production')) && (
                                   <Button
@@ -965,11 +960,12 @@ function SettingsPageContent() {
               </div>
             </CardContent>
           </Card>
+          )}
         </motion.div>
       </div>
 
-      {/* 新規ユーザーモーダル */}
-      {showNewUserModal && (
+      {/* 新規ユーザーモーダル - OrgAdminのみ */}
+      {isOrgAdmin && showNewUserModal && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}

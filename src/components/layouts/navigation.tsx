@@ -58,6 +58,13 @@ const getNavigationItems = (userRole: string, badges: any) => {
       { icon: Users, label: "お気に入り会員", href: "/favorite-members", badge: null },
       { icon: Settings, label: "設定", href: "/settings", badge: null },
     ],
+    Staff: [
+      { icon: FolderOpen, label: "案件管理", href: "/projects", badge: badges.projects || null },
+      { icon: MessageCircle, label: "チャット", href: "/chat", badge: badges.chat || null },
+      { icon: FileText, label: "契約管理", href: "/contracts", badge: badges.contracts || null },
+      { icon: Box, label: "ファイル管理", href: "/project-files", badge: null },
+      { icon: Users, label: "お気に入り会員", href: "/favorite-members", badge: null },
+    ],
     Contractor: [
       { icon: FolderOpen, label: "案件一覧", href: "/jobs", badge: badges.jobs || null },
       { icon: MessageCircle, label: "チャット", href: "/chat", badge: badges.chat || null },
@@ -345,12 +352,15 @@ export function Navigation({ onExpandedChange }: NavigationProps = {}) {
                       <span className="text-sm text-gray-700">プロフィール</span>
                     </div>
                   </Link>
-                  <Link href="/settings">
-                    <div className="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 transition-colors">
-                      <Settings className="w-4 h-4 text-gray-600" />
-                      <span className="text-sm text-gray-700">設定</span>
-                    </div>
-                  </Link>
+                  {/* 設定 - OrgAdminとAdminのみ */}
+                  {(userRole === 'OrgAdmin' || userRole === 'Admin') && (
+                    <Link href="/settings">
+                      <div className="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 transition-colors">
+                        <Settings className="w-4 h-4 text-gray-600" />
+                        <span className="text-sm text-gray-700">設定</span>
+                      </div>
+                    </Link>
+                  )}
                   <hr className="my-2" />
                   <button
                     onClick={async () => {

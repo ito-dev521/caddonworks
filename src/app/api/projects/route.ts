@@ -31,7 +31,8 @@ async function handlePOST(request: NextRequest) {
       required_contractors = 1,
       required_level = 'beginner',
       approver_ids,
-      support_enabled
+      support_enabled,
+      selected_favorite_contractor_id
     } = body
 
     // バリデーション
@@ -139,11 +140,11 @@ async function handlePOST(request: NextRequest) {
       )
     }
 
-    // OrgAdminのメンバーシップを探す
-    const membership = memberships.find(m => m.role === 'OrgAdmin')
+    // OrgAdminまたはStaffのメンバーシップを探す
+    const membership = memberships.find(m => m.role === 'OrgAdmin' || m.role === 'Staff')
     if (!membership) {
       return NextResponse.json(
-        { message: 'この操作を実行する権限がありません（OrgAdmin権限が必要です）' },
+        { message: 'この操作を実行する権限がありません（OrgAdminまたはStaff権限が必要です）' },
         { status: 403 }
       )
     }
@@ -258,10 +259,85 @@ async function handlePOST(request: NextRequest) {
       }
     }
 
+    // お気に入り会員への優先招待を送信
+    let priorityInvitationSent = false
+    if (selected_favorite_contractor_id && !approvalRequired) {
+      try {
+        // お気に入り会員であることを確認
+        const { data: favoriteCheck, error: favoriteError } = await supabaseAdmin
+          .from('favorite_members')
+          .select('id')
+          .eq('org_id', company.id)
+          .eq('contractor_id', selected_favorite_contractor_id)
+          .eq('is_active', true)
+          .single()
+
+        if (favoriteCheck && !favoriteError) {
+          // 優先招待を作成（24時間有効）
+          const expiresAt = new Date()
+          expiresAt.setHours(expiresAt.getHours() + 24)
+
+          const { data: invitation, error: invitationError } = await supabaseAdmin
+            .from('priority_invitations')
+            .insert({
+              project_id: projectData.id,
+              contractor_id: selected_favorite_contractor_id,
+              org_id: company.id,
+              response: 'pending',
+              expires_at: expiresAt.toISOString()
+            })
+            .select()
+            .single()
+
+          if (invitation && !invitationError) {
+            // プロジェクトステータスを優先招待中に変更
+            await supabaseAdmin
+              .from('projects')
+              .update({
+                status: 'priority_invitation',
+                priority_invitation_active: true
+              })
+              .eq('id', projectData.id)
+
+            // 受注者に通知を送信
+            const { error: notificationError } = await supabaseAdmin
+              .from('notifications')
+              .insert({
+                user_id: selected_favorite_contractor_id,
+                type: 'priority_invitation',
+                title: '優先案件のご案内',
+                message: `案件「${title}」への優先招待をお送りしました。24時間以内にご回答ください。`,
+                data: {
+                  project_id: projectData.id,
+                  project_title: title,
+                  invitation_id: invitation.id,
+                  expires_at: expiresAt.toISOString(),
+                  budget: budget,
+                  org_name: company.name
+                }
+              })
+
+            if (!notificationError) {
+              priorityInvitationSent = true
+            }
+          }
+        }
+      } catch (priorityError) {
+        console.error('優先招待処理エラー:', priorityError)
+      }
+    }
+
+    const successMessage = approvalRequired
+      ? '案件が作成されました。承認待ちです。'
+      : priorityInvitationSent
+        ? '案件が作成され、お気に入り会員に優先招待を送信しました。'
+        : '案件が正常に作成されました'
+
     return NextResponse.json({
-      message: approvalRequired ? '案件が作成されました。承認待ちです。' : '案件が正常に作成されました',
+      message: successMessage,
       project: projectData,
-      requires_approval: approvalRequired
+      requires_approval: approvalRequired,
+      priority_invitation_sent: priorityInvitationSent
     }, { status: 201 })
 
   } catch (error) {
@@ -329,8 +405,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ projects: [] }, { status: 200 })
     }
 
-    // OrgAdminのメンバーシップを探す
-    const membership = memberships.find(m => m.role === 'OrgAdmin')
+    // OrgAdminまたはStaffのメンバーシップを探す
+    const membership = memberships.find(m => m.role === 'OrgAdmin' || m.role === 'Staff')
     if (!membership) {
       return NextResponse.json({ projects: [] }, { status: 200 })
     }
@@ -362,6 +438,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
+
     // 受注者情報を取得
     const contractorIds = Array.from(new Set(projectsData?.map(p => p.contractor_id).filter(Boolean) || []))
     let contractorMap: any = {}
@@ -378,10 +455,44 @@ export async function GET(request: NextRequest) {
       }, {}) || {}
     }
 
-    // 契約情報を取得（複数受注者対応）
+    // 優先招待情報を取得
     const projectIds = projectsData?.map(p => p.id) || []
+    let priorityInvitationMap: any = {}
+
+    if (projectIds.length > 0) {
+      const { data: priorityInvitations } = await supabaseAdmin
+        .from('priority_invitations')
+        .select(`
+          project_id,
+          contractor_id,
+          response,
+          expires_at,
+          invited_at,
+          responded_at,
+          users!contractor_id(id, display_name)
+        `)
+        .in('project_id', projectIds)
+
+      priorityInvitationMap = (priorityInvitations || []).reduce((acc: any, invitation: any) => {
+        if (!acc[invitation.project_id]) {
+          acc[invitation.project_id] = []
+        }
+        acc[invitation.project_id].push({
+          contractor_id: invitation.contractor_id,
+          contractor_name: invitation.users?.display_name || '不明',
+          response: invitation.response,
+          expires_at: invitation.expires_at,
+          invited_at: invitation.invited_at,
+          responded_at: invitation.responded_at,
+          is_expired: new Date() > new Date(invitation.expires_at)
+        })
+        return acc
+      }, {})
+    }
+
+    // 契約情報を取得（複数受注者対応）
     let contractMap: any = {}
-    
+
     if (projectIds.length > 0) {
       const { data: contracts } = await supabaseAdmin
         .from('contracts')
@@ -468,6 +579,13 @@ export async function GET(request: NextRequest) {
         daysUntilDeadline = Math.ceil((endOfDeadlineDay.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
       }
 
+      // 優先招待の状態を確認
+      const priorityInvitations = priorityInvitationMap[project.id] || []
+      const activePriorityInvitation = priorityInvitations.find((inv: any) =>
+        inv.response === 'pending' && !inv.is_expired
+      )
+      const hasPriorityInvitation = priorityInvitations.length > 0
+
       const result = {
         id: project.id,
         title: project.title,
@@ -483,32 +601,53 @@ export async function GET(request: NextRequest) {
         category: project.category || '道路設計',
         assignee_name: project.assignee_name,
         created_at: project.created_at,
+        created_by: project.created_by, // 作成者IDを追加
         bidding_deadline: project.bidding_deadline,
         required_contractors: project.required_contractors || 1,
         is_expired: isExpired,
         days_until_deadline: daysUntilDeadline,
         support_enabled: project.support_enabled || false, // プロジェクトレベルのサポート
         contracts: contractMap[project.id] || [], // 複数受注者の契約情報
-        approver_ids: project.approver_ids || null
+        approver_ids: project.approver_ids || null,
+        priority_invitations: priorityInvitations,
+        has_active_priority_invitation: !!activePriorityInvitation,
+        has_priority_invitation: hasPriorityInvitation
       }
       
       
       return result
     }) || []
 
-    // 承認待ちの案件は、承認者として選択されたユーザーのみに表示
+    // 承認待ちの案件の表示ロジック
     const filteredProjects = formattedProjects.filter(project => {
       // 承認待ち以外の案件は全て表示
       if (project.status !== 'pending_approval') {
         return true
       }
 
-      // 承認待ちの案件は、approver_idsに現在のユーザーが含まれている場合のみ表示
-      if (project.approver_ids && Array.isArray(project.approver_ids)) {
-        return project.approver_ids.includes(userProfile.id)
+      // OrgAdminは全ての承認待ち案件を表示
+      if (membership.role === 'OrgAdmin') {
+        return true
       }
 
-      // approver_idsが設定されていない場合は表示しない
+      // Staffは承認者として選択されている案件、自分が作成した案件、または自分が担当者に指定された案件を表示
+      if (membership.role === 'Staff') {
+        // 自分が作成した案件は表示
+        if (project.created_by === userProfile.id) {
+          return true
+        }
+        // 承認者として選択されている案件も表示
+        if (project.approver_ids && Array.isArray(project.approver_ids)) {
+          return project.approver_ids.includes(userProfile.id)
+        }
+        // 担当者として指定されている案件も表示
+        if (project.assignee_name === userProfile.display_name) {
+          return true
+        }
+        return false
+      }
+
+      // その他のロールは承認待ち案件を表示しない
       return false
     })
 
