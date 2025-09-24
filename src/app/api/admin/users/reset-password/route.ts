@@ -54,11 +54,17 @@ export async function POST(request: NextRequest) {
 
     const isProd = (process.env.NEXT_PUBLIC_ENV === 'production' || process.env.NODE_ENV === 'production')
     // 権限: 本番では Admin か、同一組織の OrgAdmin に限定。開発/検証ではスキップ
-    if (isProd && !isEmailAdmin && !isMembershipAdmin) {
+    if (!isEmailAdmin && !isMembershipAdmin) {
+      // 自分のプロフィールIDを取得
+      const myProfileId = userProfile?.id
+      if (!myProfileId) {
+        return NextResponse.json({ message: 'ユーザープロフィールが見つかりません' }, { status: 400 })
+      }
+
       const { data: myMembership } = await supabaseAdmin
         .from('memberships')
         .select('org_id, role')
-        .eq('user_id', user.id)
+        .eq('user_id', myProfileId)
         .maybeSingle()
 
       const { data: targetMembership } = await supabaseAdmin
@@ -68,9 +74,29 @@ export async function POST(request: NextRequest) {
         .maybeSingle()
 
       const sameOrg = !!myMembership?.org_id && !!targetMembership?.org_id && myMembership.org_id === targetMembership.org_id
-      const isOrgAdmin = myMembership?.role === 'OrgAdmin'
-      if (!(sameOrg && isOrgAdmin)) {
-        return NextResponse.json({ message: '管理者権限が必要です' }, { status: 403 })
+      const hasManagementRole = myMembership?.role === 'OrgAdmin' || myMembership?.role === 'Staff'
+
+      console.log('権限チェック詳細:', {
+        myProfileId,
+        myMembership,
+        targetMembership,
+        sameOrg,
+        hasManagementRole,
+        role: myMembership?.role,
+        userId
+      })
+
+      if (!(sameOrg && hasManagementRole)) {
+        return NextResponse.json({
+          message: '管理者権限が必要です。同一組織のOrgAdminまたはStaffである必要があります。',
+          debug: {
+            sameOrg,
+            hasManagementRole,
+            myRole: myMembership?.role,
+            myOrgId: myMembership?.org_id,
+            targetOrgId: targetMembership?.org_id
+          }
+        }, { status: 403 })
       }
     }
 

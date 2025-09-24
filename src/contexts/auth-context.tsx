@@ -287,6 +287,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           email: email
         })
 
+        // メール認証が完了していない場合のエラーハンドリング
+        if (error.message?.includes('Email not confirmed')) {
+          throw new Error('メールアドレスの認証が完了していません。受信したメールのリンクをクリックして認証を完了してください。')
+        }
+
         // より詳細なエラーメッセージを提供
         if (error.message?.includes('Invalid login credentials')) {
           // デバッグ用API呼び出し（本番では削除推奨）
@@ -320,6 +325,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         throw error
+      }
+
+      // メール認証状態をチェック
+      if (data?.user && !data.user.email_confirmed_at) {
+        await supabase.auth.signOut()
+        throw new Error('メールアドレスの認証が完了していません。受信したメールのリンクをクリックして認証を完了してください。')
       }
 
       // 認証成功後、ユーザープロフィールを手動で取得

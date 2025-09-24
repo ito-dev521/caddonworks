@@ -27,11 +27,23 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [emailVerified, setEmailVerified] = useState(false)
 
   const { signIn, getRedirectPath, userRole, loading } = useAuth()
 
   // デバッグログ削除
   const router = useRouter()
+
+  // URLパラメータからメール認証完了を確認
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search)
+    if (urlParams.get('verified') === 'true') {
+      setEmailVerified(true)
+      setSuccess('メールアドレスの認証が完了しました。ログインしてください。')
+      // URLからパラメータを削除
+      window.history.replaceState({}, document.title, window.location.pathname)
+    }
+  }, [])
 
   // 認証状態の変更を監視してリダイレクト
   useEffect(() => {

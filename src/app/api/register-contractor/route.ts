@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 1. Supabase Authでユーザーを作成（確認メール無効化）
+    // 1. Supabase Authでユーザーを作成（メール認証必須）
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
@@ -53,16 +53,11 @@ export async function POST(request: NextRequest) {
           display_name: displayName,
           role: 'Contractor'
         },
-        emailRedirectTo: undefined // 確認メールを送信しない
+        emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/auth/login?verified=true`
       }
     })
 
-    // 自動でメール確認済みにする（管理者権限でのみ可能）
-    if (authData.user && !authError) {
-      await supabase.auth.admin.updateUserById(authData.user.id, {
-        email_confirm: true
-      })
-    }
+    // メール認証は必須のため、自動確認は行わない
 
     if (authError) {
       console.error('Auth signup error:', authError)
@@ -145,10 +140,11 @@ export async function POST(request: NextRequest) {
 
     // 成功レスポンス
     return NextResponse.json({
-      message: '受注者登録が完了しました。ログイン情報をメールでお送りしました。',
+      message: '受注者登録が完了しました。メールアドレスに認証リンクを送信しました。メール内のリンクをクリックして認証を完了してからログインしてください。',
       data: {
         userId: userData.id,
-        authUserId: authData.user.id
+        authUserId: authData.user.id,
+        emailConfirmationRequired: true
       }
     }, { status: 200 })
 
