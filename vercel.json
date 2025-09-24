@@ -7,6 +7,12 @@
     }
   },
   "env": {
-    "SKIP_ENV_VALIDATION": "true"
+    "SKIP_ENV_VALIDATION": "true",
+    "NODE_ENV": "production"
+  },
+  "build": {
+    "env": {
+      "SKIP_ENV_VALIDATION": "true"
+    }
   }
 }
