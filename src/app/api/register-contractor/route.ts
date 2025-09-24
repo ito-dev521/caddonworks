@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
+import { sendContractorWelcomeEmail } from '@/lib/mailgun'
 
 export async function POST(request: NextRequest) {
   try {
@@ -44,7 +45,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 1. Supabase Authでユーザーを作成
+    // 1. Supabase Authでユーザーを作成（確認メール無効化）
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
@@ -52,9 +53,17 @@ export async function POST(request: NextRequest) {
         data: {
           display_name: displayName,
           role: 'Contractor'
-        }
+        },
+        emailRedirectTo: undefined // 確認メールを送信しない
       }
     })
+
+    // 自動でメール確認済みにする（管理者権限でのみ可能）
+    if (authData.user && !authError) {
+      await supabase.auth.admin.updateUserById(authData.user.id, {
+        email_confirm: true
+      })
+    }
 
     if (authError) {
       console.error('Auth signup error:', authError)
@@ -116,9 +125,23 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // カスタムウェルカムメールを送信
+    try {
+      const loginUrl = `${process.env.NEXTAUTH_URL}/auth/login`
+      await sendContractorWelcomeEmail({
+        email,
+        displayName,
+        password,
+        loginUrl
+      })
+    } catch (emailError) {
+      console.error('Failed to send welcome email:', emailError)
+      // メール送信失敗はログに記録するが、登録処理は成功として扱う
+    }
+
     // 成功レスポンス
     return NextResponse.json({
-      message: '受注者登録が完了しました',
+      message: '受注者登録が完了しました。ログイン情報をメールでお送りしました。',
       data: {
         userId: userData.id,
         authUserId: authData.user.id

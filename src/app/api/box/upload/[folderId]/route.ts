@@ -63,17 +63,11 @@ export async function POST(
     // ファイルをArrayBufferに変換
     const arrayBuffer = await file.arrayBuffer()
 
-    // モックフォルダの場合は成功レスポンスを返す
-    if (params.folderId.startsWith('mock_') || params.folderId.startsWith('pending_')) {
+    // フォルダIDの基本的な検証
+    if (!params.folderId || params.folderId === 'undefined' || params.folderId === 'null') {
       return NextResponse.json({
-        success: true,
-        message: 'ファイルをアップロードしました（テスト環境）',
-        file: {
-          id: `mock_uploaded_${Date.now()}`,
-          name: file.name,
-          size: file.size
-        }
-      }, { status: 200 })
+        message: '有効なフォルダIDが指定されていません'
+      }, { status: 400 })
     }
 
     // 実際のBOXにアップロード

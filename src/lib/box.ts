@@ -372,44 +372,69 @@ export async function createProjectFolderStructure(projectTitle: string, project
       })
     })
 
-    if (!mainFolderRes.ok) {
-      const errorText = await mainFolderRes.text()
-      throw new Error(`Main folder creation failed ${mainFolderRes.status}: ${errorText}`)
-    }
+    let mainFolderId: string
 
-    const mainFolder: any = await mainFolderRes.json()
-    const mainFolderId = mainFolder.id as string
+    if (!mainFolderRes.ok) {
+      if (mainFolderRes.status === 409) {
+        // 同名のフォルダが既に存在する場合
+        const errorData = await mainFolderRes.json()
+        const conflicts = errorData?.context_info?.conflicts
+
+        if (conflicts && conflicts.length > 0) {
+          // 既存のフォルダIDを使用
+          mainFolderId = conflicts[0].id
+          console.log(`📁 Using existing folder: ${mainFolderName} (ID: ${mainFolderId})`)
+        } else {
+          throw new Error(`Main folder exists but conflict info not available: ${errorData}`)
+        }
+      } else {
+        const errorText = await mainFolderRes.text()
+        throw new Error(`Main folder creation failed ${mainFolderRes.status}: ${errorText}`)
+      }
+    } else {
+      const mainFolder: any = await mainFolderRes.json()
+      mainFolderId = mainFolder.id as string
+      console.log(`📁 Created new folder: ${mainFolderName} (ID: ${mainFolderId})`)
+    }
 
     
 
-    // サブフォルダを作成
-    const subfolderNames = ['受取', '作業', '納品', '契約']
+    // 既存のサブフォルダを取得
+    const existingItems = await getBoxFolderItems(mainFolderId)
     const subfolders: Record<string, string> = {}
 
-    for (const subfolderName of subfolderNames) {
-      
-
-      const subfolderRes = await fetch('https://api.box.com/2.0/folders', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          name: subfolderName,
-          parent: { id: mainFolderId }
-        })
-      })
-
-      if (!subfolderRes.ok) {
-        console.warn(`Subfolder creation failed for ${subfolderName}: ${subfolderRes.status}`)
-        continue
-      }
-
-      const subfolder: any = await subfolderRes.json()
-      subfolders[subfolderName] = subfolder.id as string
-      
+    // フォルダ名マッピング（Box内の実際のフォルダ名に対応）
+    const folderMapping: Record<string, string[]> = {
+      '受取': ['01_受取データ', '受取', '01_受取', '01_'],
+      '作業': ['02_作業フォルダ', '作業', '02_作業', '02_'],
+      '納品': ['03_納品データ', '納品', '03_納品', '03_'],
+      '契約': ['04_契約資料', '契約', '04_契約', '04_']
     }
+
+    // 既存のフォルダから該当するサブフォルダを見つける
+    existingItems.forEach(item => {
+      if (item.type === 'folder') {
+        const itemName = item.name
+
+        // 各カテゴリに対してマッチングを確認
+        Object.entries(folderMapping).forEach(([category, patterns]) => {
+          patterns.forEach(pattern => {
+            if (itemName.includes(pattern) && !subfolders[category]) {
+              subfolders[category] = item.id
+              console.log(`📁 Found existing subfolder: ${category} -> ${itemName} (ID: ${item.id})`)
+            }
+          })
+        })
+      }
+    })
+
+    // 見つからないサブフォルダがあればログに記録（作成はしない）
+    const expectedCategories = ['受取', '作業', '納品', '契約']
+    expectedCategories.forEach(category => {
+      if (!subfolders[category]) {
+        console.warn(`📁 Subfolder not found for category: ${category}`)
+      }
+    })
 
     return {
       folderId: mainFolderId,

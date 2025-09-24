@@ -2,7 +2,7 @@ export const runtime = 'nodejs'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { getBoxFolderItems } from '@/lib/box'
+import { getBoxFolderItems, createCompanyFolder, createProjectFolderStructure } from '@/lib/box'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -227,27 +227,58 @@ export async function GET(request: NextRequest) {
           }
 
           // BOXフォルダIDをチェック
-          
-
           if (!project.box_folder_id) {
-            return {
-              ...project,
-              box_items: [
-                {
-                  id: 'mock_folder_1',
-                  name: 'テストフォルダ',
-                  type: 'folder',
-                  size: undefined,
-                  modified_at: new Date().toISOString(),
-                  created_at: new Date().toISOString(),
-                  path_collection: { entries: [{ name: project.title }] }
-                }
-              ],
-              subfolders: {
-                '受取': 'pending_1',
-                '作業': 'pending_2',
-                '納品': 'pending_3',
-                '契約': 'pending_4'
+            // Boxフォルダが存在しない場合、自動作成を試行
+            try {
+              // まず組織情報を取得
+              const { data: organization, error: orgError } = await supabaseAdmin
+                .from('organizations')
+                .select('name')
+                .eq('id', orgAdminMembership.org_id)
+                .single()
+
+              if (orgError || !organization) {
+                throw new Error('組織情報を取得できません')
+              }
+
+              // 会社フォルダを取得または作成
+              const companyFolder = await createCompanyFolder(organization.name)
+
+              // プロジェクトフォルダ構造を作成
+              const folderStructure = await createProjectFolderStructure(
+                project.title,
+                project.id,
+                companyFolder.id
+              )
+
+              // データベースにBoxフォルダIDを保存
+              const { error: updateError } = await supabaseAdmin
+                .from('projects')
+                .update({ box_folder_id: folderStructure.folderId })
+                .eq('id', project.id)
+
+              if (updateError) {
+                console.error('Failed to update project with Box folder ID:', updateError)
+              }
+
+              // 作成したフォルダの内容を取得
+              const items = await getBoxFolderItems(folderStructure.folderId)
+
+              return {
+                ...project,
+                box_folder_id: folderStructure.folderId,
+                box_items: items,
+                subfolders: folderStructure.subfolders,
+                recent_files: items.filter(item => item.type === 'file').slice(0, 5)
+              }
+
+            } catch (createError) {
+              console.error('Failed to create Box folder structure:', createError)
+              return {
+                ...project,
+                box_items: [],
+                subfolders: {},
+                error: `Boxフォルダの作成に失敗しました: ${createError.message}`
               }
             }
           }
@@ -259,33 +290,36 @@ export async function GET(request: NextRequest) {
           const subfolders: Record<string, string> = {}
 
           // BOXフォルダ内のアイテムからサブフォルダを特定
+          const folderMapping: Record<string, string[]> = {
+            '受取': ['01_受取データ', '受取', '01_受取', '01_'],
+            '作業': ['02_作業フォルダ', '作業', '02_作業', '02_'],
+            '納品': ['03_納品データ', '納品', '03_納品', '03_'],
+            '契約': ['04_契約資料', '契約', '04_契約', '04_']
+          }
+
           items.forEach(item => {
             if (item.type === 'folder') {
-              const name = item.name
-              // フォルダ名に基づいてマッピング
-              if (name.includes('受取') || name === '01_受取データ') {
-                subfolders['受取'] = item.id
-              } else if (name.includes('作業') || name === '02_作業フォルダ') {
-                subfolders['作業'] = item.id
-              } else if (name.includes('納品') || name === '03_納品データ') {
-                subfolders['納品'] = item.id
-              } else if (name.includes('契約') || name === '04_契約資料') {
-                subfolders['契約'] = item.id
-              } else {
-                
-              }
+              const itemName = item.name
+
+              // 各カテゴリに対してマッチングを確認
+              Object.entries(folderMapping).forEach(([category, patterns]) => {
+                patterns.forEach(pattern => {
+                  if (itemName.includes(pattern) && !subfolders[category]) {
+                    subfolders[category] = item.id
+                    console.log(`📁 Found existing subfolder: ${category} -> ${itemName} (ID: ${item.id})`)
+                  }
+                })
+              })
             }
           })
 
-          // フォールバック（フォルダが見つからない場合）
-          if (Object.keys(subfolders).length === 0) {
-            Object.assign(subfolders, {
-              '受取': 'mock_folder_1',
-              '作業': 'mock_folder_2',
-              '納品': 'mock_folder_3',
-              '契約': 'mock_folder_4'
-            })
-          }
+          // サブフォルダが見つからない場合のログ
+          const expectedCategories = ['受取', '作業', '納品', '契約']
+          expectedCategories.forEach(category => {
+            if (!subfolders[category]) {
+              console.warn(`📁 Subfolder not found for category: ${category} in project ${project.id}`)
+            }
+          })
 
           // サブフォルダ内のファイルも取得して最近のファイルに含める
           const allRecentFiles: any[] = [...items.filter(item => item.type === 'file')]

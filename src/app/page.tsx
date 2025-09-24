@@ -96,42 +96,23 @@ export default function LandingPage() {
               </div>
             </div>
             <div className="flex items-center gap-4">
-              {userRole ? (
-                // ログイン済みユーザー向けナビゲーション
-                <div className="flex items-center gap-2">
-                  <Link href={getRedirectPath()}>
-                    <Button variant="engineering">
-                      ダッシュボードへ
-                    </Button>
-                  </Link>
-                  <Link href="/settings">
-                    <Button variant="outline" size="sm">
-                      設定
-                    </Button>
-                  </Link>
-                </div>
-              ) : (
-                // 未ログインユーザー向けナビゲーション
-                <>
-                  <Link href="/auth/login">
-                    <Button variant="outline">ログイン</Button>
-                  </Link>
-                  <div className="flex items-center gap-2">
-                    <Link href="/auth/register-organization">
-                      <Button variant="engineering" size="sm">
-                        <Building className="w-4 h-4 mr-2" />
-                        発注者登録
-                      </Button>
-                    </Link>
-                    <Link href="/auth/signup">
-                      <Button variant="engineering" size="sm">
-                        <Users className="w-4 h-4 mr-2" />
-                        受注者登録
-                      </Button>
-                    </Link>
-                  </div>
-                </>
-              )}
+              <Link href="/auth/login">
+                <Button variant="outline">ログイン</Button>
+              </Link>
+              <div className="flex items-center gap-2">
+                <Link href="/auth/register-organization">
+                  <Button variant="engineering" size="sm">
+                    <Building className="w-4 h-4 mr-2" />
+                    発注者登録
+                  </Button>
+                </Link>
+                <Link href="/auth/signup">
+                  <Button variant="engineering" size="sm">
+                    <Users className="w-4 h-4 mr-2" />
+                    受注者登録
+                  </Button>
+                </Link>
+              </div>
             </div>
           </div>
         </div>

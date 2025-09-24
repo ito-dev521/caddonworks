@@ -100,44 +100,37 @@ export default function ProjectFilesPage() {
     try {
       setLoading(true)
 
-      // Box API連携を一時的に無効化（実装時に有効化）
-      setProjects([])
-      setError(null)
-      setLoading(false)
-      return
-
-      // 以下は実装時に有効化する
       // Supabaseから現在のセッションを取得
-      // const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
 
-      // if (sessionError || !session?.access_token) {
-      //   throw new Error('認証に失敗しました')
-      // }
+      if (sessionError || !session?.access_token) {
+        throw new Error('認証に失敗しました')
+      }
 
-      // const response = await fetch('/api/box/projects', {
-      //   headers: {
-      //     'Authorization': `Bearer ${session.access_token}`,
-      //     'Content-Type': 'application/json'
-      //   }
-      // })
+      const response = await fetch('/api/box/projects', {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      })
 
-      // if (!response.ok) {
-      //   const errorText = await response.text()
-      //   console.error('API error response:', errorText)
-      //   throw new Error(`プロジェクト取得に失敗しました: ${response.status}`)
-      // }
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('API error response:', errorText)
+        throw new Error(`プロジェクト取得に失敗しました: ${response.status}`)
+      }
 
-      // const data = await response.json()
-      // const projectsWithArchive = (data.projects || []).map((project: BoxProject) => {
-      //   const archiveStatus = getProjectArchiveStatus(project, archiveSettings)
-      //   const visibleFiles = filterVisibleFiles(project.box_items || [], archiveStatus)
-      //   return {
-      //     ...project,
-      //     archive_status: archiveStatus,
-      //     box_items: visibleFiles
-      //   }
-      // })
-      // setProjects(projectsWithArchive)
+      const data = await response.json()
+      const projectsWithArchive = (data.projects || []).map((project: BoxProject) => {
+        const archiveStatus = getProjectArchiveStatus(project, archiveSettings)
+        const visibleFiles = filterVisibleFiles(project.box_items || [], archiveStatus)
+        return {
+          ...project,
+          archive_status: archiveStatus,
+          box_items: visibleFiles
+        }
+      })
+      setProjects(projectsWithArchive)
     } catch (err: any) {
       setError(err.message)
     } finally {

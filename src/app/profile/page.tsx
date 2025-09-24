@@ -77,19 +77,23 @@ function ProfilePageContent() {
       alert('氏名を入力してください')
       return
     }
-    if (!formData.phone_number.trim()) {
-      alert('電話番号を入力してください')
-      return
+
+    // 受注者の場合のみ電話番号、住所を必須とする
+    if (userRole === 'Contractor') {
+      if (!formData.phone_number.trim()) {
+        alert('電話番号を入力してください')
+        return
+      }
+      if (!formData.address.trim()) {
+        alert('住所を入力してください')
+        return
+      }
+      if (!formData.address_detail.trim()) {
+        alert('住所（その他）を入力してください')
+        return
+      }
     }
-    if (!formData.address.trim()) {
-      alert('住所を入力してください')
-      return
-    }
-    if (!formData.address_detail.trim()) {
-      alert('住所（その他）を入力してください')
-      return
-    }
-    
+
     // 未経験以外の専門分野を選択した場合は経験年数が必須
     const hasNonBeginnerSpecialty = formData.specialties.some(specialty => specialty !== '未経験')
     if (hasNonBeginnerSpecialty && !formData.experience_years.trim()) {

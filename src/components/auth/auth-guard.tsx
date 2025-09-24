@@ -128,6 +128,11 @@ export function AuthGuard({
         return
       }
 
+      // 受注者は組織に所属しないため、組織チェックをスキップ
+      if (userRole === 'Contractor') {
+        return
+      }
+
       // 管理者関連ページまたはログイン関連ページは組織チェックをスキップ
       const isAdminPage = pathname.startsWith('/admin')
       const isAuthPage = pathname.startsWith('/auth')
@@ -147,7 +152,7 @@ export function AuthGuard({
     }
 
     checkOrgStatus()
-  }, [user, userOrganization, skipOrganizationCheck, loading, pathname])
+  }, [user, userOrganization, skipOrganizationCheck, loading, pathname, userRole])
 
   if (loading || maintenanceLoading) {
     return (
