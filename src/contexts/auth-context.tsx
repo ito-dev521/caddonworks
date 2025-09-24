@@ -47,8 +47,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (error) {
           console.error('AuthProvider: セッション取得エラー:', error)
-          // セッションエラーの場合は完全にクリア
-          await supabase.auth.signOut()
+          // セッションエラー時はサインアウト呼び出しを行わず、ローカル状態のみクリア
           setUser(null)
           setUserProfile(null)
           setUserRole(null)
@@ -73,9 +72,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       } catch (error) {
         console.error('AuthProvider: 初期化エラー:', error)
-        // エラーが発生した場合は完全にクリア
+        // エラー発生時もサインアウト呼び出しは行わず、ローカル状態をクリア
         if (mounted) {
-          await supabase.auth.signOut()
           setUser(null)
           setUserProfile(null)
           setUserRole(null)
@@ -473,11 +471,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     setLoading(true)
     try {
-      const { error } = await supabase.auth.signOut()
-      if (error) throw error
+      // セッションが無い場合はAPI呼び出しをスキップ
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) {
+        try {
+          await supabase.auth.signOut()
+        } catch (e: any) {
+          // AuthSessionMissingError などは無視してローカル状態をクリア
+          console.warn('signOut: 非致命的エラーを無視:', e?.message || e)
+        }
+      }
       setUser(null)
       setUserProfile(null)
       setUserRole(null)
+      setUserOrganization(null)
     } finally {
       setLoading(false)
     }

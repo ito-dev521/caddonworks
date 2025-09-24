@@ -189,6 +189,11 @@ async function handlePOST(request: NextRequest) {
       insertData.required_level = required_level
     }
 
+    // 優先招待候補（承認後に送る）を保存
+    if (selected_favorite_contractor_id) {
+      insertData.priority_invitation_candidate_id = selected_favorite_contractor_id
+    }
+
 
     // 認証済みユーザーとして新規案件を作成（RLSをバイパス）
     const { data: projectData, error: projectError } = await supabaseAdmin

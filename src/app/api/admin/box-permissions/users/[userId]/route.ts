@@ -26,7 +26,10 @@ export async function GET(
     const { data: user, error: userError } = await supabaseAdmin
       .from('users')
       .select(`
-        *,
+        id,
+        display_name,
+        email,
+        organization,
         box_permissions (*),
         box_time_restrictions (*),
         box_daily_limits (*),
@@ -40,7 +43,7 @@ export async function GET(
     }
 
     // 権限データを整形
-    const permissions = user.box_permissions?.map(p => ({
+    const permissions = user.box_permissions?.map((p: any) => ({
       folderId: p.folder_type,
       folderName: p.folder_name,
       download: p.can_download,
@@ -63,9 +66,9 @@ export async function GET(
       userId: user.id,
       user: {
         id: user.id,
-        name: user.name,
+        name: user.display_name || user.email || 'Unknown User',
         email: user.email,
-        role: user.role
+        role: 'contractor' // デフォルトで contractor として扱う
       },
       permissions,
       timeRestrictions: {

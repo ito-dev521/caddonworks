@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '管理者権限が必要です' }, { status: 403 })
     }
 
-    let affectedUsers = []
+    let affectedUsers: any[] = []
     let logMessage = ''
 
     switch (action) {
@@ -111,7 +111,7 @@ export async function POST(request: NextRequest) {
     await clearAllPermissionCaches()
 
     // 緊急通知を送信
-    await sendEmergencyNotification(affectedUsers, action, user.email)
+    await sendEmergencyNotification(affectedUsers, action, user.email!)
 
     return NextResponse.json({
       success: true,

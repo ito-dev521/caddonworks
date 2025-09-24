@@ -17,7 +17,6 @@ import {
   AlertTriangle,
   Check,
   X,
-  ChevronDown,
   Search
 } from "lucide-react"
 
@@ -73,8 +72,11 @@ export default function BoxPermissionsPage() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
         console.error('認証が必要です')
+        alert('管理者としてログインしてください')
         return
       }
+
+      console.log('Session found, fetching users...')
 
       const response = await fetch('/api/admin/box-permissions/users', {
         headers: {
@@ -83,16 +85,21 @@ export default function BoxPermissionsPage() {
         }
       })
 
+      console.log('API response status:', response.status)
+
       if (!response.ok) {
         const errorData = await response.json()
         console.error('API error:', errorData)
+        alert(`API エラー: ${errorData.error || 'Unknown error'}`)
         return
       }
 
       const data = await response.json()
+      console.log('Users data:', data)
       setUsers(data.users || [])
-    } catch (error) {
+    } catch (error: any) {
       console.error('ユーザー取得エラー:', error)
+      alert(`エラー: ${error.message}`)
     }
   }
 
@@ -386,7 +393,7 @@ export default function BoxPermissionsPage() {
                           <input
                             type="checkbox"
                             checked={userPermissions.timeRestrictions.enabled}
-                            onChange={(e) => {
+                            onChange={() => {
                               // 時間制限の有効/無効切り替え処理
                             }}
                             className="w-4 h-4 text-engineering-blue"

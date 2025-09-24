@@ -63,17 +63,38 @@ export async function POST(
     }
 
     // 案件情報を取得
-    const { data: project, error: projectError } = await supabaseAdmin
+    let { data: project, error: projectError } = await supabaseAdmin
       .from('projects')
       .select(`
         id,
         title,
         status,
         approver_ids,
-        org_id
+        org_id,
+        priority_invitation_candidate_id
       `)
       .eq('id', projectId)
       .single()
+
+    // 互換性: カラム未追加の環境では候補カラムなしで再取得
+    if ((projectError && (projectError.message || '').includes('priority_invitation_candidate_id'))) {
+      const fallback = await supabaseAdmin
+        .from('projects')
+        .select(`
+          id,
+          title,
+          status,
+          approver_ids,
+          org_id
+        `)
+        .eq('id', projectId)
+        .single()
+      project = (fallback.data as any) || null
+      projectError = fallback.error as any
+      if (project) {
+        ;(project as any).priority_invitation_candidate_id = null
+      }
+    }
 
     if (projectError || !project) {
       return NextResponse.json(
@@ -99,7 +120,11 @@ export async function POST(
     }
 
     // 案件のステータスを更新
-    const newStatus = action === 'approve' ? 'bidding' : 'rejected'
+    // 承認時に優先招待候補があれば priority_invitation にして一般公開を避ける
+    const shouldStartPriority = action === 'approve' && !!project.priority_invitation_candidate_id
+    const newStatus = action === 'approve'
+      ? (shouldStartPriority ? 'priority_invitation' : 'bidding')
+      : 'rejected'
     let boxFolderId: string | null = null
 
     // 承認の場合はBOXフォルダを作成（HTTPエンドポイントに委譲）
@@ -141,7 +166,8 @@ export async function POST(
 
     const updateData: any = {
       status: newStatus,
-      approver_ids: null // 承認後は承認者IDをクリア
+      approver_ids: null, // 承認後は承認者IDをクリア
+      priority_invitation_active: shouldStartPriority
     }
 
     // BOXフォルダが作成された場合は追加
@@ -149,17 +175,41 @@ export async function POST(
       updateData.box_folder_id = boxFolderId
     }
 
-    const { error: updateError } = await supabaseAdmin
+    let updateErrorMessage: string | null = null
+    let updateRes = await supabaseAdmin
       .from('projects')
       .update(updateData)
       .eq('id', projectId)
 
-    if (updateError) {
-      console.error('案件ステータス更新エラー:', updateError)
-      return NextResponse.json(
-        { message: '案件の更新に失敗しました' },
-        { status: 500 }
-      )
+    if (updateRes.error) {
+      // priority_invitation_active カラムが無い環境へのフォールバック
+      const msg = updateRes.error.message || ''
+      if (msg.includes('priority_invitation_active')) {
+        const fallbackData: any = { ...updateData }
+        delete fallbackData.priority_invitation_active
+        const retry = await supabaseAdmin
+          .from('projects')
+          .update(fallbackData)
+          .eq('id', projectId)
+        if (retry.error) {
+          updateErrorMessage = retry.error.message
+        }
+      } else {
+        updateErrorMessage = msg
+      }
+    }
+
+    if (updateErrorMessage) {
+      console.error('案件ステータス更新エラー:', updateErrorMessage)
+      // 制約未対応の環境では、一般公開(bidding)のまま優先招待のみ送るフォールバックに切替
+      if (shouldStartPriority && updateErrorMessage.includes('projects_status_check')) {
+        // ステータス変更はスキップし、後続の優先招待作成のみ実行
+      } else {
+        return NextResponse.json(
+          { message: '案件の更新に失敗しました' },
+          { status: 500 }
+        )
+      }
     }
 
     // 案件作成者に通知を送信
@@ -203,10 +253,48 @@ export async function POST(
       // 通知エラーは承認処理を妨げない
     }
 
+    // 優先招待を作成（必要な場合）
+    if (shouldStartPriority) {
+      try {
+        const expiresAt = new Date()
+        expiresAt.setHours(expiresAt.getHours() + 24)
+
+        const { data: invitation, error: invitationError } = await supabaseAdmin
+          .from('priority_invitations')
+          .insert({
+            project_id: projectId,
+            contractor_id: project.priority_invitation_candidate_id,
+            org_id: project.org_id,
+            response: 'pending',
+            expires_at: expiresAt.toISOString()
+          })
+          .select()
+          .single()
+
+        if (!invitationError && invitation) {
+          // 通知
+          await supabaseAdmin
+            .from('notifications')
+            .insert({
+              user_id: project.priority_invitation_candidate_id,
+              type: 'priority_invitation',
+              title: '優先案件のご案内',
+              message: `案件「${project.title}」への優先招待をお送りしました。24時間以内にご回答ください。`,
+              data: {
+                project_id: projectId,
+                project_title: project.title,
+                invitation_id: invitation.id,
+                expires_at: expiresAt.toISOString()
+              }
+            })
+        }
+      } catch (e) {
+        console.error('承認時の優先招待作成エラー:', e)
+      }
+    }
+
     const responseMessage = action === 'approve'
-      ? boxFolderId
-        ? '案件が承認され、BOXフォルダが作成されました'
-        : '案件が承認されました（BOXフォルダ作成は権限承認待ちです）'
+      ? (shouldStartPriority ? '案件が承認され、優先招待を送信しました' : '案件が承認されました（一般公開）')
       : '案件が却下されました'
 
     return NextResponse.json({
@@ -214,7 +302,8 @@ export async function POST(
       project: {
         id: projectId,
         status: newStatus,
-        box_folder_id: boxFolderId
+        box_folder_id: boxFolderId,
+        priority_invitation_active: shouldStartPriority
       }
     }, { status: 200 })
 

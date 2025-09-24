@@ -298,7 +298,7 @@ async function logDownloadAttempt(logData: any) {
         user_agent: logData.userAgent,
         attempted_at: new Date().toISOString()
       })
-  } catch (error) {
+  } catch (error: any) {
     // テーブルが存在しない場合はエラーを無視
     if (!error.message?.includes('relation "box_download_logs" does not exist')) {
       console.error('Download log error:', error)
