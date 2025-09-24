@@ -463,6 +463,52 @@ function SettingsPageContent() {
     }
   }
 
+  // ユーザーパスワード変更
+  const resetUserPassword = async (userId: string) => {
+    const user = users.find(u => u.id === userId)
+    const isOwnPassword = userId === userProfile?.id
+    const userName = isOwnPassword ? '自分' : (user?.display_name || 'ユーザー')
+
+    if (!confirm(`${userName}のパスワードを変更しますか？新しいパスワードが生成されて表示されます。`)) {
+      return
+    }
+
+    try {
+      setIsSaving(true)
+      const { data: { session } } = await supabase.auth.getSession()
+
+      if (!session) {
+        throw new Error('セッションが見つかりません')
+      }
+
+      const response = await fetch('/api/admin/users/reset-password', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ userId })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || 'パスワード変更に失敗しました')
+      }
+
+      const data = await response.json()
+      const isOwnPassword = userId === userProfile?.id
+      const successMessage = isOwnPassword
+        ? `あなたのパスワードが変更されました。新しいパスワード: ${data.newPassword}`
+        : `${userName}のパスワードが変更されました。新しいパスワード: ${data.newPassword}`
+      alert(successMessage)
+    } catch (error) {
+      console.error('パスワード変更エラー:', error)
+      alert(error instanceof Error ? error.message : 'パスワード変更に失敗しました')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
   // ユーザー削除
   const deleteUser = async (userId: string) => {
     if (!confirm('このユーザーを削除しますか？この操作は取り消せません。')) {
@@ -904,51 +950,26 @@ function SettingsPageContent() {
                             >
                               <Edit className="w-4 h-4" />
                             </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-orange-600 hover:text-orange-700"
+                              disabled={isSaving}
+                              title={user.id === userProfile?.id ? "パスワード変更" : `${user.display_name}のパスワード変更`}
+                              onClick={() => resetUserPassword(user.id)}
+                            >
+                              <Key className="w-4 h-4" />
+                            </Button>
                             {user.id !== userProfile?.id && (
-                              <>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => deleteUser(user.id)}
-                                  className="text-red-600 hover:text-red-700"
-                                  disabled={isSaving}
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </Button>
-                                {(!(process.env.NEXT_PUBLIC_ENV === 'production' || process.env.NODE_ENV === 'production')) && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="text-orange-600 hover:text-orange-700"
-                                    disabled={isSaving}
-                                    title="即時再発行(表示)"
-                                    onClick={async () => {
-                                      try {
-                                        const ok = confirm('即時に新しいパスワードを発行して表示します。よろしいですか？')
-                                        if (!ok) return
-                                        const { data: { session } } = await supabase.auth.getSession()
-                                        if (!session) throw new Error('セッションが見つかりません')
-                                        const res = await fetch('/api/admin/users/reset-password', {
-                                          method: 'POST',
-                                          headers: {
-                                            'Authorization': `Bearer ${session.access_token}`,
-                                            'Content-Type': 'application/json'
-                                          },
-                                          body: JSON.stringify({ userId: user.id })
-                                        })
-                                        const data = await res.json()
-                                        if (!res.ok) throw new Error(data.message || '再発行に失敗しました')
-                                        alert(`新しいパスワード: ${data.newPassword}`)
-                                      } catch (e: any) {
-                                        console.error('即時再発行失敗:', e)
-                                        alert(e.message || '再発行に失敗しました')
-                                      }
-                                    }}
-                                  >
-                                    <Key className="w-4 h-4" />
-                                  </Button>
-                                )}
-                              </>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => deleteUser(user.id)}
+                                className="text-red-600 hover:text-red-700"
+                                disabled={isSaving}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
                             )}
                           </div>
                         </div>
