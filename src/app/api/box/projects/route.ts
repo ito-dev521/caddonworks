@@ -327,7 +327,8 @@ export async function GET(request: NextRequest) {
           // 各サブフォルダからファイルを取得
           for (const [folderName, folderId] of Object.entries(subfolders)) {
             try {
-              if (!folderId.startsWith('mock_') && !folderId.startsWith('pending_')) {
+              // 実際のBOXフォルダからファイルを取得
+              if (true) {
                 try {
                   const subFolderItems = await getBoxFolderItems(folderId)
                   const subFiles = subFolderItems

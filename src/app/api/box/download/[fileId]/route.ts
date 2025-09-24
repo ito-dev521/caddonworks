@@ -32,28 +32,6 @@ export async function GET(request: NextRequest, { params }: { params: { fileId: 
     }
 
     
-    // モックファイルの場合はサンプルコンテンツを返す
-    if (params.fileId.startsWith('mock_')) {
-      const mockContent = `これは${params.fileId}のテストファイル内容です。
-
-ファイルタイプ: サンプルドキュメント
-作成日: ${new Date().toLocaleDateString('ja-JP')}
-説明: BOX承認後に実際のファイルがダウンロード可能になります。
-
-このファイルは表示・テスト目的のサンプルファイルです。
-実際のプロジェクトファイルはBOX連携完了後にご利用いただけます。`
-
-      const buffer = Buffer.from(mockContent, 'utf-8')
-
-      return new NextResponse(buffer, {
-        status: 200,
-        headers: {
-          'Content-Type': 'application/octet-stream',
-          'Content-Disposition': 'attachment; filename="sample-file.txt"',
-          'Content-Length': buffer.length.toString()
-        }
-      })
-    }
 
     // BOX設定がない場合はエラーレスポンス
     const hasBoxConfig = process.env.BOX_CLIENT_ID &&
