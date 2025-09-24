@@ -102,10 +102,49 @@ export async function POST(request: NextRequest) {
     if ('error' in ctx) return ctx.error
     const { supabaseAdmin, operatorOrgId } = ctx
 
+    console.log('運営ユーザー作成: operatorOrgId =', operatorOrgId)
+
     const body = await request.json()
     const { email, displayName, role }: { email?: string; displayName?: string; role?: OperatorRole } = body
+    console.log('運営ユーザー作成リクエスト:', { email, displayName, role })
+    
     if (!email || !role) {
       return NextResponse.json({ message: 'email と role は必須です' }, { status: 400 })
+    }
+
+    // operatorOrgIdがnullの場合はデフォルトの運営組織を作成または取得
+    let finalOperatorOrgId = operatorOrgId
+    if (!finalOperatorOrgId) {
+      console.log('運営組織IDが見つからないため、デフォルト組織を作成/取得します')
+      const { data: defaultOrg, error: orgError } = await supabaseAdmin
+        .from('organizations')
+        .select('id')
+        .eq('name', '運営会社')
+        .maybeSingle()
+      
+      if (defaultOrg) {
+        finalOperatorOrgId = defaultOrg.id
+        console.log('既存の運営組織を使用:', finalOperatorOrgId)
+      } else {
+        // デフォルト運営組織を作成
+        const { data: newOrg, error: createOrgError } = await supabaseAdmin
+          .from('organizations')
+          .insert({
+            name: '運営会社',
+            email: 'admin@caddon.jp',
+            status: 'approved'
+          })
+          .select('id')
+          .single()
+        
+        if (createOrgError || !newOrg) {
+          console.error('運営組織作成エラー:', createOrgError)
+          return NextResponse.json({ message: '運営組織の作成に失敗しました' }, { status: 500 })
+        }
+        
+        finalOperatorOrgId = newOrg.id
+        console.log('新しい運営組織を作成:', finalOperatorOrgId)
+      }
     }
 
     // 既存ユーザーのチェック
@@ -150,13 +189,15 @@ export async function POST(request: NextRequest) {
     }
 
     // 運営組織のmembershipを付与
+    console.log('メンバーシップ作成:', { user_id: profile.id, org_id: finalOperatorOrgId, role })
     const { error: memErr } = await supabaseAdmin
       .from('memberships')
-      .insert({ user_id: profile.id, org_id: operatorOrgId, role })({ user_id: profile.id, org_id: operatorOrgId, role })
+      .insert({ user_id: profile.id, org_id: finalOperatorOrgId, role })
     if (memErr) {
+      console.error('メンバーシップ作成エラー:', memErr)
       await supabaseAdmin.from('users').delete().eq('id', profile.id)
       await supabaseAdmin.auth.admin.deleteUser(authUserId)
-      return NextResponse.json({ message: '権限付与に失敗しました' }, { status: 400 })
+      return NextResponse.json({ message: '権限付与に失敗しました: ' + memErr.message }, { status: 400 })
     }
 
     // 初回セットアップ用にパスワードリセットメールを送付
