@@ -278,7 +278,7 @@ export async function GET(request: NextRequest) {
                 ...project,
                 box_items: [],
                 subfolders: {},
-                error: `Boxフォルダの作成に失敗しました: ${createError.message}`
+                error: `Boxフォルダの作成に失敗しました: ${(createError as Error).message || 'Unknown error'}`
               }
             }
           }

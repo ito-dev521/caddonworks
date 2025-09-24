@@ -76,20 +76,20 @@ export async function GET() {
     // メンバーシップから受注者情報を取得し、真の個人事業主のみフィルタリング
     const contractors = contractorMemberships
       ?.filter(membership =>
-        membership.users?.email === 'contractor@demo.com' ||
-        membership.users?.email === 'iiistylelab@gmail.com'
+        (membership.users as any)?.email === 'contractor@demo.com' ||
+        (membership.users as any)?.email === 'iiistylelab@gmail.com'
       )
       ?.map(membership => ({
-        id: membership.users?.id,
-        email: membership.users?.email,
-        display_name: membership.users?.display_name,
-        organization: membership.users?.organization,
+        id: (membership.users as any)?.id,
+        email: (membership.users as any)?.email,
+        display_name: (membership.users as any)?.display_name,
+        organization: (membership.users as any)?.organization,
         role: membership.role,
         active: true, // メンバーシップが存在することで有効とみなす
-        created_at: membership.users?.created_at,
-        formal_name: membership.users?.formal_name,
-        phone_number: membership.users?.phone_number,
-        member_level: membership.users?.member_level
+        created_at: (membership.users as any)?.created_at,
+        formal_name: (membership.users as any)?.formal_name,
+        phone_number: (membership.users as any)?.phone_number,
+        member_level: (membership.users as any)?.member_level
       })) || []
 
     return NextResponse.json({

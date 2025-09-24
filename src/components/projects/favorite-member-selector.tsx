@@ -4,9 +4,6 @@ import React, { useState, useEffect } from 'react'
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Label } from "@/components/ui/label"
 import { Star, User, Clock } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 
@@ -134,28 +131,34 @@ export function FavoriteMemberSelector({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <RadioGroup
-          value={selectedContractorId || ""}
-          onValueChange={onSelectionChange}
-        >
+        <div className="space-y-2">
           {favoriteMembers.map((member) => (
             <div key={member.id} className="flex items-center space-x-2">
-              <RadioGroupItem
+              <input
+                type="radio"
                 value={member.contractor_id}
                 id={member.contractor_id}
+                name="contractor"
+                checked={selectedContractorId === member.contractor_id}
+                onChange={(e) => onSelectionChange(e.target.value)}
                 className="mt-1"
               />
-              <Label
+              <label
                 htmlFor={member.contractor_id}
                 className="flex-1 cursor-pointer"
               >
                 <div className="flex items-center gap-3 p-3 rounded-lg border hover:bg-gray-50 transition-colors">
-                  <Avatar className="w-10 h-10">
-                    <AvatarImage src={member.profile_image_url} />
-                    <AvatarFallback>
-                      <User className="w-5 h-5" />
-                    </AvatarFallback>
-                  </Avatar>
+                  <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
+                    {member.profile_image_url ? (
+                      <img 
+                        src={member.profile_image_url} 
+                        alt={member.contractor_name}
+                        className="w-10 h-10 rounded-full object-cover"
+                      />
+                    ) : (
+                      <User className="w-5 h-5 text-gray-500" />
+                    )}
+                  </div>
 
                   <div className="flex-1">
                     <div className="font-medium text-gray-900">
@@ -178,10 +181,10 @@ export function FavoriteMemberSelector({
                     </Badge>
                   </div>
                 </div>
-              </Label>
+              </label>
             </div>
           ))}
-        </RadioGroup>
+        </div>
 
         <div className="flex gap-2 pt-4 border-t">
           <Button

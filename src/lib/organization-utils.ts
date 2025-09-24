@@ -1,4 +1,4 @@
-import { UserRole } from '@/contexts/auth-context'
+import { UserRole } from '@/lib/supabase'
 
 /**
  * ユーザーの組織表示名を取得する

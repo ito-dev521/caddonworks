@@ -299,7 +299,7 @@ export default function FilesPage() {
 
                         {/* Tags */}
                         <div className="flex flex-wrap gap-1">
-                          {file.tags.map(tag => (
+                          {file.tags.map((tag: string) => (
                             <Badge key={tag} variant="outline" className="text-xs">
                               {tag}
                             </Badge>

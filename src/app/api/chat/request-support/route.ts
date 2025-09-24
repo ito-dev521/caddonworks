@@ -71,11 +71,11 @@ export async function POST(request: NextRequest) {
     }
 
     const project = chatRoom.projects
-    const projectLevel = project.member_level || 'beginner'
+    const projectLevel = (project as any)?.member_level || 'beginner'
 
     // サポート要請者の種別を判定
-    const isContractor = project.contractor_id === user_id
-    const isClient = requester.memberships?.some(m => m.org_id === project.org_id)
+    const isContractor = (project as any)?.contractor_id === user_id
+    const isClient = requester.memberships?.some(m => m.org_id === (project as any)?.org_id)
     const requesterType = isContractor ? '受注者' : isClient ? '発注者' : '不明'
 
     // 既に監査員が参加しているかチェック
@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           message: '監査員は既にチャットに参加しています',
-          auditor: existingAuditor.users.display_name
+          auditor: (existingAuditor.users as any)?.display_name
         },
         { status: 200 }
       )

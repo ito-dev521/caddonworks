@@ -251,7 +251,6 @@ export default function SignUpPage() {
                         onChange={(value) => handleInputChange('password', value)}
                         label="パスワード *"
                         placeholder="••••••••"
-                        autoComplete="new-password"
                         required
                         showStrengthIndicator={true}
                       />
