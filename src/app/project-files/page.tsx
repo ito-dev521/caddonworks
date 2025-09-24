@@ -5,7 +5,6 @@ import { motion, AnimatePresence } from "framer-motion"
 import {
   FolderOpen,
   File,
-  Download,
   Eye,
   Upload,
   Search,
@@ -411,50 +410,6 @@ export default function ProjectFilesPage() {
     }
   }
 
-  // 一括ダウンロード
-  const handleBulkDownload = async (projectId: string, projectTitle: string) => {
-    // 認証が完了していない場合は何もしない
-    if (authLoading || !user) {
-      return
-    }
-
-    try {
-      
-
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-
-      if (sessionError || !session?.access_token) {
-        throw new Error('認証に失敗しました')
-      }
-
-      // プロジェクトのすべてのファイルを取得
-      const response = await fetch(`/api/box/projects/${projectId}/download-all`, {
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`
-        }
-      })
-
-      if (!response.ok) {
-        throw new Error(`一括ダウンロードに失敗しました: ${response.status}`)
-      }
-
-      // ZIPファイルとしてダウンロード
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${projectTitle}_files.zip`
-      document.body.appendChild(a)
-      a.click()
-      window.URL.revokeObjectURL(url)
-      document.body.removeChild(a)
-
-      
-    } catch (err: any) {
-      console.error('Bulk download error:', err)
-      alert(`一括ダウンロードに失敗しました: ${err.message}`)
-    }
-  }
 
   const getRecentFiles = (project: BoxProject) => {
     // recent_files が利用可能な場合はそれを使用、そうでなければ従来の方法
@@ -883,17 +838,8 @@ export default function ProjectFilesPage() {
                             className="border-t border-gray-200"
                           >
                             <CardContent className="p-4 bg-gray-50">
-                              <div className="flex items-center justify-between mb-3">
+                              <div className="mb-3">
                                 <h4 className="font-medium">全ファイル一覧</h4>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleBulkDownload(project.id, project.title)}
-                                  className="text-blue-600 hover:text-blue-800"
-                                >
-                                  <Download className="w-3 h-3 mr-1" />
-                                  一括ダウンロード
-                                </Button>
                               </div>
                               {project.archive_status?.files_visible ? (
                                 <div className="space-y-2 max-h-64 overflow-y-auto">
