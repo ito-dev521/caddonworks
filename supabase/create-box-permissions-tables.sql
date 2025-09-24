@@ -179,7 +179,7 @@ CREATE TRIGGER update_box_emergency_stops_updated_at
 -- インデックスの作成（パフォーマンス向上）
 CREATE INDEX IF NOT EXISTS idx_box_permissions_user_id ON box_permissions(user_id);
 CREATE INDEX IF NOT EXISTS idx_box_permissions_folder_type ON box_permissions(folder_type);
-CREATE INDEX IF NOT EXISTS idx_box_download_logs_user_date ON box_download_logs(user_id, DATE(attempted_at));
+CREATE INDEX IF NOT EXISTS idx_box_download_logs_user_attempted ON box_download_logs(user_id, attempted_at);
 CREATE INDEX IF NOT EXISTS idx_box_download_logs_result ON box_download_logs(result);
 
 -- テーブル作成完了のログ
