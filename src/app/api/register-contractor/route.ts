@@ -9,8 +9,7 @@ export async function POST(request: NextRequest) {
       password,
       displayName,
       specialties,
-      qualifications,
-      portfolioUrl
+      qualifications
     } = body
 
     // バリデーション
@@ -107,8 +106,7 @@ export async function POST(request: NextRequest) {
         email,
         display_name: displayName,
         specialties: specialties || [],
-        qualifications: qualifications || [],
-        portfolio_url: portfolioUrl || null
+        qualifications: qualifications || []
       })
       .select()
       .single()
@@ -124,11 +122,52 @@ export async function POST(request: NextRequest) {
     }
 
     // 3. 受注者としてのメンバーシップを作成
-    // 受注者は特定の組織に所属しないため、org_idはnull
+    // 受注者用のデフォルト組織を取得または作成
+    let contractorOrgId = null
+    
+    // 受注者用のデフォルト組織を検索
+    const { data: contractorOrg, error: orgSearchError } = await supabase
+      .from('organizations')
+      .select('id')
+      .eq('name', '受注者')
+      .maybeSingle()
+    
+    if (contractorOrg) {
+      contractorOrgId = contractorOrg.id
+    } else {
+      // 受注者用のデフォルト組織を作成
+      const { data: newOrg, error: orgCreateError } = await supabase
+        .from('organizations')
+        .insert({
+          name: '受注者',
+          email: 'contractors@system.local'
+        })
+        .select('id')
+        .single()
+      
+      if (orgCreateError || !newOrg) {
+        console.error('受注者組織作成エラー:', orgCreateError)
+        // ユーザーとAuthユーザーを削除（ロールバック）
+        await supabase.from('users').delete().eq('id', userData.id)
+        if (isDevelopment) {
+          const { createSupabaseAdmin } = await import('@/lib/supabase')
+          const supabaseAdmin = createSupabaseAdmin()
+          await supabaseAdmin.auth.admin.deleteUser(authData.user.id)
+        } else {
+          await supabase.auth.admin.deleteUser(authData.user.id)
+        }
+        return NextResponse.json(
+          { message: '受注者組織の作成に失敗しました: ' + (orgCreateError?.message || 'Unknown error') },
+          { status: 400 }
+        )
+      }
+      contractorOrgId = newOrg.id
+    }
+
     const { error: membershipError } = await supabase
       .from('memberships')
       .insert({
-        org_id: null,
+        org_id: contractorOrgId,
         user_id: userData.id,
         role: 'Contractor'
       })
@@ -137,7 +176,13 @@ export async function POST(request: NextRequest) {
       console.error('Membership creation error:', membershipError)
       // ユーザーとAuthユーザーを削除（ロールバック）
       await supabase.from('users').delete().eq('id', userData.id)
-      await supabase.auth.admin.deleteUser(authData.user.id)
+      if (isDevelopment) {
+        const { createSupabaseAdmin } = await import('@/lib/supabase')
+        const supabaseAdmin = createSupabaseAdmin()
+        await supabaseAdmin.auth.admin.deleteUser(authData.user.id)
+      } else {
+        await supabase.auth.admin.deleteUser(authData.user.id)
+      }
       return NextResponse.json(
         { message: '権限設定に失敗しました: ' + membershipError.message },
         { status: 400 }
