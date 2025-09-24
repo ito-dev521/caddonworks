@@ -1,15 +1,31 @@
-import formData from 'form-data'
-import Mailgun from 'mailgun.js'
-
-const mailgun = new Mailgun(formData)
-
-const mg = mailgun.client({
-  username: 'api',
-  key: process.env.MAILGUN_API_KEY || '',
-  url: 'https://api.mailgun.net'
-})
-
+// Mailgun設定の初期化を動的に行う
+let mg: any = null
 const DOMAIN = process.env.MAILGUN_DOMAIN || ''
+
+// Mailgunクライアントを動的に初期化する関数
+const initMailgun = async () => {
+  if (mg) return mg
+
+  if (!process.env.MAILGUN_API_KEY || !process.env.MAILGUN_DOMAIN) {
+    return null
+  }
+
+  try {
+    const formData = await import('form-data')
+    const Mailgun = await import('mailgun.js')
+
+    const mailgun = new Mailgun.default(formData.default)
+    mg = mailgun.client({
+      username: 'api',
+      key: process.env.MAILGUN_API_KEY,
+      url: 'https://api.mailgun.net'
+    })
+    return mg
+  } catch (error) {
+    console.error('Failed to initialize Mailgun:', error)
+    return null
+  }
+}
 
 export interface ContractorWelcomeEmailData {
   email: string
@@ -118,8 +134,16 @@ export const sendContractorWelcomeEmail = async (data: ContractorWelcomeEmailDat
 Civil Engineering Platform
   `
 
+  // Mailgunを動的に初期化
+  const mailgunClient = await initMailgun()
+
+  if (!mailgunClient || !DOMAIN) {
+    console.warn('Mailgun not configured, skipping email send')
+    return { message: 'Email sending skipped (Mailgun not configured)' }
+  }
+
   try {
-    const result = await mg.messages.create(DOMAIN, {
+    const result = await mailgunClient.messages.create(DOMAIN, {
       from: `土木設計業務プラットフォーム <noreply@${DOMAIN}>`,
       to: [email],
       subject: '【重要】受注者登録完了とログイン情報のご案内',
@@ -185,8 +209,16 @@ export const sendPasswordResetEmail = async (email: string, resetLink: string, d
     </html>
   `
 
+  // Mailgunを動的に初期化
+  const mailgunClient = await initMailgun()
+
+  if (!mailgunClient || !DOMAIN) {
+    console.warn('Mailgun not configured, skipping password reset email send')
+    return { message: 'Password reset email sending skipped (Mailgun not configured)' }
+  }
+
   try {
-    const result = await mg.messages.create(DOMAIN, {
+    const result = await mailgunClient.messages.create(DOMAIN, {
       from: `土木設計業務プラットフォーム <noreply@${DOMAIN}>`,
       to: [email],
       subject: 'パスワードリセットのご案内',
