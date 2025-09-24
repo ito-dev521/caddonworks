@@ -152,7 +152,7 @@ export async function POST(request: NextRequest) {
     // 運営組織のmembershipを付与
     const { error: memErr } = await supabaseAdmin
       .from('memberships')
-      .insert({ user_id: profile.id, org_id: operatorOrgId, role })
+      .insert({ user_id: profile.id, org_id: operatorOrgId, role })({ user_id: profile.id, org_id: operatorOrgId, role })
     if (memErr) {
       await supabaseAdmin.from('users').delete().eq('id', profile.id)
       await supabaseAdmin.auth.admin.deleteUser(authUserId)

@@ -163,7 +163,7 @@ function AdminUsersPageContent() {
       await fetchUsers()
       setNewEmail("")
       setNewDisplayName("")
-      setNewRole('Reviewer')
+      setNewRole('Auditor')
       alert('ユーザーを作成しました。初回設定用のメールが送信されます。')
     } catch (e: any) {
       console.error('運営作成エラー:', e)
@@ -323,6 +323,8 @@ function AdminUsersPageContent() {
                 onChange={(e) => setNewRole(e.target.value as OperatorRole)}
                 className="w-full px-3 py-2 border border-gray-200 rounded"
               >
+                <option value="Admin">Admin（管理者）</option>
+                <option value="Reviewer">Reviewer（審査）</option>
                 <option value="Auditor">Auditor（監査）</option>
               </select>
               <Button onClick={createOperator} disabled={isSaving} className="bg-engineering-blue">
