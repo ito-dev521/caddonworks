@@ -196,35 +196,7 @@ export async function GET(request: NextRequest) {
     const projectsWithBoxData = await Promise.all(
       (projects || []).map(async (project) => {
         try {
-          // Box API 設定をチェック
-          const hasBoxConfig = process.env.BOX_CLIENT_ID &&
-                               process.env.BOX_CLIENT_SECRET &&
-                               process.env.BOX_ENTERPRISE_ID
-
-          
-
-          if (!hasBoxConfig) {
-            return {
-              ...project,
-              box_items: [
-                {
-                  id: 'mock_folder',
-                  name: 'テストフォルダ',
-                  type: 'folder',
-                  size: undefined,
-                  modified_at: new Date().toISOString(),
-                  created_at: new Date().toISOString(),
-                  path_collection: { entries: [{ name: project.title }] }
-                }
-              ],
-              subfolders: {
-                '受取': 'mock_folder_1',
-                '作業': 'mock_folder_2',
-                '納品': 'mock_folder_3',
-                '契約': 'mock_folder_4'
-              }
-            }
-          }
+          // 実際のBox APIを試行（環境変数チェックを削除）
 
           // BOXフォルダIDをチェック
           if (!project.box_folder_id) {
