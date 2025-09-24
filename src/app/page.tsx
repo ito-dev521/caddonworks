@@ -157,11 +157,6 @@ export default function LandingPage() {
                 </Button>
               </Link>
             </div>
-            <div className="mt-4 flex justify-center">
-              <Button variant="outline" size="lg">
-                デモを見る
-              </Button>
-            </div>
           </motion.div>
         </div>
       </section>

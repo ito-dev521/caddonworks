@@ -90,25 +90,6 @@ export default function LoginPage() {
     }
   }
 
-  const demoLogin = (role: 'admin' | 'orgadmin' | 'orgadmin2' | 'contractor' | 'contractor2' | 'reviewer') => {
-    const adminEmail = (process.env.NEXT_PUBLIC_ADMIN_EMAILS || 'admin@demo.com')
-      .split(',')
-      .map(e => e.trim())
-      .filter(Boolean)[0] || 'admin@demo.com'
-
-    const demoCredentials = {
-      // 運営者デモは環境変数の先頭メール + 一時PW に合わせる
-      admin: { email: adminEmail, password: 'AdminDemo123!' },
-      orgadmin: { email: "orgadmin@demo.com", password: "demo123" },
-      orgadmin2: { email: "orgadmin2@demo.com", password: "demo123" },
-      contractor: { email: "contractor@demo.com", password: "demo123" },
-      contractor2: { email: "contractor2@demo.com", password: "demo123" },
-      reviewer: { email: "reviewer@demo.com", password: "demo123" }
-    }
-
-    setEmail(demoCredentials[role].email)
-    setPassword(demoCredentials[role].password)
-  }
 
   return (
     <div className="min-h-screen bg-gradient-mesh flex items-center justify-center p-4">
@@ -163,60 +144,6 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {/* Demo Login Buttons */}
-            <div className="space-y-3">
-              <p className="text-sm font-medium text-gray-700 mb-3">デモアカウントでログイン:</p>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => demoLogin('admin')}
-                  className="hover:border-red-500"
-                >
-                  運営者デモ
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => demoLogin('orgadmin')}
-                  className="hover:border-engineering-blue"
-                >
-                  発注者デモ
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => demoLogin('orgadmin2')}
-                  className="hover:border-engineering-blue"
-                >
-                  発注者デモ2
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => demoLogin('contractor')}
-                  className="hover:border-engineering-green"
-                >
-                  受注者デモ
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => demoLogin('contractor2')}
-                  className="hover:border-engineering-green"
-                >
-                  受注者デモ2
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => demoLogin('reviewer')}
-                  className="hover:border-purple-500"
-                >
-                  監督員デモ
-                </Button>
-              </div>
-            </div>
           </div>
         </motion.div>
 
@@ -353,54 +280,6 @@ export default function LoginPage() {
             </CardContent>
           </Card>
 
-          {/* Mobile Demo Buttons */}
-          <div className="mt-6 lg:hidden">
-            <p className="text-sm font-medium text-gray-700 mb-3 text-center">デモアカウント:</p>
-            <div className="flex flex-wrap justify-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => demoLogin('admin')}
-              >
-                運営者
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => demoLogin('orgadmin')}
-              >
-                発注者
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => demoLogin('orgadmin2')}
-              >
-                発注者2
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => demoLogin('contractor')}
-              >
-                受注者
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => demoLogin('contractor2')}
-              >
-                受注者2
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => demoLogin('reviewer')}
-              >
-                監督員
-              </Button>
-            </div>
-          </div>
         </motion.div>
       </div>
     </div>
