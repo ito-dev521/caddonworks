@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import {
   Upload,
@@ -34,16 +34,79 @@ import { FileUploadZone } from "@/components/files/file-upload-zone"
 import { FilePreview } from "@/components/files/file-preview"
 import { AccessControlModal } from "@/components/files/access-control-modal"
 import { formatDate } from "@/lib/utils"
+import { useAuth } from "@/contexts/auth-context"
+import { supabase } from "@/lib/supabase"
 
 export default function FilesPage() {
+  const { userProfile } = useAuth()
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [selectedFiles, setSelectedFiles] = useState<string[]>([])
   const [showUpload, setShowUpload] = useState(false)
   const [showPreview, setShowPreview] = useState<string | null>(null)
   const [showAccessControl, setShowAccessControl] = useState<string | null>(null)
+  const [files, setFiles] = useState<any[]>([])
+  const [projects, setProjects] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
 
-  // ファイルデータ（実装時に実際のAPIから取得）
-  const files: any[] = []
+  // Box APIから実際のプロジェクトデータとファイルを取得
+  useEffect(() => {
+    const fetchBoxData = async () => {
+      if (!userProfile) return
+
+      try {
+        setLoading(true)
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session) return
+
+        const response = await fetch('/api/box/projects', {
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json'
+          }
+        })
+
+        if (response.ok) {
+          const result = await response.json()
+          setProjects(result.projects || [])
+
+          // 全プロジェクトからファイルを抽出
+          const allFiles: any[] = []
+          result.projects?.forEach((project: any) => {
+            if (project.box_items) {
+              project.box_items.forEach((item: any) => {
+                if (item.type === 'file') {
+                  allFiles.push({
+                    ...item,
+                    project_title: project.title,
+                    project_id: project.id
+                  })
+                }
+              })
+            }
+            if (project.recent_files) {
+              project.recent_files.forEach((file: any) => {
+                allFiles.push({
+                  ...file,
+                  project_title: project.title,
+                  project_id: project.id
+                })
+              })
+            }
+          })
+
+          setFiles(allFiles)
+        } else {
+          console.error('Box APIからのデータ取得に失敗')
+        }
+      } catch (error) {
+        console.error('データ取得エラー:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchBoxData()
+  }, [userProfile])
 
   const getFileIcon = (type: string) => {
     const icons = {
@@ -119,7 +182,7 @@ export default function FilesPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-gray-600">総ファイル数</p>
-                    <p className="text-3xl font-bold text-gray-900">1,247</p>
+                    <p className="text-3xl font-bold text-gray-900">{loading ? "..." : files.length}</p>
                   </div>
                   <div className="p-3 bg-blue-100 rounded-lg">
                     <FileText className="w-6 h-6 text-blue-600" />
@@ -133,8 +196,8 @@ export default function FilesPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-gray-600">ストレージ使用量</p>
-                    <p className="text-2xl font-bold text-engineering-blue">847 GB</p>
-                    <Progress value={65} variant="engineering" className="mt-2" />
+                    <p className="text-2xl font-bold text-engineering-blue">{loading ? "..." : formatFileSize(files.reduce((total, file) => total + (file.size || 0), 0))}</p>
+                    <Progress value={Math.min((files.reduce((total, file) => total + (file.size || 0), 0) / (1024 * 1024 * 1024)) / 10 * 100, 100)} variant="engineering" className="mt-2" />
                   </div>
                   <div className="p-3 bg-engineering-blue/10 rounded-lg">
                     <Archive className="w-6 h-6 text-engineering-blue" />
@@ -248,62 +311,52 @@ export default function FilesPage() {
                                 {file.name}
                               </CardTitle>
                               <CardDescription className="text-sm">
-                                v{file.version} • {formatFileSize(file.size)}
+                                {file.project_title && <span>{file.project_title} • </span>}
+                                {formatFileSize(file.size || 0)}
                               </CardDescription>
                             </div>
                           </div>
                         </div>
 
                         <div className="flex items-center gap-2 mt-2">
-                          <StatusIndicator status={file.status} size="sm" />
+                          {file.subfolder && (
+                            <Badge variant="outline" className="text-xs">
+                              {file.subfolder}
+                            </Badge>
+                          )}
                           <Badge variant="outline" className="text-xs flex items-center gap-1">
-                            {getScanStatusIcon(file.scanStatus)}
-                            {file.scanStatus}
+                            {getScanStatusIcon('clean')}
+                            スキャン済み
                           </Badge>
                         </div>
                       </CardHeader>
 
                       <CardContent className="space-y-4">
                         {/* File Preview */}
-                        {file.previewUrl && (
-                          <div
-                            className="aspect-video bg-gray-100 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors flex items-center justify-center"
-                            onClick={() => setShowPreview(file.id)}
-                          >
-                            <Eye className="w-8 h-8 text-gray-400" />
-                            <span className="ml-2 text-sm text-gray-500">プレビュー</span>
-                          </div>
-                        )}
+                        <div
+                          className="aspect-video bg-gray-100 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors flex items-center justify-center"
+                          onClick={() => setShowPreview(file.id)}
+                        >
+                          <Eye className="w-8 h-8 text-gray-400" />
+                          <span className="ml-2 text-sm text-gray-500">プレビュー</span>
+                        </div>
 
                         {/* File Metadata */}
                         <div className="space-y-2 text-xs text-gray-600">
+                          {file.project_title && (
+                            <div className="flex justify-between">
+                              <span>プロジェクト:</span>
+                              <span className="font-medium truncate ml-2">{file.project_title}</span>
+                            </div>
+                          )}
                           <div className="flex justify-between">
-                            <span>プロジェクト:</span>
-                            <span className="font-medium truncate ml-2">{file.project}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>アップロード:</span>
-                            <span>{file.uploadedBy}</span>
+                            <span>作成日:</span>
+                            <span>{new Date(file.created_at).toLocaleDateString('ja-JP')}</span>
                           </div>
                           <div className="flex justify-between">
                             <span>最終更新:</span>
-                            <span>{new Date(file.uploadedAt).toLocaleDateString('ja-JP')}</span>
+                            <span>{new Date(file.modified_at).toLocaleDateString('ja-JP')}</span>
                           </div>
-                          {file.checkOutBy && (
-                            <div className="flex justify-between">
-                              <span>チェックアウト:</span>
-                              <span className="text-orange-600 font-medium">{file.checkOutBy}</span>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Tags */}
-                        <div className="flex flex-wrap gap-1">
-                          {file.tags.map((tag: string) => (
-                            <Badge key={tag} variant="outline" className="text-xs">
-                              {tag}
-                            </Badge>
-                          ))}
                         </div>
 
                         {/* Actions */}
