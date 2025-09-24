@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
-import { sendContractorWelcomeEmail } from '@/lib/mailgun'
 
 export async function POST(request: NextRequest) {
   try {
@@ -127,13 +126,18 @@ export async function POST(request: NextRequest) {
 
     // カスタムウェルカムメールを送信
     try {
-      const loginUrl = `${process.env.NEXTAUTH_URL}/auth/login`
-      await sendContractorWelcomeEmail({
-        email,
-        displayName,
-        password,
-        loginUrl
-      })
+      if (process.env.MAILGUN_API_KEY && process.env.MAILGUN_DOMAIN) {
+        const { sendContractorWelcomeEmail } = await import('@/lib/mailgun')
+        const loginUrl = `${process.env.NEXTAUTH_URL}/auth/login`
+        await sendContractorWelcomeEmail({
+          email,
+          displayName,
+          password,
+          loginUrl
+        })
+      } else {
+        console.log('Mailgun not configured, skipping welcome email')
+      }
     } catch (emailError) {
       console.error('Failed to send welcome email:', emailError)
       // メール送信失敗はログに記録するが、登録処理は成功として扱う
