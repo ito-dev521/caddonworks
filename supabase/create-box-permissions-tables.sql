@@ -65,9 +65,7 @@ CREATE TABLE IF NOT EXISTS box_download_logs (
     reason TEXT,
     ip_address INET,
     user_agent TEXT,
-    attempted_at TIMESTAMPTZ DEFAULT NOW(),
-    INDEX (user_id, attempted_at),
-    INDEX (result, attempted_at)
+    attempted_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Box権限変更ログテーブル
@@ -80,9 +78,7 @@ CREATE TABLE IF NOT EXISTS box_permission_logs (
     old_value BOOLEAN,
     new_value BOOLEAN,
     changed_at TIMESTAMPTZ DEFAULT NOW(),
-    ip_address INET,
-    INDEX (target_user_id, changed_at),
-    INDEX (admin_user_id, changed_at)
+    ip_address INET
 );
 
 -- 緊急操作ログテーブル
@@ -94,9 +90,7 @@ CREATE TABLE IF NOT EXISTS emergency_actions_log (
     affected_user_ids UUID[],
     description TEXT,
     executed_at TIMESTAMPTZ DEFAULT NOW(),
-    ip_address INET,
-    INDEX (admin_user_id, executed_at),
-    INDEX (action, executed_at)
+    ip_address INET
 );
 
 -- デフォルト権限設定を挿入する関数
