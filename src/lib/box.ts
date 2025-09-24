@@ -349,6 +349,36 @@ export async function getBoxFolderCollaborators(folderId: string): Promise<any[]
   }
 }
 
+export async function renameBoxFolder(folderId: string, newName: string): Promise<any> {
+  try {
+    const accessToken = await getAppAuthAccessToken()
+
+    const res = await fetch(`https://api.box.com/2.0/folders/${folderId}`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        name: newName
+      })
+    })
+
+    if (!res.ok) {
+      const errorText = await res.text()
+      throw new Error(`Box folder rename failed ${res.status}: ${errorText}`)
+    }
+
+    const folder: any = await res.json()
+    console.log(`📁 Renamed folder to: ${newName} (ID: ${folderId})`)
+    return folder
+
+  } catch (error) {
+    console.error('❌ Box folder rename failed:', error)
+    throw error
+  }
+}
+
 export async function createProjectFolderStructure(projectTitle: string, projectId: string, companyFolderId: string): Promise<{
   folderId: string;
   subfolders: Record<string, string>;
@@ -358,7 +388,7 @@ export async function createProjectFolderStructure(projectTitle: string, project
 
     // メインプロジェクトフォルダを作成（会社フォルダ下）
     const mainFolderName = `[PRJ-${projectId.slice(0, 8)}] ${projectTitle}`
-    
+
 
     const mainFolderRes = await fetch('https://api.box.com/2.0/folders', {
       method: 'POST',
@@ -397,7 +427,7 @@ export async function createProjectFolderStructure(projectTitle: string, project
       console.log(`📁 Created new folder: ${mainFolderName} (ID: ${mainFolderId})`)
     }
 
-    
+
 
     // 既存のサブフォルダを取得
     const existingItems = await getBoxFolderItems(mainFolderId)
@@ -406,9 +436,9 @@ export async function createProjectFolderStructure(projectTitle: string, project
     // フォルダ名マッピング（Box内の実際のフォルダ名に対応）
     const folderMapping: Record<string, string[]> = {
       '受取': ['01_受取データ', '受取', '01_受取', '01_'],
-      '作業': ['02_作業フォルダ', '作業', '02_作業', '02_'],
+      '作業': ['02_作業データ', '作業', '02_作業', '02_'],
       '納品': ['03_納品データ', '納品', '03_納品', '03_'],
-      '契約': ['04_契約資料', '契約', '04_契約', '04_']
+      '契約': ['04_契約データ', '契約', '04_契約', '04_']
     }
 
     // 既存のフォルダから該当するサブフォルダを見つける
