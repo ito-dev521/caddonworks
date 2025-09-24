@@ -44,20 +44,45 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 1. Supabase Authでユーザーを作成（メール認証必須）
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
+    // 1. Supabase Authでユーザーを作成
+    const isDevelopment = process.env.NODE_ENV === 'development'
+    
+    let authData, authError
+    
+    if (isDevelopment) {
+      // 開発環境：Supabaseのメール設定問題を回避するため、admin APIを使用
+      const { createSupabaseAdmin } = await import('@/lib/supabase')
+      const supabaseAdmin = createSupabaseAdmin()
+      
+      const result = await supabaseAdmin.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true, // 開発環境では自動確認
+        user_metadata: {
           display_name: displayName,
           role: 'Contractor'
-        },
-        emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/auth/login?verified=true`
-      }
-    })
-
-    // メール認証は必須のため、自動確認は行わない
+        }
+      })
+      
+      authData = result.data
+      authError = result.error
+    } else {
+      // 本番環境：通常のサインアップ（メール認証必須）
+      const result = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            display_name: displayName,
+            role: 'Contractor'
+          },
+          emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/auth/login?verified=true`
+        }
+      })
+      
+      authData = result.data
+      authError = result.error
+    }
 
     if (authError) {
       console.error('Auth signup error:', authError)
@@ -139,12 +164,16 @@ export async function POST(request: NextRequest) {
     }
 
     // 成功レスポンス
+    const successMessage = isDevelopment 
+      ? '受注者登録が完了しました。開発環境のため、すぐにログインできます。'
+      : '受注者登録が完了しました。メールアドレスに認証リンクを送信しました。メール内のリンクをクリックして認証を完了してからログインしてください。'
+    
     return NextResponse.json({
-      message: '受注者登録が完了しました。メールアドレスに認証リンクを送信しました。メール内のリンクをクリックして認証を完了してからログインしてください。',
+      message: successMessage,
       data: {
         userId: userData.id,
         authUserId: authData.user.id,
-        emailConfirmationRequired: true
+        emailConfirmationRequired: !isDevelopment
       }
     }, { status: 200 })
 

@@ -327,8 +327,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw error
       }
 
-      // メール認証状態をチェック
-      if (data?.user && !data.user.email_confirmed_at) {
+      // メール認証状態をチェック（本番環境のみ）
+      const isDevelopment = process.env.NODE_ENV === 'development'
+      if (!isDevelopment && data?.user && !data.user.email_confirmed_at) {
         await supabase.auth.signOut()
         throw new Error('メールアドレスの認証が完了していません。受信したメールのリンクをクリックして認証を完了してください。')
       }
