@@ -41,7 +41,7 @@ export default function Error({
         <div className="flex space-x-3">
           <button
             onClick={reset}
-            className="flex-1 bg-engineering-blue text-white px-4 py-2 rounded-lg hover:bg-engineering-blue/90 transition-colors"
+            className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
           >
             再試行
           </button>

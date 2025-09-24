@@ -53,17 +53,15 @@ module.exports = {
           foreground: "hsl(var(--card-foreground))",
         },
         // Civil Engineering Brand Colors
-        engineering: {
-          blue: '#0066CC',
-          'blue-dark': '#004499',
-          'blue-light': '#4D94FF',
-          green: '#10B981',
-          'green-dark': '#059669',
-          'green-light': '#34D399',
-          slate: '#64748B',
-          'slate-dark': '#334155',
-          'slate-light': '#94A3B8',
-        }
+        'engineering-blue': '#0066CC',
+        'engineering-blue-dark': '#004499',
+        'engineering-blue-light': '#4D94FF',
+        'engineering-green': '#10B981',
+        'engineering-green-dark': '#059669',
+        'engineering-green-light': '#34D399',
+        'engineering-slate': '#64748B',
+        'engineering-slate-dark': '#334155',
+        'engineering-slate-light': '#94A3B8',
       },
       borderRadius: {
         lg: "var(--radius)",
