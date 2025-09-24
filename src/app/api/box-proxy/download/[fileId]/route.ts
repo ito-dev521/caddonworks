@@ -165,38 +165,63 @@ export async function GET(
 
 // 権限チェック関数
 async function checkDownloadPermission(userId: string, folderId: string | null, folderName: string | null) {
-  // デフォルト権限設定（将来的にデータベースから取得）
-  const defaultPermissions: Record<string, boolean> = {
-    '01_received': false,    // 受取データはダウンロード不可
-    '02_work': false,        // 作業データはダウンロード不可
-    '03_delivery': false,    // 納品データはダウンロード不可
-    '04_contract': true      // 契約データはダウンロード可
-  }
+  try {
+    // データベースから実際の権限を取得
+    const { data: permissions, error: permError } = await supabaseAdmin
+      .from('box_permissions')
+      .select('*')
+      .eq('user_id', userId)
 
-  // フォルダ名から判定
-  if (folderName) {
-    if (folderName.includes('01_') || folderName.includes('受取')) {
-      return { allowed: false, reason: '受取データフォルダはダウンロード禁止です' }
+    if (permError) {
+      console.error('Permission check error:', permError)
+      // エラー時は安全側に倒してアクセス拒否
+      return { allowed: false, reason: 'システムエラーのためアクセスを拒否しました' }
     }
-    if (folderName.includes('02_') || folderName.includes('作業')) {
-      return { allowed: false, reason: '作業データフォルダはダウンロード禁止です' }
-    }
-    if (folderName.includes('03_') || folderName.includes('納品')) {
-      return { allowed: false, reason: '納品データフォルダはダウンロード禁止です' }
-    }
-    if (folderName.includes('04_') || folderName.includes('契約')) {
-      return { allowed: true, reason: '契約データフォルダはダウンロード許可' }
-    }
-  }
 
-  // 緊急停止チェック
-  const emergencyStop = await checkEmergencyStop(userId)
-  if (emergencyStop) {
-    return { allowed: false, reason: '管理者により一時的にアクセスが停止されています' }
-  }
+    // フォルダタイプを特定
+    let folderType = ''
+    if (folderName) {
+      if (folderName.includes('01_') || folderName.includes('受取')) {
+        folderType = '01_received'
+      } else if (folderName.includes('02_') || folderName.includes('作業')) {
+        folderType = '02_work'
+      } else if (folderName.includes('03_') || folderName.includes('納品')) {
+        folderType = '03_delivery'
+      } else if (folderName.includes('04_') || folderName.includes('契約')) {
+        folderType = '04_contract'
+      }
+    }
 
-  // デフォルトは許可（既存の動作を維持）
-  return { allowed: true, reason: 'default permission' }
+    // 該当するフォルダの権限を取得
+    const permission = permissions?.find(p => p.folder_type === folderType)
+
+    if (permission) {
+      if (!permission.can_download) {
+        return {
+          allowed: false,
+          reason: `${permission.folder_name}フォルダはダウンロード権限がありません`
+        }
+      }
+    } else {
+      // 権限設定が見つからない場合はデフォルトで拒否
+      return {
+        allowed: false,
+        reason: '該当フォルダのダウンロード権限が設定されていません'
+      }
+    }
+
+    // 緊急停止チェック
+    const emergencyStop = await checkEmergencyStop(userId)
+    if (emergencyStop) {
+      return { allowed: false, reason: '管理者により一時的にアクセスが停止されています' }
+    }
+
+    return { allowed: true, reason: 'permission granted' }
+
+  } catch (error) {
+    console.error('Permission check error:', error)
+    return { allowed: false, reason: 'システムエラーのためアクセスを拒否しました' }
+  }
 }
 
 // 時間制限チェック
@@ -232,8 +257,23 @@ async function checkDailyLimits(userId: string) {
 
 // 緊急停止チェック
 async function checkEmergencyStop(userId: string) {
-  // 緊急停止フラグをチェック（仮実装）
-  return false // 将来的にデータベースまたはキャッシュから取得
+  try {
+    const { data: emergencyStop, error } = await supabaseAdmin
+      .from('box_emergency_stops')
+      .select('is_stopped')
+      .eq('user_id', userId)
+      .single()
+
+    if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+      console.error('Emergency stop check error:', error)
+      return false
+    }
+
+    return emergencyStop?.is_stopped || false
+  } catch (error) {
+    console.error('Emergency stop check error:', error)
+    return false
+  }
 }
 
 // ダウンロード試行ログ

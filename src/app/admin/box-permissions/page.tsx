@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Navigation } from "@/components/layouts/navigation"
 import { AuthGuard } from "@/components/auth/auth-guard"
 import { motion } from "framer-motion"
+import { supabase } from "@/lib/supabase"
 import {
   FolderLock,
   Users,
@@ -69,7 +70,25 @@ export default function BoxPermissionsPage() {
 
   const fetchUsers = async () => {
     try {
-      const response = await fetch('/api/admin/box-permissions/users')
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        console.error('認証が必要です')
+        return
+      }
+
+      const response = await fetch('/api/admin/box-permissions/users', {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        console.error('API error:', errorData)
+        return
+      }
+
       const data = await response.json()
       setUsers(data.users || [])
     } catch (error) {
@@ -83,9 +102,22 @@ export default function BoxPermissionsPage() {
 
     setIsLoading(true)
     try {
-      const response = await fetch(`/api/admin/box-permissions/users/${userId}`)
-      const data = await response.json()
-      setUserPermissions(data.userPermissions)
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
+      const response = await fetch(`/api/admin/box-permissions/users/${userId}`, {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setUserPermissions(data.userPermissions)
+      } else {
+        console.error('権限取得エラー:', await response.json())
+      }
     } catch (error) {
       console.error('権限取得エラー:', error)
     }
@@ -97,9 +129,15 @@ export default function BoxPermissionsPage() {
     if (!userPermissions) return
 
     try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
       const response = await fetch('/api/admin/box-permissions/update', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
         body: JSON.stringify({
           userId: userPermissions.userId,
           folderId,
@@ -121,6 +159,8 @@ export default function BoxPermissionsPage() {
             )
           }
         })
+      } else {
+        console.error('権限更新エラー:', await response.json())
       }
     } catch (error) {
       console.error('権限更新エラー:', error)
@@ -132,13 +172,24 @@ export default function BoxPermissionsPage() {
     if (!confirm('全受注者のBox アクセスを停止しますか？')) return
 
     try {
-      await fetch('/api/admin/box-permissions/emergency-stop', {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
+      const response = await fetch('/api/admin/box-permissions/emergency-stop', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
         body: JSON.stringify({ action: 'stop_all' })
       })
-      setEmergencyMode(true)
-      alert('全受注者のアクセスを停止しました')
+
+      if (response.ok) {
+        setEmergencyMode(true)
+        alert('全受注者のアクセスを停止しました')
+      } else {
+        console.error('緊急停止エラー:', await response.json())
+      }
     } catch (error) {
       console.error('緊急停止エラー:', error)
     }

@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Star, User, Clock } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
+import { supabase } from "@/lib/supabase"
 
 interface FavoriteMember {
   id: string
@@ -42,11 +43,14 @@ export function FavoriteMemberSelector({
 
     try {
       setLoading(true)
-      const token = localStorage.getItem('auth_token')
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) {
+        throw new Error('認証が必要です。再度ログインしてください。')
+      }
 
       const response = await fetch('/api/favorite-members', {
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${session.access_token}`
         }
       })
 
@@ -55,7 +59,21 @@ export function FavoriteMemberSelector({
       }
 
       const data = await response.json()
-      setFavoriteMembers(data.favorite_members || [])
+
+      const mapped = (data.favorite_members || []).map((item: any) => {
+        const user = item.users || item["users"] || {}
+        return {
+          id: item.id,
+          contractor_id: item.contractor_id,
+          contractor_name: user.display_name || user.name || '',
+          contractor_email: user.email || '',
+          profile_image_url: user.profile_image_url || undefined,
+          notes: item.notes || undefined,
+          added_at: item.added_at
+        } as FavoriteMember
+      })
+
+      setFavoriteMembers(mapped)
     } catch (err) {
       console.error('お気に入り会員取得エラー:', err)
       setError(err instanceof Error ? err.message : 'エラーが発生しました')

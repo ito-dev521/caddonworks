@@ -35,6 +35,7 @@ import { useAuth } from "@/contexts/auth-context"
 import { supabase } from "@/lib/supabase"
 import { AuthGuard } from "@/components/auth/auth-guard"
 import { MEMBER_LEVELS, type MemberLevel } from "@/lib/member-level"
+import { FavoriteMemberSelector } from "@/components/projects/favorite-member-selector"
 
 interface ProjectData {
   id: string
@@ -127,7 +128,7 @@ function ProjectsPageContent() {
   const [showExpiredNotification, setShowExpiredNotification] = useState(false)
   const [expiredProjectsCount, setExpiredProjectsCount] = useState(0)
   const [favoriteMembers, setFavoriteMembers] = useState<any[]>([])
-  const [selectedFavoriteMembers, setSelectedFavoriteMembers] = useState<string[]>([])
+  const [selectedFavoriteContractorId, setSelectedFavoriteContractorId] = useState<string | null>(null)
   const [showFavoriteMembersModal, setShowFavoriteMembersModal] = useState(false)
   const [orgAdmins, setOrgAdmins] = useState<any[]>([])
   const [approvalRequired, setApprovalRequired] = useState(false)
@@ -393,44 +394,15 @@ function ProjectsPageContent() {
         },
         body: JSON.stringify({
           ...newProject,
-          budget: parseBudget(newProject.budget)
+          budget: parseBudget(newProject.budget),
+          selected_favorite_contractor_id: selectedFavoriteContractorId
         })
       })
 
       const result = await response.json()
 
       if (response.ok) {
-        const projectId = result.project.id
-        
-        // お気に入り会員に優先依頼を送信
-        if (selectedFavoriteMembers.length > 0) {
-          try {
-            const invitationResponse = await fetch('/api/priority-invitations', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${session.access_token}`
-              },
-              body: JSON.stringify({
-                project_id: projectId,
-                contractor_ids: selectedFavoriteMembers,
-                expires_in_hours: 72 // 3日間
-              })
-            })
-
-            const invitationResult = await invitationResponse.json()
-            if (invitationResponse.ok) {
-              alert(`案件が正常に作成されました。${selectedFavoriteMembers.length}名のお気に入り会員に優先依頼を送信しました。`)
-            } else {
-              alert(`案件は作成されましたが、優先依頼の送信に失敗しました: ${invitationResult.message}`)
-            }
-          } catch (error) {
-            console.error('優先依頼送信エラー:', error)
-            alert('案件は作成されましたが、優先依頼の送信に失敗しました')
-          }
-        } else {
-          alert('案件が正常に作成されました')
-        }
+        alert(result.message || '案件が正常に作成されました')
 
         setShowNewProjectForm(false)
         setNewProject({
@@ -448,7 +420,7 @@ function ProjectsPageContent() {
           approver_ids: [] as string[],
           support_enabled: false
         })
-        setSelectedFavoriteMembers([])
+        setSelectedFavoriteContractorId(null)
         // 案件一覧を再読み込み
         await fetchProjects()
       } else {
@@ -1681,6 +1653,15 @@ function ProjectsPageContent() {
                           </option>
                         ))}
                       </select>
+                    </div>
+
+                    {/* お気に入り会員の中から1人を選択（任意） */}
+                    <div className="md:col-span-2">
+                      <FavoriteMemberSelector
+                        selectedContractorId={selectedFavoriteContractorId}
+                        onSelectionChange={(id) => setSelectedFavoriteContractorId(id)}
+                        onSkip={() => setSelectedFavoriteContractorId(null)}
+                      />
                     </div>
 
                     {/* 承認者選択（承認機能が有効な場合のみ表示） */}

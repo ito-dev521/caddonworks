@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
 
         // 各受注者の権限を一時停止状態に設定
         for (const contractor of affectedUsers) {
-          await setEmergencyStop(contractor.id, true)
+          await setEmergencyStop(contractor.id, true, user.id, '管理者による緊急停止')
         }
         break
 
@@ -130,9 +130,32 @@ export async function POST(request: NextRequest) {
 }
 
 // 緊急停止状態を設定
-async function setEmergencyStop(userId: string, stopped: boolean) {
-  console.log(`🚨 Emergency stop for user ${userId}: ${stopped}`)
-  // 実装時：緊急停止フラグをデータベースまたはキャッシュに設定
+async function setEmergencyStop(userId: string, stopped: boolean, adminId?: string, reason?: string) {
+  try {
+    const updateData: any = {
+      is_stopped: stopped,
+      updated_at: new Date().toISOString()
+    }
+
+    if (stopped) {
+      updateData.stopped_by = adminId
+      updateData.stopped_at = new Date().toISOString()
+      updateData.reason = reason || '管理者による停止'
+    }
+
+    const { error } = await supabaseAdmin
+      .from('box_emergency_stops')
+      .upsert(updateData)
+      .eq('user_id', userId)
+
+    if (error) {
+      console.error('Emergency stop update error:', error)
+    } else {
+      console.log(`🚨 Emergency stop for user ${userId}: ${stopped}`)
+    }
+  } catch (error) {
+    console.error('Emergency stop setting error:', error)
+  }
 }
 
 // 全権限キャッシュクリア

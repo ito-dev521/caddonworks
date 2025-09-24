@@ -38,9 +38,38 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: '管理者権限が必要です' }, { status: 403 })
     }
 
-    // Box権限設定テーブルがまだないので、将来的にここで実装
-    // 現在はログのみ出力
-    console.log(`📝 Box権限変更: ${userId} - ${folderId} - ${permissionType}: ${value}`)
+    // 現在の値を取得
+    const { data: currentPermission, error: currentError } = await supabaseAdmin
+      .from('box_permissions')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('folder_type', folderId)
+      .single()
+
+    const oldValue = currentPermission ? currentPermission[`can_${permissionType}`] : null
+
+    // Box権限設定を更新
+    const updateData = {
+      [`can_${permissionType}`]: value,
+      updated_at: new Date().toISOString()
+    }
+
+    const { error: updateError } = await supabaseAdmin
+      .from('box_permissions')
+      .update(updateData)
+      .eq('user_id', userId)
+      .eq('folder_type', folderId)
+
+    if (updateError) {
+      console.error('Permission update error:', updateError)
+      return NextResponse.json({
+        success: false,
+        error: '権限更新に失敗しました',
+        details: updateError.message
+      }, { status: 500 })
+    }
+
+    console.log(`📝 Box権限変更成功: ${userId} - ${folderId} - ${permissionType}: ${oldValue} → ${value}`)
 
     // 変更ログをデータベースに記録
     const { error: logError } = await supabaseAdmin
@@ -50,15 +79,15 @@ export async function PUT(request: NextRequest) {
         target_user_id: userId,
         folder_id: folderId,
         permission_type: permissionType,
-        old_value: !value, // 仮の旧値
+        old_value: oldValue,
         new_value: value,
         changed_at: new Date().toISOString(),
         ip_address: request.headers.get('x-forwarded-for') || 'unknown'
       })
 
-    // テーブルが存在しない場合はエラーを無視
-    if (logError && !logError.message.includes('relation "box_permission_logs" does not exist')) {
+    if (logError) {
       console.error('Log insert error:', logError)
+      // ログエラーは処理を停止しない
     }
 
     // 権限キャッシュをクリア（実装時）

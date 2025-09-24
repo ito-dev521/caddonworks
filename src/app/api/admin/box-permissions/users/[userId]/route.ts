@@ -22,52 +22,42 @@ export async function GET(
       return NextResponse.json({ error: '認証が必要です' }, { status: 401 })
     }
 
-    // ユーザー情報を取得
+    // ユーザー情報と権限設定を取得
     const { data: user, error: userError } = await supabaseAdmin
       .from('users')
-      .select('*')
+      .select(`
+        *,
+        box_permissions (*),
+        box_time_restrictions (*),
+        box_daily_limits (*),
+        box_emergency_stops (*)
+      `)
       .eq('id', userId)
       .single()
 
     if (userError || !user) {
-      return NextResponse.json({ error: 'ユーザーが見つかりません' }, { status: 404 })
+      return NextResponse.json({ error: 'ユーザーが見つかりません', details: userError }, { status: 404 })
     }
 
-    // Box権限設定を取得（まだテーブルがないので仮データ）
-    const defaultPermissions = [
-      {
-        folderId: '01_received',
-        folderName: '01_受取データ',
-        download: false,
-        preview: true,
-        upload: false,
-        edit: false
-      },
-      {
-        folderId: '02_work',
-        folderName: '02_作業データ',
-        download: false,
-        preview: true,
-        upload: true,
-        edit: true
-      },
-      {
-        folderId: '03_delivery',
-        folderName: '03_納品データ',
-        download: false,
-        preview: true,
-        upload: true,
-        edit: false
-      },
-      {
-        folderId: '04_contract',
-        folderName: '04_契約データ',
-        download: true,
-        preview: true,
-        upload: false,
-        edit: false
-      }
-    ]
+    // 権限データを整形
+    const permissions = user.box_permissions?.map(p => ({
+      folderId: p.folder_type,
+      folderName: p.folder_name,
+      download: p.can_download,
+      preview: p.can_preview,
+      upload: p.can_upload,
+      edit: p.can_edit,
+      delete: p.can_delete
+    })) || []
+
+    // 時間制限設定
+    const timeRestrictions = user.box_time_restrictions?.[0] || {}
+
+    // 日次制限設定
+    const dailyLimits = user.box_daily_limits?.[0] || {}
+
+    // 緊急停止状態
+    const emergencyStop = user.box_emergency_stops?.[0] || {}
 
     const userPermissions = {
       userId: user.id,
@@ -77,17 +67,23 @@ export async function GET(
         email: user.email,
         role: user.role
       },
-      permissions: defaultPermissions,
+      permissions,
       timeRestrictions: {
-        enabled: false,
-        startTime: '09:00',
-        endTime: '18:00',
-        timezone: 'Asia/Tokyo'
+        enabled: timeRestrictions.enabled || false,
+        startTime: timeRestrictions.start_time || '09:00',
+        endTime: timeRestrictions.end_time || '18:00',
+        timezone: timeRestrictions.timezone || 'Asia/Tokyo',
+        daysOfWeek: timeRestrictions.days_of_week || [1,2,3,4,5]
       },
       downloadLimits: {
-        enabled: false,
-        maxPerDay: 10,
-        maxSizePerDay: '100MB'
+        enabled: dailyLimits.enabled || false,
+        maxPerDay: dailyLimits.max_downloads_per_day || 10,
+        maxSizePerDay: `${dailyLimits.max_size_per_day_mb || 100}MB`
+      },
+      emergencyStop: {
+        isStopped: emergencyStop.is_stopped || false,
+        stoppedAt: emergencyStop.stopped_at,
+        reason: emergencyStop.reason
       }
     }
 

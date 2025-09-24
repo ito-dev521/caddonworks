@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: '管理者権限が必要です' }, { status: 403 })
     }
 
-    // 全ユーザーを取得（受注者と発注者）
+    // 全ユーザーを取得（メンバーシップとBox権限設定も含む）
     const { data: users, error: usersError } = await supabaseAdmin
       .from('users')
       .select(`
@@ -38,15 +38,20 @@ export async function GET(request: NextRequest) {
         name,
         email,
         role,
-        organizations:memberships!inner(
-          organization:organizations(name)
+        memberships (
+          organizations (
+            name
+          )
+        ),
+        box_emergency_stops (
+          is_stopped
         )
       `)
       .order('name')
 
     if (usersError) {
       console.error('Users fetch error:', usersError)
-      return NextResponse.json({ error: 'ユーザー取得エラー' }, { status: 500 })
+      return NextResponse.json({ error: 'ユーザー取得エラー', details: usersError }, { status: 500 })
     }
 
     // データを整形
@@ -55,7 +60,8 @@ export async function GET(request: NextRequest) {
       name: user.name,
       email: user.email,
       role: user.role,
-      organization: user.organizations?.[0]?.organization?.name
+      organization: user.memberships?.[0]?.organizations?.name || '所属なし',
+      isEmergencyStopped: user.box_emergency_stops?.[0]?.is_stopped || false
     })) || []
 
     return NextResponse.json({
