@@ -9,8 +9,8 @@ CREATE TABLE IF NOT EXISTS box_permissions (
     can_upload BOOLEAN DEFAULT false,
     can_edit BOOLEAN DEFAULT false,
     can_delete BOOLEAN DEFAULT false,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(user_id, folder_type)
 );
 
@@ -23,8 +23,8 @@ CREATE TABLE IF NOT EXISTS box_time_restrictions (
     end_time TIME DEFAULT '18:00:00',
     timezone VARCHAR(50) DEFAULT 'Asia/Tokyo',
     days_of_week INTEGER[] DEFAULT '{1,2,3,4,5}', -- 月-金 (1=月曜)
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Box日次制限設定テーブル
@@ -35,8 +35,8 @@ CREATE TABLE IF NOT EXISTS box_daily_limits (
     max_downloads_per_day INTEGER DEFAULT 10,
     max_size_per_day_mb INTEGER DEFAULT 100,
     reset_time TIME DEFAULT '00:00:00',
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Box緊急停止状態テーブル
@@ -47,8 +47,8 @@ CREATE TABLE IF NOT EXISTS box_emergency_stops (
     stopped_by UUID REFERENCES users(id),
     stopped_at TIMESTAMPTZ,
     reason TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Boxダウンロードログテーブル
@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS box_download_logs (
     reason TEXT,
     ip_address INET,
     user_agent TEXT,
-    attempted_at TIMESTAMPTZ DEFAULT NOW()
+    attempted_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Box権限変更ログテーブル
@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS box_permission_logs (
     permission_type VARCHAR(50), -- 'download', 'upload', 'edit', etc.
     old_value BOOLEAN,
     new_value BOOLEAN,
-    changed_at TIMESTAMPTZ DEFAULT NOW(),
+    changed_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     ip_address INET
 );
 
@@ -89,7 +89,7 @@ CREATE TABLE IF NOT EXISTS emergency_actions_log (
     action VARCHAR(50) NOT NULL, -- 'stop_all', 'stop_user', 'resume_all', etc.
     affected_user_ids UUID[],
     description TEXT,
-    executed_at TIMESTAMPTZ DEFAULT NOW(),
+    executed_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     ip_address INET
 );
 
@@ -151,7 +151,7 @@ CREATE TRIGGER trigger_new_user_box_permissions
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
-    NEW.updated_at = NOW();
+    NEW.updated_at = CURRENT_TIMESTAMP;
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
