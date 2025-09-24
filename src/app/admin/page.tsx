@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Shield, Users, Building2, FileText, ScrollText, Settings } from "lucide-react"
+import { Shield, Users, Building2, FileText, ScrollText, Settings, FolderLock } from "lucide-react"
 import { Navigation } from "@/components/layouts/navigation"
 import { motion } from "framer-motion"
 import { AuthGuard } from "@/components/auth/auth-guard"
@@ -55,6 +55,12 @@ export default function AdminDashboardPage() {
                 icon={<Settings className="w-6 h-6" />}
                 title="システム管理"
                 desc="機能フラグやメンテナンス操作"
+              />
+              <DashboardCard
+                href="/admin/box-permissions"
+                icon={<FolderLock className="w-6 h-6" />}
+                title="Box権限管理"
+                desc="フォルダ別ダウンロード制限・ユーザー権限設定"
               />
             </div>
           </motion.div>
