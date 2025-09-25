@@ -32,6 +32,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '管理者権限が必要です' }, { status: 403 })
     }
 
+    // 管理者ユーザープロファイルIDを取得
+    const { data: adminProfile } = await supabaseAdmin
+      .from('users')
+      .select('id')
+      .eq('auth_user_id', user.id)
+      .maybeSingle()
+
+    console.log('🔍 Admin profile lookup:', {
+      authUserId: user.id,
+      profileFound: !!adminProfile,
+      profileId: adminProfile?.id
+    })
+
     let affectedUsers: any[] = []
     let logMessage = ''
 
@@ -48,7 +61,7 @@ export async function POST(request: NextRequest) {
 
         // 各受注者の権限を一時停止状態に設定
         for (const contractor of affectedUsers) {
-          await setEmergencyStop(contractor.id, true, user.id, '管理者による緊急停止')
+          await setEmergencyStop(contractor.id, true, adminProfile?.id, '管理者による緊急停止')
         }
         break
 
@@ -89,22 +102,42 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: '無効なアクションです' }, { status: 400 })
     }
 
-    // 緊急操作ログを記録
-    const { error: logError } = await supabaseAdmin
-      .from('emergency_actions_log')
-      .insert({
-        admin_user_id: user.id,
-        admin_email: user.email,
-        action: action,
-        affected_user_ids: affectedUsers.map(u => u.id),
-        description: logMessage,
-        executed_at: new Date().toISOString(),
-        ip_address: request.headers.get('x-forwarded-for') || 'unknown'
-      })
+    // 緊急操作ログを記録 (プロファイルIDを使用)
+    const logData: any = {
+      admin_email: user.email,
+      action: action,
+      affected_user_ids: affectedUsers.map(u => u.id),
+      description: logMessage,
+      ip_address: request.headers.get('x-forwarded-for') || 'unknown'
+    }
 
-    // テーブルが存在しない場合はエラーを無視
-    if (logError && !logError.message.includes('relation "emergency_actions_log" does not exist')) {
-      console.error('Emergency log insert error:', logError)
+    // プロファイルIDが存在する場合のみ admin_user_id を設定
+    if (adminProfile?.id) {
+      logData.admin_user_id = adminProfile.id
+    } else {
+      console.warn('⚠️ Admin profile not found for auth user:', user.id, 'email:', user.email)
+    }
+
+    console.log('📝 Emergency log data:', logData)
+
+    // 緊急操作ログを安全に挿入（エラーを無視）
+    try {
+      const { error: logError } = await supabaseAdmin
+        .from('emergency_actions_log')
+        .insert(logData)
+
+      if (logError) {
+        console.error('Emergency log insert error:', {
+          error: logError,
+          logData: logData
+        })
+        // エラーが発生してもアプリケーションの処理は継続する
+      } else {
+        console.log('✅ Emergency action logged successfully')
+      }
+    } catch (error) {
+      console.error('Emergency log insert exception:', error)
+      // ログの保存に失敗しても緊急操作は継続する
     }
 
     // 全権限キャッシュをクリア

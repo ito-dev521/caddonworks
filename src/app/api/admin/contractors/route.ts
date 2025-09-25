@@ -45,7 +45,8 @@ export async function GET() {
           auth_user_id,
           formal_name,
           phone_number,
-          member_level
+          member_level,
+          role
         `)
         .order('created_at', { ascending: false })
 
@@ -56,16 +57,13 @@ export async function GET() {
         }, { status: 500 })
       }
 
-      // 真の個人事業主のみを抽出（明示的に2人のみ）
-      const contractors = allUsers?.filter(user =>
-        user.email === 'contractor@demo.com' ||
-        user.email === 'iiistylelab@gmail.com'
-      ) || []
+      // 受注者ロールのユーザーのみ抽出（memberships テーブルが使えない環境向けフォールバック）
+      const contractors = allUsers?.filter(user => (user as any)?.role === 'Contractor') || []
 
       return NextResponse.json({
         contractors: contractors.map(user => ({
           ...user,
-          role: 'Contractor', // 仮の役割を設定
+          role: (user as any)?.role || 'Contractor',
           active: true // 仮の状態を設定
         })),
         total: contractors.length,
@@ -73,13 +71,9 @@ export async function GET() {
       }, { status: 200 })
     }
 
-    // メンバーシップから受注者情報を取得し、真の個人事業主のみフィルタリング
-    const contractors = contractorMemberships
-      ?.filter(membership =>
-        (membership.users as any)?.email === 'contractor@demo.com' ||
-        (membership.users as any)?.email === 'iiistylelab@gmail.com'
-      )
-      ?.map(membership => ({
+    // メンバーシップから受注者情報を取得
+    let contractors = (contractorMemberships || [])
+      .map(membership => ({
         id: (membership.users as any)?.id,
         email: (membership.users as any)?.email,
         display_name: (membership.users as any)?.display_name,
@@ -90,7 +84,31 @@ export async function GET() {
         formal_name: (membership.users as any)?.formal_name,
         phone_number: (membership.users as any)?.phone_number,
         member_level: (membership.users as any)?.member_level
-      })) || []
+      }))
+
+    // フォールバック: memberships に該当がない場合、users.role から推定
+    if (!contractors || contractors.length === 0) {
+      const { data: roleUsers, error: roleUsersError } = await supabaseAdmin
+        .from('users')
+        .select('id, email, display_name, organization, created_at, formal_name, phone_number, member_level, role')
+        .eq('role', 'Contractor')
+        .order('created_at', { ascending: false })
+
+      if (!roleUsersError && roleUsers) {
+        contractors = roleUsers.map((user: any) => ({
+          id: user.id,
+          email: user.email,
+          display_name: user.display_name,
+          organization: user.organization,
+          role: user.role || 'Contractor',
+          active: true,
+          created_at: user.created_at,
+          formal_name: user.formal_name,
+          phone_number: user.phone_number,
+          member_level: user.member_level
+        }))
+      }
+    }
 
     return NextResponse.json({
       contractors: contractors,

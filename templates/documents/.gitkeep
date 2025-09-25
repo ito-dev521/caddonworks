@@ -1,0 +1,6 @@
+# This file ensures the templates/documents directory is tracked by Git
+#
+# Place your Excel templates in this directory:
+# - order_template.xlsx (発注書テンプレート)
+# - completion_template.xlsx (完了届テンプレート)
+# - monthly_invoice_template.xlsx (月次請求書テンプレート)

@@ -210,6 +210,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // 取得失敗時は無視
       }
 
+      // メンバーシップが無い/ロールが未解決の場合、usersテーブルのroleをフォールバック
+      if (!resolvedRole) {
+        try {
+          const { data: roleFromUsers } = await supabase
+            .from('users')
+            .select('role')
+            .eq('auth_user_id', authUserId)
+            .maybeSingle()
+          if (roleFromUsers?.role) {
+            resolvedRole = roleFromUsers.role as UserRole
+          }
+        } catch (_) {
+          // 無視
+        }
+      }
+
       setUserRole(resolvedRole || null)
       
       // 組織情報を取得

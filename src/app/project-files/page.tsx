@@ -26,6 +26,7 @@ import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/contexts/auth-context"
 import { AuthGuard } from "@/components/auth/auth-guard"
 import { StatusIndicator } from "@/components/ui/status-indicator"
+import { Trash2 } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import {
   getProjectArchiveStatus,
@@ -75,6 +76,7 @@ export default function ProjectFilesPage() {
   const [folderContents, setFolderContents] = useState<BoxItem[]>([])
   const [loadingFolder, setLoadingFolder] = useState(false)
   const [uploadingFile, setUploadingFile] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const [dragActive, setDragActive] = useState(false)
   const [archiveSettings] = useState<ArchiveSettings>(DEFAULT_ARCHIVE_SETTINGS)
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({})
@@ -163,7 +165,18 @@ export default function ProjectFilesPage() {
       })
 
       if (!response.ok) {
-        throw new Error(`フォルダ内容の取得に失敗しました: ${response.status}`)
+        let message = `フォルダ内容の取得に失敗しました: ${response.status}`
+        try {
+          const text = await response.text()
+          try {
+            const data = JSON.parse(text)
+            const detail = data?.error || data?.message
+            if (detail) message += `\n詳細: ${detail}`
+          } catch {
+            if (text) message += `\n詳細: ${text}`
+          }
+        } catch {}
+        throw new Error(message)
       }
 
       const data = await response.json()
@@ -1039,6 +1052,46 @@ export default function ProjectFilesPage() {
                                       {uploadingFile ? 'アップロード中...' : 'ファイル追加'}
                                     </Button>
                                   </label>
+                                </div>
+                              )}
+                              {item.type === 'file' && (
+                                <div className="mt-3">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="w-full text-red-600 border-red-300 hover:bg-red-50"
+                                    disabled={deletingId === item.id}
+                                    onClick={async () => {
+                                      if (!confirm(`「${item.name}」を削除します。よろしいですか？`)) return
+                                      try {
+                                        setDeletingId(item.id)
+                                        const { data: { session } } = await supabase.auth.getSession()
+                                        if (!session) throw new Error('セッションが見つかりません')
+                                        const res = await fetch(`/api/box/file/${item.id}`, {
+                                          method: 'DELETE',
+                                          headers: { 'Authorization': `Bearer ${session.access_token}` }
+                                        })
+                                        const text = await res.text()
+                                        if (!res.ok) {
+                                          try {
+                                            const j = JSON.parse(text)
+                                            throw new Error(j?.error || j?.message || `削除に失敗しました: ${res.status}`)
+                                          } catch {
+                                            throw new Error(text || `削除に失敗しました: ${res.status}`)
+                                          }
+                                        }
+                                        // 一覧から除去
+                                        setFolderContents(prev => prev.filter(f => f.id !== item.id))
+                                      } catch (e: any) {
+                                        alert(e?.message || '削除に失敗しました')
+                                      } finally {
+                                        setDeletingId(null)
+                                      }
+                                    }}
+                                  >
+                                    <Trash2 className="w-3 h-3 mr-2" />
+                                    {deletingId === item.id ? '削除中...' : '削除'}
+                                  </Button>
                                 </div>
                               )}
                             </CardContent>

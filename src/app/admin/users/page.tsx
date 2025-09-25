@@ -206,10 +206,12 @@ function AdminUsersPageContent() {
     try {
       setIsSaving(true)
       const { data: { session } } = await supabase.auth.getSession()
-      
+
       if (!session) {
         throw new Error('セッションが見つかりません')
       }
+
+      console.log('🔄 会員レベル更新開始:', { userId, newLevel })
 
       const response = await fetch('/api/admin/users', {
         method: 'PUT',
@@ -223,8 +225,11 @@ function AdminUsersPageContent() {
         })
       })
 
+      const responseData = await response.json()
+      console.log('📡 サーバーレスポンス:', responseData)
+
       if (!response.ok) {
-        throw new Error('会員レベルの更新に失敗しました')
+        throw new Error(responseData.message || '会員レベルの更新に失敗しました')
       }
 
       // ローカル状態を更新

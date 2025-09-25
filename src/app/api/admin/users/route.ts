@@ -58,6 +58,20 @@ export async function GET(request: NextRequest) {
 
     const roles: OperatorRole[] = ['Admin', 'Reviewer', 'Auditor']
 
+    // 運営組織IDを確実に取得する
+    let finalOperatorOrgId = operatorOrgId
+
+    if (!finalOperatorOrgId) {
+      // デフォルト運営組織を探す
+      const { data: operatorOrg } = await supabaseAdmin
+        .from('organizations')
+        .select('id')
+        .eq('name', '運営会社')
+        .single()
+
+      finalOperatorOrgId = operatorOrg?.id
+    }
+
     const query = supabaseAdmin
       .from('memberships')
       .select(`
@@ -71,14 +85,23 @@ export async function GET(request: NextRequest) {
           formal_name,
           phone_number,
           address,
+          member_level,
           created_at,
           updated_at
+        ),
+        organizations!inner(
+          id,
+          name
         )
       `)
       .in('role', roles)
 
-    if (operatorOrgId) {
-      query.eq('org_id', operatorOrgId)
+    // 運営組織IDがある場合は必ず絞り込む
+    if (finalOperatorOrgId) {
+      query.eq('org_id', finalOperatorOrgId)
+    } else {
+      // 運営組織が見つからない場合は運営組織名で絞り込む
+      query.eq('organizations.name', '運営会社')
     }
 
     const { data: rows, error } = await query
@@ -98,8 +121,12 @@ export async function GET(request: NextRequest) {
 // 追加・編集・削除（運営会社スタッフ専用）
 export async function POST(request: NextRequest) {
   try {
+    console.log('=== 運営ユーザー作成API開始 ===')
     const ctx = await assertAdminAndGetOperatorOrgId(request)
-    if ('error' in ctx) return ctx.error
+    if ('error' in ctx) {
+      console.log('管理者権限チェック失敗')
+      return ctx.error
+    }
     const { supabaseAdmin, operatorOrgId } = ctx
 
     console.log('運営ユーザー作成: operatorOrgId =', operatorOrgId)
@@ -116,7 +143,7 @@ export async function POST(request: NextRequest) {
     let finalOperatorOrgId = operatorOrgId
     if (!finalOperatorOrgId) {
       console.log('運営組織IDが見つからないため、デフォルト組織を作成/取得します')
-      const { data: defaultOrg, error: orgError } = await supabaseAdmin
+      const { data: defaultOrg } = await supabaseAdmin
         .from('organizations')
         .select('id')
         .eq('name', '運営会社')
@@ -166,9 +193,14 @@ export async function POST(request: NextRequest) {
       email_confirm: false
     })
     if (authErr) {
+      console.error('認証ユーザー作成エラー:', authErr)
       return NextResponse.json({ message: '認証ユーザー作成に失敗しました: ' + authErr.message }, { status: 400 })
     }
-    const authUserId = created.user?.id as string
+    if (!created?.user?.id) {
+      console.error('認証ユーザーIDが取得できませんでした:', created)
+      return NextResponse.json({ message: '認証ユーザーの作成に失敗しました' }, { status: 400 })
+    }
+    const authUserId = created.user.id
 
     // users プロフィール作成
     const { data: profile, error: profileErr } = await supabaseAdmin
@@ -206,8 +238,15 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ message: '運営ユーザーを作成しました', user: { id: profile.id, email, display_name: profile.display_name, role } }, { status: 200 })
   } catch (error) {
-    console.error('admin users POST API: サーバーエラー:', error)
-    return NextResponse.json({ message: 'サーバーエラーが発生しました' }, { status: 500 })
+    console.error('=== 運営ユーザー作成API: サーバーエラー ===', error)
+    console.error('エラーの詳細:', {
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
+    })
+    return NextResponse.json({
+      message: 'サーバーエラーが発生しました',
+      error: error instanceof Error ? error.message : String(error)
+    }, { status: 500 })
   }
 }
 
@@ -218,7 +257,15 @@ export async function PUT(request: NextRequest) {
     const { supabaseAdmin, operatorOrgId } = ctx
 
     const body = await request.json()
-    const { userId, displayName, role } = body as { userId?: string; displayName?: string; role?: OperatorRole }
+    const { userId, displayName, role, memberLevel } = body as {
+      userId?: string;
+      displayName?: string;
+      role?: OperatorRole;
+      memberLevel?: 'beginner' | 'intermediate' | 'advanced'
+    }
+
+    console.log('ユーザー更新リクエスト:', { userId, displayName, role, memberLevel })
+
     if (!userId) {
       return NextResponse.json({ message: 'userId は必須です' }, { status: 400 })
     }
@@ -233,11 +280,40 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ message: '運営ユーザーではありません' }, { status: 403 })
     }
 
+    // ユーザー情報の更新
+    const userUpdates: any = {}
     if (displayName) {
-      await supabaseAdmin.from('users').update({ display_name: displayName, updated_at: new Date().toISOString() }).eq('id', userId)
+      userUpdates.display_name = displayName
     }
+    if (memberLevel) {
+      userUpdates.member_level = memberLevel
+    }
+
+    if (Object.keys(userUpdates).length > 0) {
+      userUpdates.updated_at = new Date().toISOString()
+
+      const { error: userUpdateError } = await supabaseAdmin
+        .from('users')
+        .update(userUpdates)
+        .eq('id', userId)
+
+      if (userUpdateError) {
+        console.error('ユーザー更新エラー:', userUpdateError)
+        return NextResponse.json({ message: 'ユーザー情報の更新に失敗しました' }, { status: 500 })
+      }
+    }
+
+    // メンバーシップの更新
     if (role) {
-      await supabaseAdmin.from('memberships').update({ role }).eq('id', targetMembership.id)
+      const { error: membershipUpdateError } = await supabaseAdmin
+        .from('memberships')
+        .update({ role })
+        .eq('id', targetMembership.id)
+
+      if (membershipUpdateError) {
+        console.error('メンバーシップ更新エラー:', membershipUpdateError)
+        return NextResponse.json({ message: '権限の更新に失敗しました' }, { status: 500 })
+      }
     }
 
     return NextResponse.json({ message: '更新しました' }, { status: 200 })
