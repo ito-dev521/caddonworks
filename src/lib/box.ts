@@ -56,7 +56,11 @@ export async function getAppAuthAccessToken(): Promise<string> {
     const clientID = getEnv('BOX_CLIENT_ID')
     const clientSecret = getEnv('BOX_CLIENT_SECRET')
     const enterpriseId = getEnv('BOX_ENTERPRISE_ID')
-    const privateKey = getEnv('BOX_JWT_PRIVATE_KEY').replace(/\\n/g, '\n')
+    let privateKey = getEnv('BOX_JWT_PRIVATE_KEY')
+    // 先頭と末尾のシングルクォートを除去
+    privateKey = privateKey.replace(/^'|'$/g, '')
+    // エスケープされた改行を実際の改行に変換
+    privateKey = privateKey.replace(/\\n/g, '\n')
     const passphrase = getEnv('BOX_JWT_PRIVATE_KEY_PASSPHRASE')
     const publicKeyId = getEnv('BOX_PUBLIC_KEY_ID')
 

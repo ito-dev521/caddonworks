@@ -208,6 +208,34 @@ export default function BoxPermissionsPage() {
     }
   }
 
+  // 緊急時全復旧
+  const emergencyResumeAll = async () => {
+    if (!confirm('全受注者のBox アクセスを復旧しますか？')) return
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
+      const response = await fetch('/api/admin/box-permissions/emergency-stop', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({ action: 'resume_all' })
+      })
+
+      if (response.ok) {
+        setEmergencyMode(false)
+        alert('全受注者のアクセスを復旧しました')
+      } else {
+        console.error('緊急復旧エラー:', await response.json())
+      }
+    } catch (error) {
+      console.error('緊急復旧エラー:', error)
+    }
+  }
+
   // Box同期実行
   const syncUserToBox = async (userId: string) => {
     setIsSyncing(true)
@@ -303,18 +331,39 @@ export default function BoxPermissionsPage() {
             </div>
 
             {/* 緊急操作パネル */}
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+            <div className={`border rounded-lg p-4 mb-6 ${
+              emergencyMode
+                ? 'bg-red-50 border-red-200'
+                : 'bg-orange-50 border-orange-200'
+            }`}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <AlertTriangle className="w-5 h-5 text-red-600" />
-                  <span className="font-semibold text-red-800">緊急操作</span>
+                  <AlertTriangle className={`w-5 h-5 ${
+                    emergencyMode ? 'text-red-600' : 'text-orange-600'
+                  }`} />
+                  <span className={`font-semibold ${
+                    emergencyMode ? 'text-red-800' : 'text-orange-800'
+                  }`}>
+                    緊急操作
+                  </span>
                 </div>
-                <button
-                  onClick={emergencyStopAll}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-semibold"
-                >
-                  全アクセス停止
-                </button>
+                <div className="flex items-center gap-2">
+                  {!emergencyMode ? (
+                    <button
+                      onClick={emergencyStopAll}
+                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-semibold"
+                    >
+                      全アクセス停止
+                    </button>
+                  ) : (
+                    <button
+                      onClick={emergencyResumeAll}
+                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold"
+                    >
+                      全アクセス復旧
+                    </button>
+                  )}
+                </div>
               </div>
               {emergencyMode && (
                 <p className="text-red-700 text-sm mt-2">

@@ -71,10 +71,28 @@ export async function findOrCreateBoxUser(email: string, displayName: string): P
     })
 
     if (!searchResponse.ok) {
-      throw new Error(`Box user search failed: ${searchResponse.status}`)
+      let errorMessage = `HTTP ${searchResponse.status}`
+      try {
+        const errorText = await searchResponse.text()
+        console.error('❌ Box ユーザー検索エラーレスポンス:', errorText)
+        errorMessage = `${searchResponse.status} - ${errorText}`
+      } catch {
+        // エラーテキスト読み取り失敗は無視
+      }
+      throw new Error(`Box user search failed: ${errorMessage}`)
     }
 
-    const searchData = await searchResponse.json()
+    let searchData
+    try {
+      const responseText = await searchResponse.text()
+      if (!responseText) {
+        throw new Error('Empty search response from Box API')
+      }
+      searchData = JSON.parse(responseText)
+    } catch (parseError: any) {
+      console.error('❌ Box 検索レスポンスパースエラー:', parseError)
+      throw new Error(`Failed to parse Box search response: ${parseError.message}`)
+    }
     console.log('📋 Box ユーザー検索結果:', searchData.total_count)
 
     // 既存ユーザーが見つかった場合
@@ -112,11 +130,37 @@ export async function findOrCreateBoxUser(email: string, displayName: string): P
     })
 
     if (!createResponse.ok) {
-      const errorData = await createResponse.json()
-      throw new Error(`Box user creation failed: ${createResponse.status} - ${errorData.message}`)
+      let errorMessage = `HTTP ${createResponse.status}`
+      try {
+        const errorText = await createResponse.text()
+        console.error('❌ Box ユーザー作成エラーレスポンス:', errorText)
+
+        if (errorText) {
+          try {
+            const errorData = JSON.parse(errorText)
+            errorMessage = `${createResponse.status} - ${errorData.message || errorData.error_description || errorText}`
+          } catch {
+            errorMessage = `${createResponse.status} - ${errorText}`
+          }
+        }
+      } catch (textError) {
+        console.error('❌ レスポンス読み取りエラー:', textError)
+      }
+
+      throw new Error(`Box user creation failed: ${errorMessage}`)
     }
 
-    const newUser = await createResponse.json()
+    let newUser
+    try {
+      const responseText = await createResponse.text()
+      if (!responseText) {
+        throw new Error('Empty response from Box API')
+      }
+      newUser = JSON.parse(responseText)
+    } catch (parseError: any) {
+      console.error('❌ Box レスポンスパースエラー:', parseError)
+      throw new Error(`Failed to parse Box API response: ${parseError.message}`)
+    }
     console.log('✅ 新しいBox ユーザーを作成しました:', newUser.login)
 
     return {
