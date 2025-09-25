@@ -61,6 +61,12 @@ export default function BoxPermissionsPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [emergencyMode, setEmergencyMode] = useState(false)
+  const [isSyncing, setIsSyncing] = useState(false)
+  const [syncStatus, setSyncStatus] = useState<{
+    success: boolean
+    message: string
+    details?: string
+  } | null>(null)
 
   // ユーザー一覧を取得
   useEffect(() => {
@@ -202,6 +208,73 @@ export default function BoxPermissionsPage() {
     }
   }
 
+  // Box同期実行
+  const syncUserToBox = async (userId: string) => {
+    setIsSyncing(true)
+    setSyncStatus(null)
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        setSyncStatus({
+          success: false,
+          message: 'セッションエラー',
+          details: '認証情報が見つかりません'
+        })
+        return
+      }
+
+      const user = users.find(u => u.id === userId)
+      const boxEmail = user?.email || ''
+      const boxLogin = boxEmail
+
+      console.log('🔄 Box同期開始:', { userId, boxEmail, boxLogin })
+
+      const response = await fetch('/api/admin/box-sync/user', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          userId,
+          boxEmail,
+          boxLogin
+        })
+      })
+
+      const result = await response.json()
+
+      if (response.ok && result.success) {
+        setSyncStatus({
+          success: true,
+          message: `Box同期完了 (${result.syncedPermissions}/${result.totalPermissions})`,
+          details: result.errors && result.errors.length > 0
+            ? `エラー: ${result.errors.join(', ')}`
+            : `Box User ID: ${result.boxUserId}`
+        })
+
+        // 権限情報を再取得
+        await fetchUserPermissions(userId)
+      } else {
+        setSyncStatus({
+          success: false,
+          message: 'Box同期エラー',
+          details: result.details || result.error || '詳細不明'
+        })
+      }
+    } catch (error: any) {
+      console.error('❌ Box同期エラー:', error)
+      setSyncStatus({
+        success: false,
+        message: '同期処理エラー',
+        details: error.message
+      })
+    } finally {
+      setIsSyncing(false)
+    }
+  }
+
   // フィルタリングされたユーザー
   const filteredUsers = users.filter(user =>
     user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -313,13 +386,63 @@ export default function BoxPermissionsPage() {
                   <div className="space-y-6">
                     {/* 基本情報 */}
                     <div className="bg-white rounded-lg shadow p-6">
-                      <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-                        <Shield className="w-5 h-5" />
-                        {userPermissions.user.name} の権限設定
-                      </h2>
-                      <p className="text-gray-600 text-sm">
-                        {userPermissions.user.email} • {userPermissions.user.role === 'contractor' ? '受注者' : '発注者'}
-                      </p>
+                      <div className="flex items-center justify-between mb-4">
+                        <div>
+                          <h2 className="text-xl font-semibold flex items-center gap-2">
+                            <Shield className="w-5 h-5" />
+                            {userPermissions.user.name} の権限設定
+                          </h2>
+                          <p className="text-gray-600 text-sm">
+                            {userPermissions.user.email} • {userPermissions.user.role === 'contractor' ? '受注者' : '発注者'}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => syncUserToBox(userPermissions.userId)}
+                            disabled={isSyncing}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                          >
+                            {isSyncing ? (
+                              <>
+                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                同期中...
+                              </>
+                            ) : (
+                              <>
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                                Box同期
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Box同期状態表示 */}
+                      {syncStatus && (
+                        <div className={`mb-4 p-3 rounded-lg border ${
+                          syncStatus.success
+                            ? 'bg-green-50 border-green-200 text-green-700'
+                            : 'bg-red-50 border-red-200 text-red-700'
+                        }`}>
+                          <div className="flex items-center gap-2">
+                            {syncStatus.success ? (
+                              <Check className="w-4 h-4" />
+                            ) : (
+                              <X className="w-4 h-4" />
+                            )}
+                            <span className="text-sm font-medium">
+                              {syncStatus.message}
+                            </span>
+                          </div>
+                          {syncStatus.details && (
+                            <p className="text-xs mt-1 opacity-75">
+                              {syncStatus.details}
+                            </p>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {/* フォルダ別権限設定 */}

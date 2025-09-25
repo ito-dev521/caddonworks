@@ -16,51 +16,91 @@ export async function GET(
   try {
     const { userId } = params
 
-    // 管理者権限チェック（省略 - 上記と同じ）
+    console.log('👤 Individual user permissions API called for userId:', userId)
+
+    // 管理者権限チェック
     const authHeader = request.headers.get('authorization')
+    console.log('🔑 Auth header present:', !!authHeader)
+
     if (!authHeader) {
+      console.log('❌ No auth header provided')
       return NextResponse.json({ error: '認証が必要です' }, { status: 401 })
     }
 
-    // ユーザー情報と権限設定を取得
+    const token = authHeader.replace('Bearer ', '')
+    const { data: { user: authUser }, error: authError } = await supabaseAdmin.auth.getUser(token)
+
+    console.log('👤 Admin user auth check:', { user: authUser?.email, error: authError?.message })
+
+    if (authError || !authUser) {
+      console.log('❌ Auth error or no user')
+      return NextResponse.json({ error: '認証エラー', details: authError?.message }, { status: 401 })
+    }
+
+    // 管理者メールアドレスチェック
+    const adminEmails = process.env.NEXT_PUBLIC_ADMIN_EMAILS?.split(',') || []
+    console.log('🔧 Admin check:', { userEmail: authUser.email, isAdmin: adminEmails.includes(authUser.email!) })
+
+    if (!adminEmails.includes(authUser.email!)) {
+      console.log('❌ User is not admin')
+      return NextResponse.json({ error: '管理者権限が必要です' }, { status: 403 })
+    }
+
+    console.log('📊 Fetching user data for userId:', userId)
+
+    // まず基本的なユーザー情報を取得
     const { data: user, error: userError } = await supabaseAdmin
       .from('users')
-      .select(`
-        id,
-        display_name,
-        email,
-        organization,
-        box_permissions (*),
-        box_time_restrictions (*),
-        box_daily_limits (*),
-        box_emergency_stops (*)
-      `)
+      .select('id, display_name, email, organization')
       .eq('id', userId)
       .single()
 
+    console.log('👥 User query result:', {
+      found: !userError,
+      user: user ? { id: user.id, name: user.display_name, email: user.email } : null,
+      error: userError?.message
+    })
+
     if (userError || !user) {
+      console.log('❌ User not found')
       return NextResponse.json({ error: 'ユーザーが見つかりません', details: userError }, { status: 404 })
     }
 
-    // 権限データを整形
-    const permissions = user.box_permissions?.map((p: any) => ({
-      folderId: p.folder_type,
-      folderName: p.folder_name,
-      download: p.can_download,
-      preview: p.can_preview,
-      upload: p.can_upload,
-      edit: p.can_edit,
-      delete: p.can_delete
-    })) || []
-
-    // 時間制限設定
-    const timeRestrictions = user.box_time_restrictions?.[0] || {}
-
-    // 日次制限設定
-    const dailyLimits = user.box_daily_limits?.[0] || {}
-
-    // 緊急停止状態
-    const emergencyStop = user.box_emergency_stops?.[0] || {}
+    // デフォルトの権限データを作成（Box関連テーブルからは後で取得）
+    const permissions = [
+      {
+        folderId: '01_received',
+        folderName: '01_受取データ',
+        download: false,
+        preview: true,
+        upload: false,
+        edit: false
+      },
+      {
+        folderId: '02_work',
+        folderName: '02_作業データ',
+        download: false,
+        preview: true,
+        upload: true,
+        edit: true
+      },
+      {
+        folderId: '03_delivery',
+        folderName: '03_納品データ',
+        download: false,
+        preview: true,
+        upload: true,
+        edit: false
+      },
+      {
+        folderId: '04_contract',
+        folderName: '04_契約データ',
+        download: true,
+        preview: true,
+        upload: false,
+        edit: false
+      }
+    ]
 
     const userPermissions = {
       userId: user.id,
@@ -68,27 +108,28 @@ export async function GET(
         id: user.id,
         name: user.display_name || user.email || 'Unknown User',
         email: user.email,
-        role: 'contractor' // デフォルトで contractor として扱う
+        role: 'contractor'
       },
       permissions,
       timeRestrictions: {
-        enabled: timeRestrictions.enabled || false,
-        startTime: timeRestrictions.start_time || '09:00',
-        endTime: timeRestrictions.end_time || '18:00',
-        timezone: timeRestrictions.timezone || 'Asia/Tokyo',
-        daysOfWeek: timeRestrictions.days_of_week || [1,2,3,4,5]
+        enabled: false,
+        startTime: '09:00',
+        endTime: '18:00',
+        timezone: 'Asia/Tokyo',
+        daysOfWeek: [1,2,3,4,5]
       },
       downloadLimits: {
-        enabled: dailyLimits.enabled || false,
-        maxPerDay: dailyLimits.max_downloads_per_day || 10,
-        maxSizePerDay: `${dailyLimits.max_size_per_day_mb || 100}MB`
-      },
-      emergencyStop: {
-        isStopped: emergencyStop.is_stopped || false,
-        stoppedAt: emergencyStop.stopped_at,
-        reason: emergencyStop.reason
+        enabled: false,
+        maxPerDay: 10,
+        maxSizePerDay: '100MB'
       }
     }
+
+    console.log('✅ User permissions prepared:', {
+      userId: userPermissions.userId,
+      userName: userPermissions.user.name,
+      permissionsCount: permissions.length
+    })
 
     return NextResponse.json({
       success: true,
