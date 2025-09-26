@@ -248,13 +248,38 @@ function ProjectsPageContent() {
   const fetchProjects = useCallback(async () => {
     try {
       setDataLoading(true)
-      // APIを経由して案件データを取得
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) {
-        console.error('セッションが見つかりません')
+
+      // セッション取得とバリデーション
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+
+      if (sessionError) {
+        console.error('セッション取得エラー:', sessionError)
         setDataLoading(false)
         return
       }
+
+      if (!session || !session.user) {
+        console.error('セッションまたはユーザーが見つかりません')
+        setDataLoading(false)
+        return
+      }
+
+      if (!session.access_token) {
+        console.error('アクセストークンが見つかりません')
+        setDataLoading(false)
+        return
+      }
+
+      // トークンの基本的な形式チェック
+      const tokenParts = session.access_token.split('.')
+      if (tokenParts.length !== 3) {
+        console.error('JWT トークン形式エラー:', tokenParts.length, '個の部分')
+        console.error('再ログインが必要です')
+        setDataLoading(false)
+        return
+      }
+
+      console.log('API呼び出し実行中 - ユーザー:', session.user.email)
 
       const response = await fetch('/api/projects', {
         method: 'GET',
@@ -380,7 +405,7 @@ function ProjectsPageContent() {
       }
 
       const { data: { session } } = await supabase.auth.getSession()
-      if (!session) {
+      if (!session || !session.access_token) {
         alert('ログインが必要です')
         setIsSubmitting(false)
         return

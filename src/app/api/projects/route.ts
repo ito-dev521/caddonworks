@@ -83,19 +83,48 @@ async function handlePOST(request: NextRequest) {
     // Authorizationヘッダーからユーザー情報を取得
     const authHeader = request.headers.get('authorization')
     if (!authHeader) {
+      console.error('Authorization header missing')
       return NextResponse.json(
         { message: '認証が必要です' },
         { status: 401 }
       )
     }
 
-    const token = authHeader.replace('Bearer ', '')
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
-    
-    if (authError || !user) {
-      console.error('認証エラー:', authError)
+    const token = authHeader.replace('Bearer ', '').trim()
+    if (!token || token === 'null' || token === 'undefined') {
+      console.error('Invalid token format:', token)
       return NextResponse.json(
-        { message: '認証に失敗しました' },
+        { message: '有効な認証トークンが必要です' },
+        { status: 401 }
+      )
+    }
+
+    // JWT形式の基本的な検証
+    const tokenParts = token.split('.')
+    if (tokenParts.length !== 3) {
+      console.error('JWT token format error. Token parts:', tokenParts.length, 'Token preview:', token.substring(0, 50))
+      return NextResponse.json(
+        { message: 'トークン形式が正しくありません。再ログインしてください。' },
+        { status: 401 }
+      )
+    }
+
+    let user: any = null
+    let authError: any = null
+
+    try {
+      const result = await supabaseAdmin.auth.getUser(token)
+      user = result.data?.user
+      authError = result.error
+    } catch (error) {
+      console.error('Token validation error:', error)
+      authError = error
+    }
+
+    if (authError || !user) {
+      console.error('認証エラー詳細:', authError?.message || authError)
+      return NextResponse.json(
+        { message: '認証に失敗しました。再ログインしてください。' },
         { status: 401 }
       )
     }
@@ -366,12 +395,19 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const token = authHeader.replace('Bearer ', '')
-    
+    const token = authHeader.replace('Bearer ', '').trim()
+    if (!token || token === 'null' || token === 'undefined') {
+      return NextResponse.json({ message: '有効な認証トークンが必要です' }, { status: 401 })
+    }
+
     const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
-    
+
     if (authError || !user) {
-      console.error('projects API: 認証エラー:', authError)
+      console.error('projects API: 認証エラー:', {
+        error: authError,
+        tokenLength: token.length,
+        tokenStart: token.length > 10 ? token.substring(0, 10) + '...' : token
+      })
       return NextResponse.json(
         { message: '認証に失敗しました: ' + (authError?.message || 'ユーザーが見つかりません') },
         { status: 401 }

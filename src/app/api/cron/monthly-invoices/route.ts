@@ -78,13 +78,13 @@ export async function POST(request: NextRequest) {
     }
 
     // 2. 受注者別にグループ化
-    const contractorGroups = new Map()
+    const contractorGroups = new Map<string, { contractor: any; projects: any[] }>()
 
     completedProjects.forEach(project => {
       const contractor = project.contracts[0]?.contractor
       if (!contractor) return
 
-      const contractorId = contractor.id
+      const contractorId = (contractor as any).id
       if (!contractorGroups.has(contractorId)) {
         contractorGroups.set(contractorId, {
           contractor,
@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
         })
       }
 
-      contractorGroups.get(contractorId).projects.push(project)
+      contractorGroups.get(contractorId)!.projects.push(project)
     })
 
     console.log(`👥 対象受注者数: ${contractorGroups.size}`)
@@ -100,10 +100,10 @@ export async function POST(request: NextRequest) {
     const results = []
 
     // 3. 各受注者の月次請求書を作成
-    for (const [contractorId, group] of contractorGroups) {
+    for (const [contractorId, group] of Array.from(contractorGroups.entries())) {
       try {
         // システム利用料計算（各プロジェクト金額の10%）
-        const projectsData = group.projects.map(project => ({
+        const projectsData = group.projects.map((project: any) => ({
           project_id: project.id,
           project_title: project.title,
           project_amount: project.amount,
@@ -111,7 +111,7 @@ export async function POST(request: NextRequest) {
           system_fee: Math.floor(project.amount * 0.1) // 10%のシステム利用料
         }))
 
-        const systemFeeTotal = projectsData.reduce((sum, p) => sum + p.system_fee, 0)
+        const systemFeeTotal = projectsData.reduce((sum: number, p: any) => sum + p.system_fee, 0)
 
         // 既存の請求書チェック
         const { data: existingInvoice } = await supabaseAdmin
@@ -162,7 +162,7 @@ export async function POST(request: NextRequest) {
         const { error: projectsError } = await supabaseAdmin
           .from('monthly_invoice_projects')
           .insert(
-            projectsData.map(p => ({
+            projectsData.map((p: any) => ({
               ...p,
               monthly_invoice_id: invoice.id
             }))

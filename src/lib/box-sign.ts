@@ -106,7 +106,8 @@ class BoxSignAPI {
       }
 
       if (options.message) {
-        signRequestData.message = options.message
+        // Box Sign APIでmessageプロパティが利用可能かチェック
+        (signRequestData as any).message = options.message
       }
 
       console.log('🔄 Box Sign リクエスト作成中...', {

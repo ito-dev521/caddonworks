@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseAdmin = createClient(
@@ -7,18 +7,34 @@ const supabaseAdmin = createClient(
   { auth: { autoRefreshToken: false, persistSession: false } }
 )
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    // 管理者ページからのアクセスを前提とし、認証チェックは簡素化
-    // （実際の認証はページレベルのAuthGuardで行われている前提）
+    // 管理者認証チェック
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader) {
+      return NextResponse.json({ error: '認証が必要です' }, { status: 401 })
+    }
 
-    // 組織のみを取得（受注者を除外）
-    // approval_statusカラムの存在チェックを行い、存在しない場合はエラーハンドリング
+    const token = authHeader.replace('Bearer ', '')
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
+    if (authError || !user) {
+      return NextResponse.json({ error: '認証に失敗しました' }, { status: 401 })
+    }
+
+    // 管理者権限チェック
+    const adminEmails = (process.env.NEXT_PUBLIC_ADMIN_EMAILS || '').split(',').map(e => e.trim().toLowerCase())
+    const isAdmin = !!user.email && adminEmails.includes(user.email.toLowerCase())
+
+    if (!isAdmin) {
+      return NextResponse.json({ error: '管理者権限が必要です' }, { status: 403 })
+    }
+
+    // 組織のみを取得（デモ・テスト用組織は除外）
     let organizations: any[] = []
     let orgError: any = null
 
     try {
-      // まず新しいカラムを含めて取得を試行（受注者を除外）
+      // まず新しいカラムを含めて取得を試行
       const { data, error } = await supabaseAdmin
         .from('organizations')
         .select(`
@@ -33,11 +49,17 @@ export async function GET() {
           billing_email,
           box_folder_id
         `)
-        .neq('name', '個人事業主（受注者）')
+        .not('name', 'like', '%デモ%')
+        .not('name', 'like', '%テスト%')
+        .not('name', 'like', '%受注者%')
+        .not('name', 'like', '%個人事業主%')
+        .not('name', 'ilike', '%demo%')
+        .not('name', 'ilike', '%test%')
+        .not('name', 'ilike', '%contractor%')
         .order('created_at', { ascending: false })
 
       if (error && error.code === '42703') {
-        // カラムが存在しない場合は基本カラムのみ取得（受注者を除外）
+        // カラムが存在しない場合は基本カラムのみ取得
         const { data: basicData, error: basicError } = await supabaseAdmin
           .from('organizations')
           .select(`
@@ -46,9 +68,15 @@ export async function GET() {
             active,
             system_fee,
             created_at,
-            billing_email,
+            billing_email
           `)
-          .neq('name', '個人事業主（受注者）')
+          .not('name', 'like', '%デモ%')
+          .not('name', 'like', '%テスト%')
+          .not('name', 'like', '%受注者%')
+          .not('name', 'like', '%個人事業主%')
+          .not('name', 'ilike', '%demo%')
+          .not('name', 'ilike', '%test%')
+          .not('name', 'ilike', '%contractor%')
           .order('created_at', { ascending: false })
 
         organizations = basicData || []

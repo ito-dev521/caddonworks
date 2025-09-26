@@ -292,7 +292,7 @@ export function SignatureStatus({
                   <div>
                     <div className="font-medium text-gray-900">{signer.email}</div>
                     <div className="text-sm text-gray-600">
-                      {roleLabels[signer.role] || signer.role}
+                      {roleLabels[signer.role as keyof typeof roleLabels] || signer.role}
                     </div>
                   </div>
                 </div>

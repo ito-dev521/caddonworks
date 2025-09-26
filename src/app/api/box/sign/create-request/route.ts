@@ -79,11 +79,14 @@ export async function POST(request: NextRequest) {
 
     // 3. PDFドキュメント生成
     console.log('📄 PDF生成中...', fileName)
+    if (!documentData) {
+      return NextResponse.json({ error: 'Document data is required' }, { status: 400 })
+    }
     const pdfBuffer = await documentGenerator.generateDocument(templateId, documentData)
 
     // 4. Box にファイルアップロード
     console.log('📤 Boxにアップロード中...', { fileName, parentId: boxFileParentId })
-    const uploadResult = await uploadFileToBox(boxFileParentId, fileName, pdfBuffer)
+    const uploadResult = await uploadFileToBox(boxFileParentId, fileName, pdfBuffer as unknown as ArrayBuffer)
     const boxFileId = uploadResult.entries[0].id
 
     // 5. Box Sign 署名リクエスト作成
@@ -92,8 +95,8 @@ export async function POST(request: NextRequest) {
       documentName: fileName,
       boxFileId: boxFileId,
       signers: signers || (type === 'monthly_invoice'
-        ? createMonthlyInvoiceSigners(documentData.contractorEmail!, documentData.contractorName)
-        : createProjectSigners(documentData.contractorEmail!, documentData.clientEmail!, documentData.contractorName, documentData.clientName)
+        ? createMonthlyInvoiceSigners(documentData.contractorEmail!, documentData.contractorName!)
+        : createProjectSigners(documentData.contractorEmail!, documentData.clientEmail!, documentData.contractorName!, documentData.clientName!)
       ),
       message: message || `${fileName}の署名をお願いいたします`,
       daysUntilExpiration

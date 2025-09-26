@@ -318,7 +318,7 @@ export function SignatureManagement({
                 <div className="p-6">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
-                      <div className={`p-2 rounded-lg border ${statusColors[request.status]}`}>
+                      <div className={`p-2 rounded-lg border ${statusColors[request.status as keyof typeof statusColors]}`}>
                         {getStatusIcon(request.status)}
                       </div>
                       <div>
@@ -335,8 +335,8 @@ export function SignatureManagement({
                     </div>
 
                     <div className="flex items-center gap-3">
-                      <span className={`px-3 py-1 rounded-full text-sm font-medium border ${statusColors[request.status]}`}>
-                        {statusLabels[request.status]}
+                      <span className={`px-3 py-1 rounded-full text-sm font-medium border ${statusColors[request.status as keyof typeof statusColors]}`}>
+                        {statusLabels[request.status as keyof typeof statusLabels]}
                       </span>
 
                       <div className="text-right text-sm text-gray-600">

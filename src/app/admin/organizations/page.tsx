@@ -32,7 +32,15 @@ function AdminOrganizationsPageContent() {
     const fetchOrgs = async () => {
       setLoading(true)
       try {
-        const res = await fetch("/api/admin/organizations")
+        // 認証トークンを取得
+        const { data: { session } } = await supabase.auth.getSession()
+        const token = session?.access_token || ''
+
+        const res = await fetch("/api/admin/organizations", {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
         if (res.ok) {
           const json = await res.json()
           setOrgs(json.organizations || [])
@@ -53,9 +61,16 @@ function AdminOrganizationsPageContent() {
 
     setActionLoading(orgId)
     try {
+      // 認証トークンを取得
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token || ''
+
       const res = await fetch(`/api/admin/organizations/${orgId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ active: !currentActive })
       })
 
@@ -94,6 +109,41 @@ function AdminOrganizationsPageContent() {
       if (res.ok) {
         setOrgs(prev => prev.filter(o => o.id !== orgId))
         alert('組織を削除しました')
+      } else {
+        const error = await res.json()
+        alert(`エラー: ${error.message}`)
+      }
+    } catch (e) {
+      console.error(e)
+      alert('処理中にエラーが発生しました')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const handleCleanupOrganizations = async () => {
+    if (!confirm(`デモ・テスト用の組織を一括削除しますか？\n\n以下のパターンの組織が削除されます：\n- デモ、テスト、受注者、個人事業主\n- demo, test, contractor\n\n注意: この操作は取り消せません。`)) return
+
+    setActionLoading('cleanup')
+    try {
+      // 認証トークンを取得
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token || ''
+
+      const res = await fetch('/api/admin/organizations/cleanup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      if (res.ok) {
+        const result = await res.json()
+        alert(`${result.deletedCount}件のデモ組織を削除しました`)
+
+        // ページを再読み込みして最新の組織一覧を表示
+        window.location.reload()
       } else {
         const error = await res.json()
         alert(`エラー: ${error.message}`)
@@ -157,6 +207,18 @@ function AdminOrganizationsPageContent() {
                 <option value="approved">承認済み</option>
                 <option value="rejected">却下</option>
               </select>
+              <button
+                onClick={handleCleanupOrganizations}
+                disabled={actionLoading === 'cleanup'}
+                className="px-4 py-2 bg-red-100 text-red-700 hover:bg-red-200 rounded-lg text-sm font-medium flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {actionLoading === 'cleanup' ? (
+                  <div className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+                ) : (
+                  <Trash2 className="w-4 h-4" />
+                )}
+                デモ組織削除
+              </button>
             </div>
           </div>
 

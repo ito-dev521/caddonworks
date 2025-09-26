@@ -272,8 +272,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       // 実行完了後にfetchingRefをクリア
       fetchingRef.current = null
-      setLoading(false) // ローディング状態を解除
-      // デバッグログ削除
+      // ユーザーロール設定が完了するまで少し待つ
+      setTimeout(() => {
+        setLoading(false) // ローディング状態を解除
+      }, 50)
     }
   }
 
@@ -412,7 +414,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
           // メンバーシップ作成の内部関数
           const createMembership = async (userId: string, orgId: string) => {
-            const { data: membership, error: membershipError } = await supabase
+            const { error: membershipError } = await supabase
               .from('memberships')
               .insert({
                 user_id: userId,
@@ -513,8 +515,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      
-      const { data, error } = await supabase
+
+      const { error } = await supabase
         .from('users')
         .update(updates)
         .eq('id', userProfile.id)

@@ -48,20 +48,40 @@ export default function LoginPage() {
   // 認証状態の変更を監視してリダイレクト
   useEffect(() => {
     if (!loading && userRole && success) {
+      console.log('Login redirect: userRole =', userRole, 'loading =', loading, 'success =', success)
 
       // ユーザーロールに基づいてリダイレクト先を決定
       const redirectPath = getRedirectPath()
+      console.log('Login redirect path:', redirectPath)
 
-      // セッションストレージに保存されたリダイレクト先を確認
-      // 前回のキャッシュはすべてクリア
+      // セッションストレージのクリア
       try {
         sessionStorage.removeItem('redirectAfterLogin')
         sessionStorage.removeItem('previousPage')
         sessionStorage.removeItem('currentPage')
       } catch {}
-      router.push(redirectPath)
+
+      // 少し遅延を入れてリダイレクト実行
+      setTimeout(() => {
+        router.push(redirectPath)
+      }, 100)
     }
   }, [userRole, loading, success, router, getRedirectPath])
+
+  // 成功後にuserRoleの読み込みを待つためのタイマー
+  useEffect(() => {
+    if (success && !userRole && !loading) {
+      console.log('Login: waiting for userRole to be loaded...')
+      const timer = setTimeout(() => {
+        if (!userRole) {
+          console.log('Login: userRole still not loaded, forcing reload')
+          window.location.reload()
+        }
+      }, 3000) // 3秒待ってもロールが読み込まれない場合はリロード
+
+      return () => clearTimeout(timer)
+    }
+  }, [success, userRole, loading])
 
   // 既にログイン済みユーザーの自動リダイレクトを防ぐ
   useEffect(() => {
@@ -93,7 +113,27 @@ export default function LoginPage() {
       await Promise.race([loginPromise, timeoutPromise])
       
       setSuccess("ログインに成功しました")
-      // リダイレクトはuseEffectで処理される
+      console.log('Login success: starting redirect process...')
+
+      // 即座にリダイレクトを試行
+      setTimeout(() => {
+        const redirectPath = getRedirectPath()
+        console.log('Immediate redirect to:', redirectPath)
+        if (redirectPath !== '/dashboard') {
+          router.push(redirectPath)
+        } else {
+          // ダッシュボードの場合は少し待ってからリダイレクト
+          setTimeout(() => {
+            router.push('/dashboard')
+          }, 1000)
+        }
+      }, 500)
+
+      // フォールバック: 5秒後にデフォルトのダッシュボードにリダイレクト
+      setTimeout(() => {
+        console.log('Fallback redirect to dashboard')
+        router.push('/dashboard')
+      }, 5000)
     } catch (err: any) {
       console.error('Login form: ログインエラー', err)
       setError(err.message || "ログインに失敗しました")
