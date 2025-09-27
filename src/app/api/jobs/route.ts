@@ -363,12 +363,18 @@ export async function GET(request: NextRequest) {
       }
     }) || []
 
-    // 期限切れ案件をフィルタリング（受注者側では表示しない）
-    const activeJobs = formattedJobs.filter(job => !job.is_expired)
-
+    // 期限切れ案件の扱い:
+    // - 入札中(bidding)の案件のみ期限切れを除外
+    // - 既に落札済み/進行中/完了など bidding 以外は表示対象にする
+    const visibleJobs = formattedJobs.filter(job => {
+      if (job.status === 'bidding') {
+        return !job.is_expired
+      }
+      return true
+    })
 
     return NextResponse.json({
-      jobs: activeJobs
+      jobs: visibleJobs
     }, { status: 200 })
 
   } catch (error) {
