@@ -115,25 +115,8 @@ export default function LoginPage() {
       setSuccess("ログインに成功しました")
       console.log('Login success: starting redirect process...')
 
-      // 即座にリダイレクトを試行
-      setTimeout(() => {
-        const redirectPath = getRedirectPath()
-        console.log('Immediate redirect to:', redirectPath)
-        if (redirectPath !== '/dashboard') {
-          router.push(redirectPath)
-        } else {
-          // ダッシュボードの場合は少し待ってからリダイレクト
-          setTimeout(() => {
-            router.push('/dashboard')
-          }, 1000)
-        }
-      }, 500)
-
-      // フォールバック: 5秒後にデフォルトのダッシュボードにリダイレクト
-      setTimeout(() => {
-        console.log('Fallback redirect to dashboard')
-        router.push('/dashboard')
-      }, 5000)
+      // リダイレクトは userRole 解決を待つ useEffect に任せる
+      // ここでは成功表示のみ行う
     } catch (err: any) {
       console.error('Login form: ログインエラー', err)
       setError(err.message || "ログインに失敗しました")

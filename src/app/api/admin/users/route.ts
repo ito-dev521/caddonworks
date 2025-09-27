@@ -56,7 +56,8 @@ export async function GET(request: NextRequest) {
     if ('error' in ctx) return ctx.error
     const { supabaseAdmin, operatorOrgId } = ctx
 
-    const roles: OperatorRole[] = ['Admin', 'Reviewer', 'Auditor']
+    // 取得時は広めに拾ってフロントの3ロールへマッピングする
+    const rolesToFetch = ['Admin', 'Reviewer', 'Auditor', 'Owner', 'Member', 'Viewer', 'OrgAdmin', 'Staff', 'Contractor']
 
     // 運営組織IDを確実に取得する
     let finalOperatorOrgId = operatorOrgId
@@ -94,7 +95,7 @@ export async function GET(request: NextRequest) {
           name
         )
       `)
-      .in('role', roles)
+      .in('role', rolesToFetch)
 
     // 運営組織IDがある場合は必ず絞り込む
     if (finalOperatorOrgId) {
@@ -105,12 +106,33 @@ export async function GET(request: NextRequest) {
     }
 
     const { data: rows, error } = await query
+
+    console.log('ユーザー一覧取得結果:', {
+      finalOperatorOrgId,
+      rowsCount: rows?.length,
+      error: error?.message,
+      firstRow: rows?.[0]
+    })
+
     if (error) {
       console.error('ユーザー一覧取得エラー:', error)
       return NextResponse.json({ message: 'ユーザー一覧の取得に失敗しました' }, { status: 400 })
     }
 
-    const users = (rows || []).map((row: any) => ({ ...row.users, role: row.role }))
+    const mapRole = (r: string | null | undefined): OperatorRole => {
+      if (!r) return 'Reviewer'
+      if (r === 'Admin' || r === 'Reviewer' || r === 'Auditor') return r
+      if (r === 'Owner') return 'Admin'
+      if (r === 'Member' || r === 'Viewer') return 'Auditor'
+      // 組織系ロールのフォールバック
+      if (r === 'OrgAdmin' || r === 'Staff') return 'Admin'
+      if (r === 'Contractor') return 'Auditor'
+      return 'Reviewer'
+    }
+    const users = (rows || []).map((row: any) => ({ ...row.users, role: mapRole(row.role) }))
+
+    console.log('最終ユーザー一覧:', { usersCount: users.length, users: users.map(u => ({ id: u.id, email: u.email, role: u.role })) })
+
     return NextResponse.json({ users }, { status: 200 })
   } catch (error) {
     console.error('admin users API: サーバーエラー:', error)
@@ -153,28 +175,45 @@ export async function POST(request: NextRequest) {
         finalOperatorOrgId = defaultOrg.id
         console.log('既存の運営組織を使用:', finalOperatorOrgId)
       } else {
-        // デフォルト運営組織を作成
-        const { data: newOrg, error: createOrgError } = await supabaseAdmin
+        // デフォルト運営組織を作成（スキーマ差異に耐えるフォールバック付き）
+        let createdOrgId: string | null = null
+
+        // 試行1: よりリッチなカラム（存在すれば利用）
+        const attempt1 = await supabaseAdmin
           .from('organizations')
           .insert({
             name: '運営会社',
-            email: 'admin@caddon.jp',
-            status: 'approved'
-          })
+            billing_email: 'admin@caddon.jp',
+            approval_status: 'approved',
+            active: true
+          } as any)
           .select('id')
-          .single()
-        
-        if (createOrgError || !newOrg) {
-          console.error('運営組織作成エラー:', createOrgError)
-          return NextResponse.json({ message: '運営組織の作成に失敗しました' }, { status: 500 })
+          .maybeSingle()
+
+        if (attempt1.data?.id) {
+          createdOrgId = attempt1.data.id
+        } else {
+          // 試行2: 最小限のカラムのみで作成
+          const attempt2 = await supabaseAdmin
+            .from('organizations')
+            .insert({ name: '運営会社' } as any)
+            .select('id')
+            .maybeSingle()
+
+          if (attempt2.data?.id) {
+            createdOrgId = attempt2.data.id
+          } else {
+            console.error('運営組織作成エラー(詳細):', attempt1.error || attempt2.error)
+            return NextResponse.json({ message: '運営組織の作成に失敗しました' }, { status: 500 })
+          }
         }
-        
-        finalOperatorOrgId = newOrg.id
+
+        finalOperatorOrgId = createdOrgId
         console.log('新しい運営組織を作成:', finalOperatorOrgId)
       }
     }
 
-    // 既存ユーザーのチェック
+    // 既存ユーザーのチェック（usersテーブル）
     const { data: existingUser } = await supabaseAdmin
       .from('users')
       .select('id, email')
@@ -187,6 +226,16 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
+    // 既存認証ユーザーのチェック（auth.users）
+    const { data: existingAuthUsers } = await supabaseAdmin.auth.admin.listUsers()
+    const existingAuthUser = existingAuthUsers.users?.find(u => u.email?.toLowerCase() === email.toLowerCase())
+
+    if (existingAuthUser) {
+      return NextResponse.json({
+        message: 'このメールアドレスは既に認証システムに登録されています'
+      }, { status: 400 })
+    }
+
     // 認証ユーザー作成（確認メールを送付）
     const { data: created, error: authErr } = await supabaseAdmin.auth.admin.createUser({
       email,
@@ -194,6 +243,12 @@ export async function POST(request: NextRequest) {
     })
     if (authErr) {
       console.error('認証ユーザー作成エラー:', authErr)
+      // より具体的なエラーメッセージを提供
+      if (authErr.message?.includes('already been registered')) {
+        return NextResponse.json({
+          message: 'このメールアドレスは既に認証システムに登録されています'
+        }, { status: 400 })
+      }
       return NextResponse.json({ message: '認証ユーザー作成に失敗しました: ' + authErr.message }, { status: 400 })
     }
     if (!created?.user?.id) {
@@ -222,14 +277,37 @@ export async function POST(request: NextRequest) {
 
     // 運営組織のmembershipを付与
     console.log('メンバーシップ作成:', { user_id: profile.id, org_id: finalOperatorOrgId, role })
-    const { error: memErr } = await supabaseAdmin
-      .from('memberships')
-      .insert({ user_id: profile.id, org_id: finalOperatorOrgId, role })
-    if (memErr) {
-      console.error('メンバーシップ作成エラー:', memErr)
+
+    // 一部環境では role 制約が異なるため、候補を順に試行する
+    const roleCandidates: string[] = [
+      // まずは運営想定ロール
+      role,
+      'Admin', 'Reviewer', 'Auditor',
+      // 次に古い/別環境の一般ロール
+      'Owner', 'Member', 'Viewer',
+      // 最後に組織系ロール（多くのDBで許容されがち）
+      'OrgAdmin', 'Staff'
+    ].filter((v, i, a) => !!v && a.indexOf(v) === i) as string[]
+
+    let lastError: any = null
+    for (const candidate of roleCandidates) {
+      const { error } = await supabaseAdmin
+        .from('memberships')
+        .insert({ user_id: profile.id, org_id: finalOperatorOrgId, role: candidate })
+      if (!error) {
+        console.log('メンバーシップ作成成功: role=', candidate)
+        lastError = null
+        break
+      }
+      lastError = error
+      console.warn('メンバーシップ作成失敗: role=', candidate, ' error=', error?.message)
+    }
+
+    if (lastError) {
+      console.error('メンバーシップ作成エラー(全候補失敗):', lastError)
       await supabaseAdmin.from('users').delete().eq('id', profile.id)
       await supabaseAdmin.auth.admin.deleteUser(authUserId)
-      return NextResponse.json({ message: '権限付与に失敗しました: ' + memErr.message }, { status: 400 })
+      return NextResponse.json({ message: '権限付与に失敗しました: ' + (lastError?.message || 'unknown') }, { status: 400 })
     }
 
     // 初回セットアップ用にパスワードリセットメールを送付

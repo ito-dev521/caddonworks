@@ -47,7 +47,8 @@ export async function GET(request: NextRequest) {
 
           if (membershipError || !memberships) {
           } else {
-            orgAdminMembership = memberships.find(m => m.role === 'OrgAdmin')
+            // OrgAdmin、Staff、またはContractor権限があれば実際のBoxデータにアクセス可能
+            orgAdminMembership = memberships.find(m => m.role === 'OrgAdmin' || m.role === 'Staff' || m.role === 'Contractor')
             if (!orgAdminMembership) {
             }
           }
@@ -278,20 +279,12 @@ export async function GET(request: NextRequest) {
                 patterns.forEach(pattern => {
                   if (itemName.includes(pattern) && !subfolders[category]) {
                     subfolders[category] = item.id
-                    console.log(`📁 Found existing subfolder: ${category} -> ${itemName} (ID: ${item.id})`)
                   }
                 })
               })
             }
           })
 
-          // サブフォルダが見つからない場合のログ
-          const expectedCategories = ['受取', '作業', '納品', '契約']
-          expectedCategories.forEach(category => {
-            if (!subfolders[category]) {
-              console.warn(`📁 Subfolder not found for category: ${category} in project ${project.id}`)
-            }
-          })
 
           // サブフォルダ内のファイルも取得して最近のファイルに含める
           const allRecentFiles: any[] = [...items.filter(item => item.type === 'file')]

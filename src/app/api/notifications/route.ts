@@ -26,9 +26,10 @@ export async function GET(request: NextRequest) {
 
     const token = authHeader.replace('Bearer ', '')
     const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
-    
+
     if (authError || !user) {
-      console.error('notifications API: 認証エラー:', authError)
+      // 認証エラーログを削減（開発時のスパム防止）
+      // console.error('notifications API: 認証エラー:', authError)
       return NextResponse.json(
         { message: '認証に失敗しました' },
         { status: 401 }
@@ -58,7 +59,6 @@ export async function GET(request: NextRequest) {
       .limit(50)
 
     if (notificationsError) {
-      console.error('notifications API: 通知取得エラー:', notificationsError)
       return NextResponse.json(
         { message: '通知の取得に失敗しました' },
         { status: 400 }
@@ -73,7 +73,6 @@ export async function GET(request: NextRequest) {
       .is('read_at', null)
 
     if (unreadError) {
-      console.error('notifications API: 未読数取得エラー:', unreadError)
     }
 
 
@@ -83,7 +82,6 @@ export async function GET(request: NextRequest) {
     }, { status: 200 })
 
   } catch (error) {
-    console.error('notifications API: サーバーエラー:', error)
     return NextResponse.json(
       { message: 'サーバーエラーが発生しました' },
       { status: 500 }
@@ -159,7 +157,6 @@ export async function PUT(request: NextRequest) {
       .single()
 
     if (updateError) {
-      console.error('notifications API: 通知更新エラー:', updateError)
       return NextResponse.json(
         { message: '通知の更新に失敗しました' },
         { status: 400 }
@@ -172,7 +169,6 @@ export async function PUT(request: NextRequest) {
     }, { status: 200 })
 
   } catch (error) {
-    console.error('notifications API: サーバーエラー:', error)
     return NextResponse.json(
       { message: 'サーバーエラーが発生しました' },
       { status: 500 }

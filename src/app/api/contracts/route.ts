@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const orgMembership = memberships.find(m => m.role === 'OrgAdmin')
+    const orgMembership = memberships.find(m => m.role === 'OrgAdmin' || m.role === 'Staff')
     if (!orgMembership) {
       return NextResponse.json(
         { message: 'この操作を実行する権限がありません（発注者権限が必要です）' },
@@ -202,7 +202,6 @@ export async function GET(request: NextRequest) {
     const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
     
     if (authError || !user) {
-      console.error('contracts API: 認証エラー', { authError: authError?.message, hasUser: !!user })
       return NextResponse.json(
         { message: '認証に失敗しました' },
         { status: 401 }
@@ -217,7 +216,6 @@ export async function GET(request: NextRequest) {
       .single()
 
     if (userError || !userProfile) {
-      console.error('contracts API: ユーザープロフィール取得エラー', { userError: userError?.message, hasProfile: !!userProfile })
       return NextResponse.json(
         { message: 'ユーザープロフィールが見つかりません' },
         { status: 403 }
@@ -231,26 +229,24 @@ export async function GET(request: NextRequest) {
       .eq('user_id', userProfile.id)
 
     if (membershipError || !memberships || memberships.length === 0) {
-      console.error('contracts API: メンバーシップ取得エラー', { membershipError: membershipError?.message, membershipsCount: memberships?.length })
       return NextResponse.json({ message: '組織情報が見つかりません' }, { status: 403 })
     }
 
     let contractsData: any[] | null = []
     let contractsError: any = null
 
-    // OrgAdminの場合、自分の組織の契約を取得
-    const orgAdminMembership = memberships.find(m => m.role === 'OrgAdmin')
-    if (orgAdminMembership) {
+    // OrgAdminまたはStaffの場合、自分の組織の契約を取得
+    const orgMembership = memberships.find(m => m.role === 'OrgAdmin' || m.role === 'Staff')
+    if (orgMembership) {
       
       // まず基本的な契約データを取得
       const { data: contractsBasic, error: contractsBasicError } = await supabaseAdmin
         .from('contracts')
         .select('*')
-        .eq('org_id', orgAdminMembership.org_id)
+        .eq('org_id', orgMembership.org_id)
         .order('created_at', { ascending: false })
       
       if (contractsBasicError) {
-        console.error('contracts API: 基本契約データ取得エラー', contractsBasicError)
         contractsData = []
         contractsError = contractsBasicError
       } else {
@@ -277,7 +273,7 @@ export async function GET(request: NextRequest) {
         const { data: orgData } = await supabaseAdmin
           .from('organizations')
           .select('id, name')
-          .eq('id', orgAdminMembership.org_id)
+          .eq('id', orgMembership.org_id)
           .single()
         
         // 受注者情報を取得
@@ -318,7 +314,6 @@ export async function GET(request: NextRequest) {
         .order('created_at', { ascending: false })
       
       if (contractsBasicError) {
-        console.error('contracts API: 基本契約データ取得エラー', contractsBasicError)
         contractsData = []
         contractsError = contractsBasicError
       } else {

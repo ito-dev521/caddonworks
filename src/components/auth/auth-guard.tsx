@@ -108,6 +108,7 @@ export function AuthGuard({
         }
       } catch (error) {
         console.error('メンテナンスモード確認エラー:', error)
+        // エラーが発生した場合はメンテナンスモードではないと判断
         setMaintenanceActive(false)
       } finally {
         setMaintenanceLoading(false)
@@ -117,7 +118,7 @@ export function AuthGuard({
     if (!loading) {
       checkMaintenance()
     } else {
-      setMaintenanceLoading(true)
+      setMaintenanceLoading(false) // 認証ローディング中はメンテナンスチェックをスキップ
     }
   }, [loading, pathname])
 
@@ -125,11 +126,13 @@ export function AuthGuard({
   useEffect(() => {
     const checkOrgStatus = async () => {
       if (!user || !userOrganization || skipOrganizationCheck || loading) {
+        setOrganizationLoading(false)
         return
       }
 
       // 受注者は組織に所属しないため、組織チェックをスキップ
       if (userRole === 'Contractor') {
+        setOrganizationLoading(false)
         return
       }
 
@@ -137,6 +140,7 @@ export function AuthGuard({
       const isAdminPage = pathname.startsWith('/admin')
       const isAuthPage = pathname.startsWith('/auth')
       if (isAdminPage || isAuthPage) {
+        setOrganizationLoading(false)
         return
       }
 
@@ -146,6 +150,8 @@ export function AuthGuard({
         setOrganizationStatus(status)
       } catch (error) {
         console.error('Failed to check organization status:', error)
+        // エラーが発生した場合は組織チェックをスキップ
+        setOrganizationStatus(null)
       } finally {
         setOrganizationLoading(false)
       }

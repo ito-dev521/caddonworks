@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { deleteBoxFolder } from '@/lib/box'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -216,19 +217,46 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     // 組織に関連するメンバーシップがあるかチェック
     const { data: memberships, error: membershipError } = await supabaseAdmin
       .from('memberships')
-      .select('id')
+      .select('id, user_id')
       .eq('org_id', organizationId)
-      .limit(1)
 
     if (membershipError) {
       console.error('メンバーシップ確認エラー:', membershipError)
       return NextResponse.json({ message: 'メンバーシップ確認に失敗しました' }, { status: 500 })
     }
 
+    // メンバーが存在する場合は安全に削除
     if (memberships && memberships.length > 0) {
-      return NextResponse.json({
-        message: 'この組織にはメンバーが存在するため削除できません。先にメンバーを削除してください。'
-      }, { status: 400 })
+      try {
+        const userIds = memberships.map((m: any) => m.user_id)
+        // メンバーシップ削除
+        await supabaseAdmin.from('memberships').delete().eq('org_id', organizationId)
+
+        // 他の組織に属していないユーザープロファイルは併せて削除
+        if (userIds.length > 0) {
+          const { data: others } = await supabaseAdmin
+            .from('memberships')
+            .select('user_id')
+            .in('user_id', userIds)
+          const stillReferenced = new Set((others || []).map((r: any) => r.user_id))
+          const toDeleteUserIds = userIds.filter(id => !stillReferenced.has(id))
+          if (toDeleteUserIds.length > 0) {
+            await supabaseAdmin.from('users').delete().in('id', toDeleteUserIds)
+          }
+        }
+      } catch (e) {
+        console.error('メンバー削除中エラー:', e)
+        return NextResponse.json({ message: 'メンバー削除に失敗しました' }, { status: 500 })
+      }
+    }
+
+    // まずBOXフォルダがあれば削除（存在しない/権限なし等はログのみ）
+    try {
+      if (org.box_folder_id) {
+        await deleteBoxFolder(org.box_folder_id as any, true)
+      }
+    } catch (e) {
+      console.error('BOXフォルダ削除エラー(続行):', e)
     }
 
     // 組織を削除
@@ -245,11 +273,8 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
       }, { status: 500 })
     }
 
-    // 注意: BOXフォルダは削除しない（データ保全のため）
-
     return NextResponse.json({
-      message: `組織「${org.name}」を削除しました`,
-      note: 'BOXフォルダは保持されています'
+      message: `組織「${org.name}」と関連BOXフォルダ（存在する場合）を削除しました`
     }, { status: 200 })
 
   } catch (error) {

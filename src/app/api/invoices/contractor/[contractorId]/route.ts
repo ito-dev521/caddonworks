@@ -63,7 +63,7 @@ export async function GET(
         base_amount,
         system_fee,
         total_amount,
-        created_at,
+        updated_at,
         projects (
           id,
           title,
@@ -79,7 +79,7 @@ export async function GET(
         )
       `)
       .eq('contractor_id', contractorId)
-      .order('created_at', { ascending: false })
+      .order('updated_at', { ascending: false })
 
     if (invoicesError) {
       console.error('請求書取得エラー:', invoicesError)

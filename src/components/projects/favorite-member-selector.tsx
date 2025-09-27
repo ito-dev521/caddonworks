@@ -76,7 +76,9 @@ export function FavoriteMemberSelector({
       setFavoriteMembers(mapped)
     } catch (err) {
       console.error('お気に入り会員取得エラー:', err)
-      setError(err instanceof Error ? err.message : 'エラーが発生しました')
+      // お気に入り会員がない場合はエラーとして扱わない
+      setError(null)
+      setFavoriteMembers([])
     } finally {
       setLoading(false)
     }

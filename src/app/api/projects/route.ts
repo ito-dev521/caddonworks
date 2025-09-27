@@ -83,7 +83,6 @@ async function handlePOST(request: NextRequest) {
     // Authorizationヘッダーからユーザー情報を取得
     const authHeader = request.headers.get('authorization')
     if (!authHeader) {
-      console.error('Authorization header missing')
       return NextResponse.json(
         { message: '認証が必要です' },
         { status: 401 }
@@ -92,7 +91,6 @@ async function handlePOST(request: NextRequest) {
 
     const token = authHeader.replace('Bearer ', '').trim()
     if (!token || token === 'null' || token === 'undefined') {
-      console.error('Invalid token format:', token)
       return NextResponse.json(
         { message: '有効な認証トークンが必要です' },
         { status: 401 }
@@ -162,7 +160,6 @@ async function handlePOST(request: NextRequest) {
 
 
     if (membershipError || !memberships || memberships.length === 0) {
-      console.error('組織情報の取得に失敗:', membershipError)
       return NextResponse.json(
         { message: '組織情報の取得に失敗しました: ' + (membershipError?.message || 'メンバーシップが見つかりません') },
         { status: 403 }

@@ -33,6 +33,7 @@ import { Button } from "@/components/ui/button"
 import { formatCurrency } from "@/lib/utils"
 import { useAuth } from "@/contexts/auth-context"
 import { supabase } from "@/lib/supabase"
+import { authenticatedFetch } from "@/lib/api-client"
 import { AuthGuard } from "@/components/auth/auth-guard"
 import { MEMBER_LEVELS, type MemberLevel } from "@/lib/member-level"
 import { FavoriteMemberSelector } from "@/components/projects/favorite-member-selector"
@@ -600,8 +601,12 @@ function ProjectsPageContent() {
     }
   }
 
-  const deleteProject = async (projectId: string) => {
-    if (!confirm('この案件を削除してもよろしいですか？')) return
+  const deleteProject = async (projectId: string, deleteType: 'manual' | 'auto_archive' = 'manual') => {
+    const confirmMessage = deleteType === 'manual'
+      ? 'この案件を削除してもよろしいですか？（関連するBoxフォルダも削除されます）'
+      : 'この案件を削除してもよろしいですか？'
+
+    if (!confirm(confirmMessage)) return
 
     try {
       const { data: { session } } = await supabase.auth.getSession()
@@ -610,7 +615,8 @@ function ProjectsPageContent() {
         return
       }
 
-      const response = await fetch(`/api/projects/${projectId}`, {
+      const deleteUrl = `/api/projects/${projectId}?deleteType=${deleteType}`
+      const response = await fetch(deleteUrl, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${session.access_token}`
@@ -620,7 +626,10 @@ function ProjectsPageContent() {
       const result = await response.json()
 
       if (response.ok) {
-        alert('案件が削除されました')
+        const message = result.box_folder_preserved
+          ? '案件が削除されました（Boxフォルダは保持されています）'
+          : '案件が削除されました'
+        alert(message)
         await fetchProjects()
       } else {
         alert('案件の削除に失敗しました: ' + result.message)

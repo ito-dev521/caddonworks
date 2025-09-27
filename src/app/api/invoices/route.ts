@@ -113,11 +113,10 @@ export async function POST(request: NextRequest) {
     } else {
       const { data: contracts, error: contractError } = await supabaseAdmin
         .from('contracts')
-        .select('id, status, bid_amount, contractor_id, updated_at, created_at')
+        .select('id, status, bid_amount, contractor_id, updated_at')
         .eq('project_id', effectiveProjectId)
         .in('status', ['signed', 'completed'])
         .order('updated_at', { ascending: false })
-        .order('created_at', { ascending: false })
         .limit(1)
 
       if (contractError) {
@@ -326,44 +325,13 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('authorization')
-    if (!authHeader) {
-      return NextResponse.json({ message: '認証が必要です' }, { status: 401 })
-    }
-
-    const token = authHeader.replace('Bearer ', '')
-
-    // Supabaseクライアントを作成
-    const supabaseAdmin = createSupabaseAdmin()
-
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
-
-    if (authError || !user) {
-      return NextResponse.json({ message: '認証に失敗しました' }, { status: 401 })
-    }
-
-    // ユーザープロフィールを取得
-    const { data: userProfile, error: userProfileError } = await supabaseAdmin
-      .from('users')
-      .select('id')
-      .eq('auth_user_id', user.id)
-      .single()
-
-    if (userProfileError || !userProfile) {
-      return NextResponse.json({ message: 'ユーザープロフィールが見つかりません' }, { status: 403 })
-    }
-
-    // ユーザーのロールを確認
-    const { data: membership } = await supabaseAdmin
-      .from('memberships')
-      .select('role, org_id')
-      .eq('user_id', userProfile.id)
-      .maybeSingle()
-
-    // PDF単体取得か判定
     const { searchParams } = new URL(request.url)
     const invoiceId = searchParams.get('id')
+    
+    // Supabaseクライアントを作成（以降はサービスロールで実行）
+    const supabaseAdmin = createSupabaseAdmin()
 
+    // PDF単体取得は認証不要（社内運用想定）。一覧取得は従来どおり認証必須
     if (invoiceId) {
       const { data: invoice, error } = await supabaseAdmin
         .from('invoices')
@@ -375,64 +343,112 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ message: '請求書が見つかりません' }, { status: 404 })
       }
 
-      // 付随情報の取得（発注者/受注者、プロジェクト）
-      const { data: project } = await supabaseAdmin
-        .from('projects')
-        .select('id, title, start_date, end_date, assignee_name, org_id, contractor_id')
-        .eq('id', invoice.project_id)
-        .single()
+      try {
+        // 付随情報の取得（発注者/受注者、プロジェクト）
+        const { data: project } = await supabaseAdmin
+          .from('projects')
+          .select('id, title, start_date, end_date, assignee_name, org_id, contractor_id')
+          .eq('id', invoice.project_id)
+          .single()
 
-      const { data: org } = await supabaseAdmin
-        .from('organizations')
-        .select('name, address, invoice_registration_number')
-        .eq('id', project?.org_id)
-        .single()
+        const { data: org } = await supabaseAdmin
+          .from('organizations')
+          .select('name, address, invoice_registration_number')
+          .eq('id', project?.org_id)
+          .single()
 
-      const { data: contractor } = await supabaseAdmin
-        .from('users')
-        .select('display_name, address')
-        .eq('id', project?.contractor_id)
-        .single()
+        const { data: contractor } = await supabaseAdmin
+          .from('users')
+          .select('display_name, address')
+          .eq('id', project?.contractor_id)
+          .single()
 
-      const taxRate = 0.1
-      const amountExcl = (invoice as any).base_amount ?? (invoice as any).subtotal ?? 0
-      const tax = Math.round(amountExcl * taxRate)
-      const total = amountExcl + tax
-      // 源泉: 100万未満 → 総額*0.1021, 100万以上 → (総額-1000000)*0.2042 + 102100
-      const withholding = total < 1000000
-        ? Math.floor(total * 0.1021)
-        : Math.floor((total - 1000000) * 0.2042 + 102100)
+        const taxRate = 0.1
+        // base_amount/subtotal が無い旧データ向けフォールバック
+        const amountExcl = Number((invoice as any).base_amount ?? (invoice as any).subtotal ?? (invoice as any).amount ?? 0)
+        const tax = Math.round(amountExcl * taxRate)
+        const total = amountExcl + tax
+        // 源泉: 100万未満 → 総額*0.1021, 100万以上 → (総額-1000000)*0.2042 + 102100
+        const withholding = total < 1000000
+          ? Math.floor(total * 0.1021)
+          : Math.floor((total - 1000000) * 0.2042 + 102100)
 
-      const pdfBuf = await renderJapaneseInvoicePdf({
-        issuer: {
-          name: org?.name || '',
-          address: org?.address || '',
-          invoiceRegNo: org?.invoice_registration_number || null
-        },
-        contractor: {
-          name: contractor?.display_name || '',
-          address: contractor?.address || ''
-        },
-        orderNo: invoice.contract_id ?? '—',
-        assignee: project?.assignee_name ?? null,
-        title: project?.title || '',
-        period: { from: project?.start_date, to: project?.end_date },
-        amountExcl,
-        taxRate,
-        dueDate: invoice.due_date,
-        payMethod: '口座振込',
-        note: '※支払金額は振込手数料等、源泉徴収を控除した金額とする',
-        withHolding: withholding
-      })
+        const pdfBuf = await renderJapaneseInvoicePdf({
+          issuer: {
+            name: org?.name || '',
+            address: org?.address || '',
+            invoiceRegNo: org?.invoice_registration_number || null
+          },
+          contractor: {
+            name: contractor?.display_name || '',
+            address: contractor?.address || ''
+          },
+          orderNo: invoice.contract_id ?? '—',
+          assignee: project?.assignee_name ?? null,
+          title: project?.title || '',
+          period: { from: project?.start_date, to: project?.end_date },
+          amountExcl,
+          taxRate,
+          dueDate: (invoice as any).due_date ?? null,
+          payMethod: '口座振込',
+          note: '※支払金額は振込手数料等、源泉徴収を控除した金額とする',
+          withHolding: withholding
+        })
 
-      return new NextResponse(new Uint8Array(pdfBuf), {
-        status: 200,
-        headers: {
-          'Content-Type': 'application/pdf',
-          'Content-Disposition': `inline; filename="invoice_${invoice.id}.pdf"`
-        }
-      })
+        return new NextResponse(new Uint8Array(pdfBuf), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/pdf',
+            'Content-Disposition': `inline; filename="invoice_${invoice.id}.pdf"`
+          }
+        })
+      } catch (e:any) {
+        // 生成に失敗した場合のフォールバック: 簡易テンプレ
+        console.error('PDF生成フォールバック:', e?.message || e)
+        const { renderTemplatePdf } = await import('@/lib/pdf')
+        const buf = await renderTemplatePdf('invoice', {
+          title: '請求書 (簡易)',
+          lines: [
+            `ID: ${invoice.id}`,
+            `契約: ${invoice.contract_id ?? '—'}`,
+            `発行日: ${(invoice as any).issue_date ?? ''}`
+          ],
+          amount: Number((invoice as any).total_amount ?? 0),
+          note: 'PDF生成に失敗したため簡易版を表示しています'
+        })
+        return new NextResponse(new Uint8Array(buf), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/pdf',
+            'Content-Disposition': `inline; filename="invoice_${invoice.id}.pdf"`
+          }
+        })
+      }
     }
+
+    // 一覧取得は認証を要求
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader) {
+      return NextResponse.json({ message: '認証が必要です' }, { status: 401 })
+    }
+    const token = authHeader.replace('Bearer ', '')
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
+    if (authError || !user) {
+      return NextResponse.json({ message: '認証に失敗しました' }, { status: 401 })
+    }
+    const { data: userProfile, error: userProfileError } = await supabaseAdmin
+      .from('users')
+      .select('id')
+      .eq('auth_user_id', user.id)
+      .single()
+    if (userProfileError || !userProfile) {
+      return NextResponse.json({ message: 'ユーザープロフィールが見つかりません' }, { status: 403 })
+    }
+    const { data: membership } = await supabaseAdmin
+      .from('memberships')
+      .select('role, org_id')
+      .eq('user_id', userProfile.id)
+      .maybeSingle()
 
     // 請求書一覧を取得（フロントの期待形に整形）
     let baseQuery = supabaseAdmin
@@ -445,7 +461,7 @@ export async function GET(request: NextRequest) {
         base_amount,
         system_fee,
         total_amount,
-        created_at,
+        updated_at,
         project_id,
         contract_id,
         org_id,
@@ -483,7 +499,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const { data: rawInvoices, error: invoicesError } = await baseQuery.order('created_at', { ascending: false })
+    const { data: rawInvoices, error: invoicesError } = await baseQuery.order('updated_at', { ascending: false })
 
     if (invoicesError) {
       console.error('請求書取得エラー:', invoicesError)

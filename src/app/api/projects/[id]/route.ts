@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { deleteBoxFolder } from '@/lib/box'
 
 export async function GET(
   request: NextRequest,
@@ -418,6 +419,28 @@ export async function DELETE(
       }, { status: 400 })
     }
 
+    // クエリパラメータでBox削除タイプを確認
+    const url = new URL(request.url)
+    const deleteType = url.searchParams.get('deleteType') || 'manual'
+    const preserveBox = deleteType === 'auto_archive' // 30日自動削除の場合
+
+    // Boxフォルダの削除処理（手動削除の場合のみ）
+    if (!preserveBox && project.box_folder_id) {
+      try {
+        console.log(`🗑️ Deleting Box folder for project: ${projectId} (folder: ${project.box_folder_id})`)
+        await deleteBoxFolder(project.box_folder_id, true)
+        console.log(`✅ Successfully deleted Box folder: ${project.box_folder_id}`)
+      } catch (boxError) {
+        console.error('❌ Box folder deletion failed:', boxError)
+        // Box削除が失敗してもプロジェクト削除は継続
+        console.warn('⚠️ Continuing with project deletion despite Box folder deletion failure')
+      }
+    } else if (preserveBox) {
+      console.log(`📦 Preserving Box folder for 30-day auto deletion: ${project.box_folder_id}`)
+    } else {
+      console.log(`📂 No Box folder to delete for project: ${projectId}`)
+    }
+
     // 案件を削除
     const { error: deleteError } = await supabaseAdmin
       .from('projects')
@@ -429,8 +452,13 @@ export async function DELETE(
       return NextResponse.json({ message: '案件の削除に失敗しました' }, { status: 500 })
     }
 
+    const deletionMessage = preserveBox
+      ? '案件が正常に削除されました（Boxフォルダは保持されています）'
+      : '案件が正常に削除されました'
+
     return NextResponse.json({
-      message: '案件が正常に削除されました'
+      message: deletionMessage,
+      box_folder_preserved: preserveBox
     }, { status: 200 })
 
   } catch (error) {

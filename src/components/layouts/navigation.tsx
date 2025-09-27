@@ -239,7 +239,7 @@ export function Navigation({ onExpandedChange }: NavigationProps = {}) {
                   >
                     <Menu className="w-4 h-4" />
                   </Button>
-                  <NotificationBell />
+                  {user && <NotificationBell />}
                 </div>
               </div>
             ) : (
@@ -248,9 +248,11 @@ export function Navigation({ onExpandedChange }: NavigationProps = {}) {
                      onClick={() => setIsExpanded(!isExpanded)}>
                   <Menu className="w-5 h-5" />
                 </div>
-                <div className="px-2 py-2 rounded-lg hover:bg-engineering-blue/10 text-gray-600 hover:text-engineering-blue flex items-center justify-center">
-                  <NotificationBell />
-                </div>
+                {user && (
+                  <div className="px-2 py-2 rounded-lg hover:bg-engineering-blue/10 text-gray-600 hover:text-engineering-blue flex items-center justify-center">
+                    <NotificationBell />
+                  </div>
+                )}
               </>
             )}
           </div>

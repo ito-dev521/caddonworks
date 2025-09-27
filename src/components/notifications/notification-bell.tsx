@@ -40,7 +40,12 @@ export function NotificationBell() {
     try {
       setIsLoading(true)
       const { data: { session } } = await supabase.auth.getSession()
-      if (!session) return
+
+      // セッションやアクセストークンがない場合は早期リターン
+      if (!session || !session.access_token) {
+        console.log('通知取得: セッションまたはアクセストークンがありません')
+        return
+      }
 
       const response = await fetch('/api/notifications', {
         headers: {
@@ -52,6 +57,11 @@ export function NotificationBell() {
         const result = await response.json()
         setNotifications(result.notifications || [])
         setUnreadCount(result.unreadCount || 0)
+      } else if (response.status === 401) {
+        // 401エラーの場合はログをスキップ（スパム防止）
+        console.log('通知取得: 認証エラー (401)')
+        setNotifications([])
+        setUnreadCount(0)
       }
     } catch (error) {
       console.error('通知取得エラー:', error)

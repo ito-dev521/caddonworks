@@ -148,12 +148,32 @@ export class DocumentGenerator {
   private async fillExcelData(worksheet: ExcelJS.Worksheet, data: DocumentData): Promise<void> {
     const config = this.getTemplateConfig(data.type)
 
+    console.log('📋 セルマッピング設定:', config.cellMappings)
+    console.log('📊 入力データ:', data)
+
+    // まずテンプレートの現在の内容を確認
+    console.log('📝 テンプレートの現在の内容:')
+    for (let row = 1; row <= Math.min(10, worksheet.rowCount); row++) {
+      for (let col = 1; col <= Math.min(10, worksheet.columnCount); col++) {
+        const cell = worksheet.getCell(row, col)
+        if (cell.value) {
+          console.log(`  [${row},${col}] = "${cell.value}"`)
+        }
+      }
+    }
+
     // セルマッピングに基づいてデータを埋め込み
     for (const [field, cellAddress] of Object.entries(config.cellMappings)) {
       const value = this.getFieldValue(data, field)
+      console.log(`🔄 ${field} -> ${cellAddress}: "${value}"`)
+
       if (value !== undefined && value !== null) {
         const cell = worksheet.getCell(cellAddress)
+        const originalValue = cell.value
         cell.value = value
+        console.log(`✅ セル ${cellAddress}: "${originalValue}" -> "${value}"`)
+      } else {
+        console.log(`⚠️ フィールド ${field} の値が空です`)
       }
     }
 
@@ -216,7 +236,7 @@ export class DocumentGenerator {
     }
   }
 
-  // ExcelをHTMLに変換する簡易実装
+  // ExcelをHTMLに変換する改良実装
   private async convertExcelToHTML(excelPath: string): Promise<string> {
     const workbook = new ExcelJS.Workbook()
     await workbook.xlsx.readFile(excelPath)
@@ -227,12 +247,30 @@ export class DocumentGenerator {
         <head>
           <meta charset="utf-8">
           <style>
-            body { font-family: 'Helvetica', 'Arial', sans-serif; font-size: 12px; }
-            table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-            td, th { border: 1px solid #ddd; padding: 8px; text-align: left; }
+            body {
+              font-family: 'MS PGothic', 'Hiragino Sans', 'Arial', sans-serif;
+              font-size: 11px;
+              margin: 20px;
+              background: white;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin: 0;
+            }
+            td, th {
+              border: 1px solid #000;
+              padding: 4px 6px;
+              vertical-align: top;
+              word-wrap: break-word;
+              height: auto;
+              min-height: 20px;
+            }
             .number { text-align: right; }
             .center { text-align: center; }
-            .header { background-color: #f5f5f5; font-weight: bold; }
+            .header { background-color: #f0f0f0; font-weight: bold; }
+            .no-border { border: none; }
+            .thick-border { border: 2px solid #000; }
           </style>
         </head>
         <body>
@@ -240,14 +278,47 @@ export class DocumentGenerator {
     `
 
     if (worksheet) {
-      worksheet.eachRow((row) => {
+      const maxRow = worksheet.rowCount
+      const maxCol = worksheet.columnCount
+
+      for (let rowNum = 1; rowNum <= maxRow; rowNum++) {
         html += '<tr>'
-        row.eachCell((cell) => {
-          const value = cell.value || ''
-          html += `<td>${value}</td>`
-        })
+        const row = worksheet.getRow(rowNum)
+
+        for (let colNum = 1; colNum <= maxCol; colNum++) {
+          const cell = worksheet.getCell(rowNum, colNum)
+          let value = ''
+
+          // セル値の処理
+          if (cell.value !== null && cell.value !== undefined) {
+            if (typeof cell.value === 'object' && 'result' in cell.value) {
+              // 数式の場合は結果を表示
+              value = cell.value.result || ''
+            } else if (cell.value instanceof Date) {
+              // 日付の場合は日本語形式でフォーマット
+              value = cell.value.toLocaleDateString('ja-JP')
+            } else {
+              value = String(cell.value)
+            }
+          }
+
+          // セルスタイルを取得
+          let cellClass = ''
+          if (cell.alignment?.horizontal === 'center') {
+            cellClass = 'center'
+          } else if (cell.alignment?.horizontal === 'right') {
+            cellClass = 'number'
+          }
+
+          // セルの背景色をチェック
+          if (cell.fill && cell.fill.type === 'pattern' && cell.fill.fgColor) {
+            cellClass += ' header'
+          }
+
+          html += `<td class="${cellClass}">${value}</td>`
+        }
         html += '</tr>'
-      })
+      }
     }
 
     html += `
@@ -302,12 +373,12 @@ export class DocumentGenerator {
       completion: {
         templatePath: 'completion_template.xlsx',
         cellMappings: {
-          'projectTitle': 'B5',
-          'contractorName': 'B6',
-          'completionDate': 'B7',
-          'createdAt': 'E2'
+          'projectTitle': 'B5',   // プロジェクト名の値入力セル
+          'contractorName': 'B6', // 受注者名の値入力セル
+          'completionDate': 'B7', // 完了日の値入力セル
+          'createdAt': 'E2'       // 作成日の値入力セル
         },
-        tableStartRow: 10, // 成果物一覧の開始行
+        tableStartRow: 11, // 成果物一覧の開始行（ヘッダーの次）
         calculateFormulas: true
       },
       monthly_invoice: {
@@ -332,7 +403,7 @@ export class DocumentGenerator {
     }
   }
 
-  // データからフィールド値を取得
+  // データからフィールド値を取得（改良版）
   private getFieldValue(data: DocumentData, field: string): any {
     const fieldParts = field.split('.')
     let value: any = data
@@ -345,9 +416,14 @@ export class DocumentGenerator {
       }
     }
 
+    // 空文字やnullの場合
+    if (value === null || value === undefined || value === '') {
+      return ''
+    }
+
     // 数値の場合はフォーマット
     if (typeof value === 'number') {
-      return value
+      return value.toLocaleString('ja-JP')
     }
 
     // 日付の場合はフォーマット
@@ -355,7 +431,8 @@ export class DocumentGenerator {
       return value.toLocaleDateString('ja-JP')
     }
 
-    return value
+    // 文字列の場合はそのまま
+    return String(value)
   }
 
   private generateDocumentContent(doc: PDFKit.PDFDocument, data: DocumentData): void {

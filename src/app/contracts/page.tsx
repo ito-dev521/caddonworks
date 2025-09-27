@@ -53,6 +53,31 @@ interface Invoice {
   billing_details: any
   created_at: string
   updated_at: string
+  project?: {
+    title?: string
+  }
+}
+
+interface CompletionReport {
+  id: string
+  project_id: string
+  contract_id: string
+  contractor_id: string
+  org_id: string
+  actual_completion_date: string
+  status: 'draft' | 'submitted' | 'approved' | 'rejected'
+  report_number?: string
+  submission_date?: string
+  contractor_signed_at?: string
+  org_signed_at?: string
+  approved_at?: string
+  box_sign_request_id?: string
+  signed_document_id?: string
+  created_at: string
+  updated_at: string
+  projects?: any
+  contracts?: any
+  organizations?: any
 }
 
 function ContractsPageContent() {
@@ -63,9 +88,10 @@ function ContractsPageContent() {
   const [pendingContracts, setPendingContracts] = useState<Contract[]>([])
   const [completedProjects, setCompletedProjects] = useState<any[]>([])
   const [invoices, setInvoices] = useState<Invoice[]>([])
+  const [completionReports, setCompletionReports] = useState<CompletionReport[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [selectedTab, setSelectedTab] = useState<'signature' | 'pending' | 'invoice'>('signature')
+  const [selectedTab, setSelectedTab] = useState<'signature' | 'pending' | 'invoice' | 'completion'>('signature')
   const lastFetchKeyRef = useRef<string | null>(null)
   // プロジェクトID -> 契約一覧（完了タブで評価ボタン用）
   const [projectContracts, setProjectContracts] = useState<Record<string, Contract[]>>({})
@@ -80,11 +106,38 @@ function ContractsPageContent() {
   } | null>(null)
   const [evaluatedProjects, setEvaluatedProjects] = useState<Set<string>>(new Set())
   const [invoicedProjects, setInvoicedProjects] = useState<Set<string>>(new Set())
-  const [invoiceStatuses, setInvoiceStatuses] = useState<Map<string, any>>(new Map())
   // 完了済みプロジェクトID集合
   const completedProjectIdSet = React.useMemo(() => new Set(completedProjects.map((p:any) => p.id)), [completedProjects])
+  // 完了届作成済みプロジェクトID集合
+  const [completionReportProjects, setCompletionReportProjects] = useState<Set<string>>(new Set())
   const [supportPercent, setSupportPercent] = useState<number>(8)
   const [loadingSupport, setLoadingSupport] = useState<boolean>(false)
+
+  // 認証付きでPDFを開く（window.open だとAuthorizationが付かないため）
+  const openPdfWithAuth = async (url: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        alert('認証が必要です')
+        return
+      }
+      const res = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      })
+      if (!res.ok) {
+        const text = await res.text().catch(() => '')
+        console.error('PDF取得エラー:', res.status, text)
+        alert('PDFを表示できませんでした')
+        return
+      }
+      const blob = await res.blob()
+      const pdfUrl = URL.createObjectURL(blob)
+      window.open(pdfUrl, '_blank')
+    } catch (e) {
+      console.error('openPdfWithAuth error:', e)
+      alert('PDFの取得に失敗しました')
+    }
+  }
 
   // 契約一覧を取得
   const fetchContracts = async () => {
@@ -143,8 +196,8 @@ function ContractsPageContent() {
         return
       }
 
-      // プロジェクトと契約データを並行して取得
-      const [projectsResponse, contractsResponse] = await Promise.all([
+      // プロジェクト、契約、完了届データを並行して取得
+      const [projectsResponse, contractsResponse, completionReportsResponse] = await Promise.all([
         fetch('/api/projects?status=completed', {
           headers: {
             'Authorization': `Bearer ${session.access_token}`,
@@ -156,7 +209,13 @@ function ContractsPageContent() {
             'Authorization': `Bearer ${session.access_token}`,
             'Content-Type': 'application/json'
           }
-        })
+        }),
+        fetch('/api/completion-reports', {
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json'
+          }
+        }).catch(() => ({ ok: false })) // 完了届APIが未対応の場合もあるため
       ])
 
       if (projectsResponse.ok && contractsResponse.ok) {
@@ -164,12 +223,20 @@ function ContractsPageContent() {
           projectsResponse.json(),
           contractsResponse.json()
         ])
-        
+
         const projects = projectsResult.projects || []
         const allContracts: Contract[] = contractsResult.contracts || []
-        
+
         setCompletedProjects(projects)
-        
+
+        // 完了届の状態を確認
+        if (completionReportsResponse.ok) {
+          const completionReportsResult = await completionReportsResponse.json()
+          const reports = completionReportsResult || []
+          const reportProjectIds = new Set(reports.map((report: any) => report.project_id))
+          setCompletionReportProjects(reportProjectIds)
+        }
+
         // 評価済みと請求書作成済みの状態を確認（契約データも渡す）
         await checkProjectStatuses(projects, allContracts)
 
@@ -228,6 +295,37 @@ function ContractsPageContent() {
     }
   }
 
+  // 業務完了届を取得（受注者用）
+  const fetchCompletionReports = async () => {
+    try {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+
+      if (sessionError || !session) {
+        console.error('セッション取得エラー:', sessionError)
+        return
+      }
+
+      const response = await fetch('/api/completion-reports', {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        setCompletionReports(result || [])
+      } else {
+        // サーバーエラーの場合は空配列を設定（機能準備中として表示）
+        console.warn('業務完了届API未対応:', response.status)
+        setCompletionReports([])
+      }
+    } catch (err: any) {
+      console.error('業務完了届取得エラー:', err)
+      setCompletionReports([])
+    }
+  }
+
   // プロジェクトの状態を確認（評価済み・請求書作成済み）
   const checkProjectStatuses = async (projects: any[], contractsData: Contract[]) => {
     try {
@@ -240,7 +338,6 @@ function ContractsPageContent() {
 
       const evaluatedSet = new Set<string>()
       const invoicedSet = new Set<string>()
-      const invoiceMap = new Map<string, any>()
 
       // 各プロジェクトの状態を並行して確認
       const statusPromises = projects.map(async (project) => {
@@ -283,7 +380,6 @@ function ContractsPageContent() {
           const invoiceResult = await invoiceResponse.json()
           if (invoiceResult.invoice) {
             invoicedSet.add(project.id)
-            invoiceMap.set(project.id, invoiceResult.invoice)
           }
         } else if (invoiceResponse) {
           console.error(`プロジェクト ${project.id} の請求書データ取得エラー:`, invoiceResponse.status, invoiceResponse.statusText)
@@ -294,7 +390,6 @@ function ContractsPageContent() {
 
       setEvaluatedProjects(evaluatedSet)
       setInvoicedProjects(invoicedSet)
-      setInvoiceStatuses(invoiceMap)
     } catch (err: any) {
       console.error('プロジェクト状態確認エラー:', err)
     }
@@ -304,30 +399,8 @@ function ContractsPageContent() {
     return evaluatedProjects.has(projectId)
   }
 
-  const isProjectInvoiced = (projectId: string) => {
-    return invoicedProjects.has(projectId)
-  }
-
-  const getInvoiceStatus = (projectId: string) => {
-    return invoiceStatuses.get(projectId)
-  }
-
-  // 契約を月毎にグループ化
-  const groupContractsByMonth = (contracts: Contract[]) => {
-    const grouped = contracts.reduce((acc, contract) => {
-      const date = new Date(contract.created_at)
-      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-      if (!acc[monthKey]) {
-        acc[monthKey] = {
-          monthName: date.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' }),
-          contracts: []
-        }
-      }
-      acc[monthKey].contracts.push(contract)
-      return acc
-    }, {} as Record<string, { monthName: string; contracts: Contract[] }>)
-
-    return Object.values(grouped).sort((a, b) => b.monthName.localeCompare(a.monthName))
+  const isCompletionReportCreated = (projectId: string) => {
+    return completionReportProjects.has(projectId)
   }
 
   // 契約をプロジェクトごとにグループ化（複数受注者対応）
@@ -403,7 +476,7 @@ function ContractsPageContent() {
   }
 
   // 業務完了届の作成
-  const handleCreateInvoice = async (projectId: string) => {
+  const handleCreateCompletionReport = async (projectId: string) => {
     try {
       const { data: { session }, error: sessionError } = await supabase.auth.getSession()
 
@@ -413,7 +486,14 @@ function ContractsPageContent() {
         return
       }
 
-      const response = await fetch('/api/invoices', {
+      // プロジェクトの契約情報を取得
+      const projectContract = projectContracts[projectId]?.[0]
+      if (!projectContract) {
+        alert('契約情報が見つかりません')
+        return
+      }
+
+      const response = await fetch('/api/completion-reports', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
@@ -421,7 +501,9 @@ function ContractsPageContent() {
         },
         body: JSON.stringify({
           project_id: projectId,
-          type: 'completion'
+          contract_id: projectContract.id,
+          actual_completion_date: new Date().toISOString().split('T')[0],
+          status: 'submitted'
         })
       })
 
@@ -432,6 +514,8 @@ function ContractsPageContent() {
           alert('業務完了届は既に作成済みです')
         } else {
           alert('業務完了届を作成しました。受注者に通知が送信されました。')
+          // 完了届作成済み状態を更新
+          setCompletionReportProjects(prev => new Set(Array.from(prev).concat(projectId)))
           // 完了案件を再取得して状態を更新
           fetchCompletedProjects()
         }
@@ -445,11 +529,52 @@ function ContractsPageContent() {
     }
   }
 
+  // 業務完了届のデジタル署名
+  const handleSignCompletionReport = async (reportId: string) => {
+    try {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+
+      if (sessionError || !session) {
+        console.error('セッション取得エラー:', sessionError)
+        alert('認証エラーが発生しました')
+        return
+      }
+
+      // 署名確認
+      const confirmSign = confirm('業務完了届にデジタル署名を開始しますか？Box Signのページが開きます。')
+      if (!confirmSign) return
+
+      const response = await fetch(`/api/completion-reports/${reportId}/sign`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        alert('デジタル署名リクエストを作成しました。署名ページに移動します。')
+        // 署名ページに移動
+        if (result.signing_urls && result.signing_urls.length > 0) {
+          window.open(result.signing_urls[0], '_blank')
+        }
+        fetchCompletionReports() // 再取得
+      } else {
+        alert(`署名リクエストの作成に失敗しました: ${result.message || '不明なエラー'}`)
+      }
+    } catch (err: any) {
+      console.error('署名エラー:', err)
+      alert('署名リクエストの作成に失敗しました')
+    }
+  }
+
   // URLパラメータからタブを設定
   useEffect(() => {
     const tab = searchParams.get('tab')
-    if (tab && ['signature', 'pending', 'invoice'].includes(tab)) {
-      setSelectedTab(tab as 'signature' | 'pending' | 'invoice')
+    if (tab && ['signature', 'pending', 'invoice', 'completion'].includes(tab)) {
+      setSelectedTab(tab as 'signature' | 'pending' | 'invoice' | 'completion')
     }
   }, [searchParams])
 
@@ -461,6 +586,7 @@ function ContractsPageContent() {
         fetchCompletedProjects()
       } else if (userRole === 'Contractor') {
         fetchInvoices()
+        fetchCompletionReports()
       }
       fetchSupportPercent()
     }
@@ -564,6 +690,23 @@ function ContractsPageContent() {
                     </span>
                   )}
                 </button>
+                {userRole === 'Contractor' && (
+                  <button
+                    onClick={() => setSelectedTab('completion')}
+                    className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                      selectedTab === 'completion'
+                        ? 'border-engineering-blue text-engineering-blue'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    業務完了届
+                    {completionReports.length > 0 && (
+                      <span className="ml-2 bg-purple-500 text-white text-xs px-2 py-1 rounded-full">
+                        {completionReports.length}
+                      </span>
+                    )}
+                  </button>
+                )}
               </nav>
             </div>
           </div>
@@ -958,24 +1101,47 @@ function ContractsPageContent() {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => handleCreateInvoice(project.id)}
-                              disabled={!evaluatedProjects.has(project.id) || isProjectInvoiced(project.id)}
-                              title={!evaluatedProjects.has(project.id) ? '受注者評価が未完了のため完了届は作成できません' : (isProjectInvoiced(project.id) ? '既に作成済みです' : '')}
+                              onClick={() => handleCreateCompletionReport(project.id)}
+                              disabled={!evaluatedProjects.has(project.id) || isCompletionReportCreated(project.id)}
+                              title={!evaluatedProjects.has(project.id) ? '受注者評価が未完了のため完了届は作成できません' : (isCompletionReportCreated(project.id) ? '既に作成済みです' : '')}
                             >
                               <FileText className="w-4 h-4 mr-2" />
-                              {isProjectInvoiced(project.id) ? '作成済み' : (!evaluatedProjects.has(project.id) ? '評価待ち' : '完了届作成')}
+                              {isCompletionReportCreated(project.id) ? '作成済み' : (!evaluatedProjects.has(project.id) ? '評価待ち' : '完了届作成')}
                             </Button>
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => {
-                                const inv = invoiceStatuses.get(project.id)
-                                if (!inv?.id) {
-                                  alert('PDFを表示できる請求書が見つかりません')
-                                  return
+                              onClick={async () => {
+                                // 完了届IDを取得してPDFを表示
+                                try {
+                                  const { data: { session } } = await supabase.auth.getSession()
+                                  if (!session) {
+                                    alert('認証が必要です')
+                                    return
+                                  }
+
+                                  const response = await fetch(`/api/completion-reports?project_id=${project.id}`, {
+                                    headers: {
+                                      'Authorization': `Bearer ${session.access_token}`
+                                    }
+                                  })
+
+                                  if (response.ok) {
+                                    const reports = await response.json()
+                                    if (reports.length > 0) {
+                                      openPdfWithAuth(`/api/completion-reports/${reports[0].id}/pdf`)
+                                    } else {
+                                      alert('完了届が見つかりません')
+                                    }
+                                  } else {
+                                    alert('完了届の取得に失敗しました')
+                                  }
+                                } catch (error) {
+                                  alert('エラーが発生しました')
                                 }
-                                window.open(`/api/invoices?id=${inv.id}`, '_blank')
                               }}
+                              disabled={!isCompletionReportCreated(project.id)}
+                              title={!isCompletionReportCreated(project.id) ? '完了届が作成されていません' : ''}
                             >
                               <FileText className="w-4 h-4 mr-2" />
                               PDF表示
@@ -1004,9 +1170,14 @@ function ContractsPageContent() {
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
                           <div className="flex items-center justify-between mb-2">
-                            <h3 className="text-lg font-semibold text-gray-900">
-                              請求書番号: {invoice.invoice_number}
-                            </h3>
+                            <div>
+                              <h3 className="text-lg font-semibold text-gray-900">
+                                請求書番号: {invoice.invoice_number}
+                              </h3>
+                              <div className="text-sm text-gray-600 mt-1">
+                                案件名: {invoice.project?.title || '—'}
+                              </div>
+                            </div>
                             <Badge
                               className={
                                 invoice.status === 'paid' ? 'bg-green-100 text-green-800' :
@@ -1028,10 +1199,10 @@ function ContractsPageContent() {
                               <span className="font-medium">支払期限:</span> {new Date(invoice.due_date).toLocaleDateString('ja-JP')}
                             </div>
                             <div>
-                              <span className="font-medium">税抜金額:</span> ¥{invoice.amount.toLocaleString()}
+                              <span className="font-medium">税抜金額:</span> ¥{Number(invoice?.amount ?? 0).toLocaleString()}
                             </div>
                             <div>
-                              <span className="font-medium">税込金額:</span> ¥{invoice.total_amount.toLocaleString()}
+                              <span className="font-medium">税込金額:</span> ¥{Number(invoice?.total_amount ?? 0).toLocaleString()}
                             </div>
                           </div>
                           {invoice.paid_date && (
@@ -1044,7 +1215,7 @@ function ContractsPageContent() {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => window.open(`/api/invoices?id=${invoice.id}`, '_blank')}
+                            onClick={() => openPdfWithAuth(`/api/invoices?id=${invoice.id}`)}
                           >
                             <FileText className="w-4 h-4 mr-2" />
                             PDF表示
@@ -1057,9 +1228,131 @@ function ContractsPageContent() {
               )
             )
           )}
+
+          {/* 業務完了届タブ（受注者用） */}
+          {selectedTab === 'completion' && userRole === 'Contractor' && (
+            completionReports.length === 0 ? (
+              <Card className="p-8 text-center">
+                <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">業務完了届機能</h3>
+                <p className="text-gray-600 mb-4">
+                  現在、業務完了届機能は準備中です。<br/>
+                  発注者から業務完了届が発行されると、ここに表示されます。
+                </p>
+                <div className="bg-blue-50 p-4 rounded-lg text-left">
+                  <h4 className="font-semibold text-blue-900 mb-2">💡 業務完了届の流れ</h4>
+                  <ol className="text-sm text-blue-800 space-y-1">
+                    <li>1. 発注者が案件完了後に「業務完了届発行」</li>
+                    <li>2. 受注者（あなた）がこのページで確認・署名</li>
+                    <li>3. 署名後にPDF形式でダウンロード可能</li>
+                  </ol>
+                </div>
+              </Card>
+            ) : (
+              <div className="space-y-6">
+                <div className="bg-purple-50 p-4 rounded-lg">
+                  <h3 className="font-semibold text-purple-900 mb-2">業務完了届について</h3>
+                  <p className="text-sm text-purple-800">
+                    発注者から発行された業務完了届の確認と署名を行えます。署名後はPDF形式でダウンロードも可能です。
+                  </p>
+                </div>
+
+                <div className="grid gap-4">
+                  {completionReports.map((report) => (
+                    <Card key={report.id} className="p-6">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between mb-2">
+                            <h3 className="text-lg font-semibold text-gray-900">
+                              {report.projects?.title || '業務完了届'}
+                            </h3>
+                            <Badge
+                              className={
+                                report.status === 'approved' ? 'bg-green-100 text-green-800' :
+                                report.status === 'submitted' ? 'bg-blue-100 text-blue-800' :
+                                report.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                                'bg-yellow-100 text-yellow-800'
+                              }
+                            >
+                              {report.status === 'approved' ? '承認済み' :
+                               report.status === 'submitted' ? '提出済み' :
+                               report.status === 'rejected' ? '差し戻し' : '下書き'}
+                            </Badge>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4 text-sm text-gray-600 mb-4">
+                            <div>
+                              <span className="font-medium">実際の完了日:</span> {new Date(report.actual_completion_date).toLocaleDateString('ja-JP')}
+                            </div>
+                            <div>
+                              <span className="font-medium">提出日:</span> {report.submission_date ? new Date(report.submission_date).toLocaleDateString('ja-JP') : '未提出'}
+                            </div>
+                            <div>
+                              <span className="font-medium">発注者:</span> {report.organizations?.name || '不明'}
+                            </div>
+                            <div>
+                              <span className="font-medium">契約金額:</span> ¥{report.contracts?.bid_amount?.toLocaleString() || '0'}
+                            </div>
+                          </div>
+
+                          {/* 署名状況 */}
+                          <div className="border-t pt-4 mb-4">
+                            <div className="grid grid-cols-2 gap-4 text-sm">
+                              <div>
+                                <span className="text-gray-600">受注者署名:</span>
+                                <span className={`ml-2 ${report.contractor_signed_at ? 'text-green-600' : 'text-gray-400'}`}>
+                                  {report.contractor_signed_at
+                                    ? new Date(report.contractor_signed_at).toLocaleString('ja-JP')
+                                    : '未署名'
+                                  }
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-gray-600">承認日:</span>
+                                <span className={`ml-2 ${report.approved_at ? 'text-green-600' : 'text-gray-400'}`}>
+                                  {report.approved_at
+                                    ? new Date(report.approved_at).toLocaleString('ja-JP')
+                                    : '未承認'
+                                  }
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2 ml-4">
+                          {!report.contractor_signed_at && (
+                            <Button
+                              variant="engineering"
+                              size="sm"
+                              onClick={() => handleSignCompletionReport(report.id)}
+                            >
+                              <FileText className="w-4 h-4 mr-2" />
+                              署名する
+                            </Button>
+                          )}
+
+                          {report.contractor_signed_at && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => window.open(`/api/completion-reports/${report.id}/pdf`, '_blank')}
+                            >
+                              <FileText className="w-4 h-4 mr-2" />
+                              PDF表示
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            )
+          )}
         </motion.div>
       </div>
-      
+
       {/* 評価フォーム */}
       {showEvaluationForm && evaluationTarget && (
         <ContractorEvaluationForm

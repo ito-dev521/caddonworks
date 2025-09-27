@@ -49,13 +49,6 @@ export async function GET(request: NextRequest) {
           billing_email,
           box_folder_id
         `)
-        .not('name', 'like', '%デモ%')
-        .not('name', 'like', '%テスト%')
-        .not('name', 'like', '%受注者%')
-        .not('name', 'like', '%個人事業主%')
-        .not('name', 'ilike', '%demo%')
-        .not('name', 'ilike', '%test%')
-        .not('name', 'ilike', '%contractor%')
         .order('created_at', { ascending: false })
 
       if (error && error.code === '42703') {
@@ -70,13 +63,6 @@ export async function GET(request: NextRequest) {
             created_at,
             billing_email
           `)
-          .not('name', 'like', '%デモ%')
-          .not('name', 'like', '%テスト%')
-          .not('name', 'like', '%受注者%')
-          .not('name', 'like', '%個人事業主%')
-          .not('name', 'ilike', '%demo%')
-          .not('name', 'ilike', '%test%')
-          .not('name', 'ilike', '%contractor%')
           .order('created_at', { ascending: false })
 
         organizations = basicData || []

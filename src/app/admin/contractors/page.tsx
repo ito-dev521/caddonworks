@@ -32,7 +32,15 @@ function AdminContractorsPageContent() {
     const fetchContractors = async () => {
       setLoading(true)
       try {
-        const res = await fetch("/api/admin/contractors")
+        // 認証トークンを取得
+        const { data: { session } } = await (await import("@/lib/supabase")).supabase.auth.getSession()
+        const token = session?.access_token || ''
+
+        const res = await fetch("/api/admin/contractors", {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
         if (res.ok) {
           const json = await res.json()
           setContractors(json.contractors || [])
@@ -53,9 +61,16 @@ function AdminContractorsPageContent() {
 
     setActionLoading(contractorId)
     try {
+      // 認証トークンを取得
+      const { data: { session } } = await (await import("@/lib/supabase")).supabase.auth.getSession()
+      const token = session?.access_token || ''
+
       const res = await fetch(`/api/admin/users/${contractorId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ active: !currentActive })
       })
 
@@ -79,9 +94,16 @@ function AdminContractorsPageContent() {
 
     setActionLoading(contractorId)
     try {
+      // 認証トークンを取得
+      const { data: { session } } = await (await import("@/lib/supabase")).supabase.auth.getSession()
+      const token = session?.access_token || ''
+
       const res = await fetch(`/api/admin/users/${contractorId}`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' }
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
       })
 
       if (res.ok) {

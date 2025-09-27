@@ -509,26 +509,56 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const updateProfile = async (updates: Partial<User>) => {
-    if (!userProfile) {
-      console.error('updateProfile: userProfile is null')
-      throw new Error('ユーザープロフィールが見つかりません')
-    }
-
     try {
+      // 認証ユーザーを取得
+      const { data: authData, error: authErr } = await supabase.auth.getUser()
+      if (authErr || !authData?.user) {
+        throw new Error('認証が必要です')
+      }
 
-      const { error } = await supabase
+      const authUserId = authData.user.id
+      const fallbackEmail = authData.user.email || ''
+
+      // upsert で存在しない場合は作成、存在する場合は更新
+      const payload: any = {
+        auth_user_id: authUserId,
+        // email は既存があれば保持、無ければ認証情報から補完
+        email: userProfile?.email || fallbackEmail,
+        updated_at: new Date().toISOString(),
+        ...updates,
+      }
+
+      // display_name のフォールバック（空のままを避ける）
+      if (!payload.display_name || String(payload.display_name).trim() === '') {
+        const localPart = (payload.email || '').split('@')[0] || 'ユーザー'
+        payload.display_name = userProfile?.display_name || localPart
+      }
+
+      const { data: upserted, error: upsertErr } = await supabase
         .from('users')
-        .update(updates)
-        .eq('id', userProfile.id)
+        .upsert(payload, { onConflict: 'auth_user_id' })
         .select()
         .single()
 
-      if (error) {
-        console.error('updateProfile: Supabaseエラー', error)
-        throw error
+      if (upsertErr) {
+        console.error('updateProfile: upsertエラー', upsertErr)
+        // 既存IDでの更新にフォールバック
+        if (userProfile?.id) {
+          const { data: updated, error: updateErr } = await supabase
+            .from('users')
+            .update({ ...updates, updated_at: new Date().toISOString() })
+            .eq('id', userProfile.id)
+            .select()
+            .single()
+          if (updateErr) throw updateErr
+          setUserProfile({ ...(userProfile || {} as any), ...(updated || {}) })
+          return
+        }
+        throw upsertErr
       }
 
-      setUserProfile({ ...userProfile, ...updates })
+      // 状態を更新
+      setUserProfile(upserted as any)
     } catch (error) {
       console.error('Error updating profile:', error)
       throw error
@@ -539,7 +569,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // 発注者(OrgAdmin/Staff)は案件管理へ、受注者は案件一覧へ
     if (!userRole) return '/dashboard'
     if (userRole === 'OrgAdmin' || userRole === 'Staff') return '/projects'
-    if (userRole === 'Contractor') return '/jobs'
+    if (userRole === 'Contractor') return '/contracts'
     if (userRole === 'Admin') return '/admin/users'
     if (userRole === 'Reviewer') return '/reviews'
     return '/dashboard'

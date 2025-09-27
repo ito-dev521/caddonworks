@@ -89,8 +89,12 @@ class BoxSignAPI {
     try {
       // Box Sign API リクエスト構築
       const signRequestData = {
-        source_files: options.boxFileId ? [{ id: options.boxFileId }] : undefined,
+        source_files: options.boxFileId ? [{
+          type: 'file',
+          id: options.boxFileId
+        }] : undefined,
         parent_folder: {
+          type: 'folder',
           id: process.env.BOX_PROJECTS_ROOT_FOLDER_ID || '0'
         },
         name: options.documentName,

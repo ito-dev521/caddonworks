@@ -146,8 +146,17 @@ export async function downloadBoxFile(fileId: string): Promise<Response> {
   return res
 }
 
-export async function uploadFileToBox(folderId: string, fileName: string, fileData: ArrayBuffer): Promise<any> {
+export async function uploadFileToBox(
+  fileDataOrBuffer: ArrayBuffer | Buffer,
+  fileName: string,
+  folderId: string
+): Promise<string> {
   try {
+    // ArrayBuffer または Buffer を ArrayBuffer に統一
+    const fileData = fileDataOrBuffer instanceof ArrayBuffer
+      ? fileDataOrBuffer
+      : fileDataOrBuffer.buffer.slice(fileDataOrBuffer.byteOffset, fileDataOrBuffer.byteOffset + fileDataOrBuffer.byteLength)
+
     // ファイル名とサイズの検証
     validateFileName(fileName)
     validateFileSize(fileData.byteLength)
@@ -188,7 +197,9 @@ export async function uploadFileToBox(folderId: string, fileName: string, fileDa
       }
     }
 
-    return res.json()
+    const result = await res.json()
+    // レスポンスからファイルIDを返す（entries[0].id）
+    return result.entries?.[0]?.id || result.id
   } catch (error: any) {
     console.error('Upload file error:', error)
     throw error
@@ -383,6 +394,34 @@ export async function renameBoxFolder(folderId: string, newName: string): Promis
   }
 }
 
+export async function deleteBoxFolder(folderId: string, recursive: boolean = true): Promise<void> {
+  try {
+    const accessToken = await getAppAuthAccessToken()
+
+    const res = await fetch(`https://api.box.com/2.0/folders/${folderId}?recursive=${recursive}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`
+      }
+    })
+
+    if (!res.ok) {
+      if (res.status === 404) {
+        console.warn(`📁 Folder ${folderId} not found, already deleted`)
+        return
+      }
+      const errorText = await res.text()
+      throw new Error(`Box folder deletion failed ${res.status}: ${errorText}`)
+    }
+
+    console.log(`📁 Successfully deleted folder: ${folderId}`)
+
+  } catch (error) {
+    console.error('❌ Box folder deletion failed:', error)
+    throw error
+  }
+}
+
 export async function createProjectFolderStructure(projectTitle: string, projectId: string, companyFolderId: string): Promise<{
   folderId: string;
   subfolders: Record<string, string>;
@@ -436,13 +475,14 @@ export async function createProjectFolderStructure(projectTitle: string, project
     // 既存のサブフォルダを取得
     const existingItems = await getBoxFolderItems(mainFolderId)
     const subfolders: Record<string, string> = {}
+    const subfolderNames: Record<string, string> = {}
 
     // フォルダ名マッピング（Box内の実際のフォルダ名に対応）
     const folderMapping: Record<string, string[]> = {
-      '受取': ['01_受取データ', '受取', '01_受取', '01_'],
-      '作業': ['02_作業データ', '作業', '02_作業', '02_'],
-      '納品': ['03_納品データ', '納品', '03_納品', '03_'],
-      '契約': ['04_契約データ', '契約', '04_契約', '04_']
+      '受取': ['01_受取データ', '受取', '01_受取', '01_', '01受取データ'],
+      '作業': ['02_作業データ', '作業', '02_作業', '02_', '02作業データ'],
+      '納品': ['03_納品データ', '納品', '03_納品', '03_', '03納品データ'],
+      '契約': ['04_契約データ', '契約', '04_契約', '04_', '04契約データ']
     }
 
     // 既存のフォルダから該当するサブフォルダを見つける
@@ -455,6 +495,7 @@ export async function createProjectFolderStructure(projectTitle: string, project
           patterns.forEach(pattern => {
             if (itemName.includes(pattern) && !subfolders[category]) {
               subfolders[category] = item.id
+              subfolderNames[category] = itemName
               console.log(`📁 Found existing subfolder: ${category} -> ${itemName} (ID: ${item.id})`)
             }
           })
@@ -462,13 +503,71 @@ export async function createProjectFolderStructure(projectTitle: string, project
       }
     })
 
-    // 見つからないサブフォルダがあればログに記録（作成はしない）
+    // 番号付き名称に正規化：
+    // - 既に番号付きがある → それを採用
+    // - 番号なしのみある → リネームして番号付きへ
+    // - どちらもない → 番号付きで新規作成
     const expectedCategories = ['受取', '作業', '納品', '契約']
-    expectedCategories.forEach(category => {
-      if (!subfolders[category]) {
-        console.warn(`📁 Subfolder not found for category: ${category}`)
+    const standardFolderNames: Record<string, string> = {
+      '受取': '01_受取データ',
+      '作業': '02_作業データ',
+      '納品': '03_納品データ',
+      '契約': '04_契約データ'
+    }
+
+    for (const category of expectedCategories) {
+      const standardName = standardFolderNames[category]
+
+      // まず既に標準名のフォルダがあるか探す
+      const exact = existingItems.find(
+        (it: any) => it.type === 'folder' && it.name === standardName
+      )
+      if (exact) {
+        subfolders[category] = exact.id
+        subfolderNames[category] = standardName
+        continue
       }
-    })
+
+      if (subfolders[category]) {
+        // 番号なし等でマッチしている場合はリネームを試行
+        const currentId = subfolders[category]
+        const currentName = subfolderNames[category]
+        if (currentName !== standardName) {
+          try {
+            await renameBoxFolder(currentId, standardName)
+            subfolderNames[category] = standardName
+            console.log(`🔁 Renamed subfolder: ${currentName} -> ${standardName}`)
+          } catch (e: any) {
+            // 競合などで失敗した場合は標準名で新規作成にフォールバック
+            console.warn(`⚠️ Rename failed (${currentName} -> ${standardName}). Creating new one.`, e?.message || e)
+            try {
+              const subFolderResult = await ensureProjectFolder({
+                name: standardName,
+                parentFolderId: mainFolderId
+              })
+              subfolders[category] = subFolderResult.id
+              subfolderNames[category] = standardName
+              console.log(`✅ Created subfolder: ${standardName} (ID: ${subFolderResult.id})`)
+            } catch (error) {
+              console.error(`❌ Failed to create subfolder ${standardName}:`, error)
+            }
+          }
+        }
+      } else {
+        // 何も無いので標準名で作成
+        try {
+          const subFolderResult = await ensureProjectFolder({
+            name: standardName,
+            parentFolderId: mainFolderId
+          })
+          subfolders[category] = subFolderResult.id
+          subfolderNames[category] = standardName
+          console.log(`✅ Created subfolder: ${standardName} (ID: ${subFolderResult.id})`)
+        } catch (error) {
+          console.error(`❌ Failed to create subfolder ${standardName}:`, error)
+        }
+      }
+    }
 
     return {
       folderId: mainFolderId,

@@ -318,7 +318,7 @@ export async function GET(request: NextRequest) {
           avatar_url,
           memberships!inner ( role )
         `)
-        .in('memberships.role', ['Reviewer', 'Staff'])
+        .in('memberships.role', ['Admin', 'Reviewer', 'Auditor'])
 
       if (supportMembers && supportMembers.length > 0) {
         supportMembers.forEach((u: any) => {

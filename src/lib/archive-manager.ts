@@ -120,3 +120,76 @@ export function getArchiveWarningMessage(
 
   return null
 }
+
+// 30日経過プロジェクトの自動削除処理
+export async function processAutoArchiveDeletion(
+  projectId: string,
+  supabaseAdmin: any
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    // プロジェクトの詳細を取得
+    const { data: project, error: projectError } = await supabaseAdmin
+      .from('projects')
+      .select('id, title, status, completed_at, box_folder_id')
+      .eq('id', projectId)
+      .single()
+
+    if (projectError || !project) {
+      return { success: false, error: 'プロジェクトが見つかりません' }
+    }
+
+    // 30日経過チェック
+    if (!isProjectArchiveDue(project.completed_at)) {
+      return { success: false, error: 'アーカイブ対象期間に達していません' }
+    }
+
+    // プロジェクト削除（Box フォルダは保持）
+    // auto_archive フラグを使用してBox保持を指定
+    const deleteUrl = `/api/projects/${projectId}?deleteType=auto_archive`
+
+    console.log(`🔄 Auto-archiving project ${projectId} (preserving Box folder)`)
+
+    // NOTE: この関数は通常バックグラウンド処理で呼ばれることを想定
+    // 実際のAPI呼び出しは呼び出し元で行う
+    return {
+      success: true,
+      error: `Project ${project.title} scheduled for auto-archive deletion with Box preservation`
+    }
+
+  } catch (error: any) {
+    console.error('Auto-archive deletion error:', error)
+    return {
+      success: false,
+      error: error.message || 'Auto-archive deletion failed'
+    }
+  }
+}
+
+// 30日経過プロジェクトを検索
+export async function findProjectsForAutoArchive(
+  supabaseAdmin: any,
+  retentionDays: number = 30
+): Promise<string[]> {
+  try {
+    const { data: projects, error } = await supabaseAdmin
+      .from('projects')
+      .select('id, completed_at')
+      .in('status', ['completed', 'cancelled'])
+      .not('completed_at', 'is', null)
+
+    if (error) {
+      console.error('Error fetching projects for auto-archive:', error)
+      return []
+    }
+
+    const archiveCandidates = projects.filter(project =>
+      isProjectArchiveDue(project.completed_at, retentionDays)
+    )
+
+    return archiveCandidates.map(p => p.id)
+
+  } catch (error) {
+    console.error('Error in findProjectsForAutoArchive:', error)
+    return []
+  }
+}

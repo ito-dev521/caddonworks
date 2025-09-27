@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
       },
       userProfile: userProfile || null,
       memberships: memberships || [],
-      canLogin: !!(authUser.email_confirmed_at && (userProfile || memberships?.length > 0))
+      canLogin: !!(authUser.email_confirmed_at && (userProfile || (memberships && memberships.length > 0)))
     })
 
   } catch (error) {
