@@ -135,22 +135,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setLoading(false)
         return
       }
-      // Fetch user profile
+      // Fetch user profile（無ければ自動作成してスムーズに遷移できるようにする）
+      let normalizedProfile: any = null
+      let createdProfileId: string | null = null
+
       const { data: profile, error: profileError } = await supabase
         .from('users')
         .select('*')
         .eq('auth_user_id', authUserId)
-        .single()
-
-      // デバッグログ削除
+        .maybeSingle()
 
       if (profileError && profileError.code !== 'PGRST116') {
         console.error('Error fetching user profile:', profileError)
-        // プロフィールが見つからない場合でも続行
+      }
+
+      // プロフィールが無い場合は最小情報で作成（初回ログイン救済）
+      if (!profile) {
+        try {
+          const { data: authUserInfo } = await supabase.auth.getUser()
+          const email = authUserInfo.user?.email || ''
+          const display = (email ? email.split('@')[0] : 'ユーザー')
+          const { data: upserted, error: upsertErr } = await supabase
+            .from('users')
+            .upsert({
+              auth_user_id: authUserId,
+              email,
+              display_name: display,
+              formal_name: display
+            }, { onConflict: 'auth_user_id' })
+            .select()
+            .single()
+
+          if (upsertErr) {
+            console.error('Auto-create profile failed:', upsertErr)
+          } else {
+            normalizedProfile = upserted as any
+            createdProfileId = upserted?.id || null
+          }
+        } catch (e) {
+          console.error('Auto-create profile exception:', e)
+        }
+      } else {
+        normalizedProfile = { ...profile }
       }
 
       // 表示名のフォールバック: 空なら氏名→メールローカル部の順で補完
-      let normalizedProfile: any = profile ? { ...profile } : null
       if (normalizedProfile) {
         const currentDisplay = (normalizedProfile.display_name || '').trim()
         if (!currentDisplay) {
@@ -166,8 +195,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUserProfile(normalizedProfile)
 
       // Fetch user role and organization from memberships
-      // プロフィールがある場合はprofile.id、ない場合はauthUserIdを使用
-      const userId = profile?.id || authUserId
+      // プロフィールがある場合はprofile.id、作成済みであればそのID、なければauthUserId
+      const userId = normalizedProfile?.id || createdProfileId || profile?.id || authUserId
 
       const { data: memberships, error: roleError } = await supabase
         .from('memberships')
@@ -210,21 +239,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // 取得失敗時は無視
       }
 
-      // メンバーシップが無い/ロールが未解決の場合、usersテーブルのroleをフォールバック
-      if (!resolvedRole) {
-        try {
-          const { data: roleFromUsers } = await supabase
-            .from('users')
-            .select('role')
-            .eq('auth_user_id', authUserId)
-            .maybeSingle()
-          if (roleFromUsers?.role) {
-            resolvedRole = roleFromUsers.role as UserRole
-          }
-        } catch (_) {
-          // 無視
-        }
-      }
+      // メンバーシップが無い/ロールが未解決の場合のフォールバックは行わない
+      // （usersテーブルにrole列が存在しない環境があるため）
 
       setUserRole(resolvedRole || null)
       

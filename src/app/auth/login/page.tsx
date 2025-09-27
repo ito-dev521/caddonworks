@@ -117,6 +117,19 @@ export default function LoginPage() {
 
       // リダイレクトは userRole 解決を待つ useEffect に任せる
       // ここでは成功表示のみ行う
+
+      // フォールバック: 1.5秒待ってもuseEffectで遷移しない場合に強制遷移
+      // （一部環境でuserRoleの解決タイミングにより遷移が発火しないケースに対応）
+      setTimeout(() => {
+        try {
+          // まだログインページに居る場合のみ実行
+          if (window.location.pathname.startsWith('/auth/login')) {
+            const redirectPath = getRedirectPath()
+            console.log('Login fallback redirect to:', redirectPath)
+            router.replace(redirectPath)
+          }
+        } catch (_) {}
+      }, 1500)
     } catch (err: any) {
       console.error('Login form: ログインエラー', err)
       setError(err.message || "ログインに失敗しました")
