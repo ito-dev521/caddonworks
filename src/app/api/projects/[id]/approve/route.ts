@@ -119,6 +119,28 @@ export async function POST(
       )
     }
 
+    // 期限切れチェック: bidding_deadline が過去の案件は承認不可
+    try {
+      const { data: deadlineRow } = await supabaseAdmin
+        .from('projects')
+        .select('bidding_deadline')
+        .eq('id', projectId)
+        .single()
+
+      const deadlineStr = (deadlineRow as any)?.bidding_deadline
+      if (deadlineStr) {
+        const deadline = new Date(deadlineStr)
+        const endOfDay = new Date(deadline)
+        endOfDay.setHours(23, 59, 59, 999)
+        if (new Date() > endOfDay) {
+          return NextResponse.json(
+            { message: '入札締切が過ぎた案件は承認できません' },
+            { status: 400 }
+          )
+        }
+      }
+    } catch (_) {}
+
     // 案件のステータスを更新
     // 承認時に優先招待候補があれば priority_invitation にして一般公開を避ける
     const shouldStartPriority = action === 'approve' && !!project.priority_invitation_candidate_id

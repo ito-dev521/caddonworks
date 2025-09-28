@@ -191,6 +191,10 @@ export function NotificationBell() {
         return <FileText className="w-4 h-4 text-purple-600" />
       case 'project_ready_for_evaluation':
         return <Star className="w-4 h-4 text-green-600" />
+      case 'priority_invitation':
+        return <Hand className="w-4 h-4 text-orange-600" />
+      case 'priority_invitation_response':
+        return <Hand className="w-4 h-4 text-green-600" />
       case 'project_approval_requested':
         return <AlertCircle className="w-4 h-4 text-orange-600" />
       case 'project_approved':

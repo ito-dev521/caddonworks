@@ -231,15 +231,14 @@ function JobsPageContent() {
 
     // ステータスフィルタ
     if (selectedTab === 'available') {
-      // 入札可能な案件（入札中の案件のみ）
-      filtered = filtered.filter(j => j.status === 'bidding')
+      // 入札可能な案件（入札中 + 優先招待中）
+      filtered = filtered.filter(j => j.status === 'bidding' || j.status === 'priority_invitation')
       
       // 期限切れの案件を除外（APIで計算済みのis_expiredフラグを使用）
       filtered = filtered.filter(job => !job.is_expired)
     } else if (selectedTab === 'awarded') {
-      // 落札した案件（署名済み契約の案件）
-      // APIから取得したデータで、入札中でない案件は全て落札した案件
-      filtered = filtered.filter(j => j.status !== 'bidding')
+      // 落札した案件（署名済み契約の案件: APIで status='awarded'）
+      filtered = filtered.filter(j => j.status === 'awarded')
     } else if (selectedTab === 'all') {
       // 全ての案件（フィルタリングなし）
       filtered = filtered
@@ -519,11 +518,11 @@ function JobsPageContent() {
               <div className="flex items-center gap-3">
                 <div className="text-right">
                   <p className="text-sm text-gray-600">入札可能案件</p>
-                  <p className="text-sm font-medium">{jobs.filter(j => j.status === 'bidding').length}件</p>
+                  <p className="text-sm font-medium">{jobs.filter(j => (j.status === 'bidding' || j.status === 'priority_invitation') && !j.is_expired).length}件</p>
                 </div>
                 <div className="text-right">
                   <p className="text-sm text-gray-600">落札案件</p>
-                  <p className="text-sm font-medium">{jobs.filter(j => j.status !== 'bidding').length}件</p>
+                  <p className="text-sm font-medium">{jobs.filter(j => j.status === 'awarded').length}件</p>
                 </div>
               </div>
             </div>
@@ -540,7 +539,7 @@ function JobsPageContent() {
                   { 
                     id: 'available', 
                     label: '入札可能', 
-                    count: jobs.filter(j => j.status === 'bidding').length 
+                    count: jobs.filter(j => (j.status === 'bidding' || j.status === 'priority_invitation') && !j.is_expired).length 
                   },
                   { 
                     id: 'awarded', 
@@ -629,14 +628,22 @@ function JobsPageContent() {
                           </CardDescription>
                         </div>
                         <div className="flex flex-col gap-2">
-                          {job.contract_amount ? (
+                          {job.status === 'awarded' ? (
                             <Badge className="bg-green-100 text-green-800">
                               落札済み
                             </Badge>
                           ) : (
-                            <Badge className={getStatusColor(job.status)}>
-                              {getStatusText(job.status)}
-                            </Badge>
+                            <>
+                              {job.status === 'priority_invitation' ? (
+                                <Badge className="bg-orange-100 text-orange-800 border-orange-200">
+                                  優先招待中
+                                </Badge>
+                              ) : (
+                                <Badge className={getStatusColor(job.status)}>
+                                  {getStatusText(job.status)}
+                                </Badge>
+                              )}
+                            </>
                           )}
                           {job.is_declined && (
                             <Badge variant="outline" className="border-red-300 text-red-700 bg-red-100">
@@ -766,7 +773,7 @@ function JobsPageContent() {
                           >
                             <Eye className="w-4 h-4" />
                           </Button>
-                          {job.status === 'bidding' && (
+                          {(job.status === 'bidding' || job.status === 'priority_invitation') && (
                             <>
                               {job.is_declined ? (
                                 <Button
@@ -794,7 +801,7 @@ function JobsPageContent() {
                               )}
                             </>
                           )}
-                          {job.status !== 'bidding' && (
+                          {job.status === 'awarded' && (
                             <Badge variant="secondary" className="bg-green-100 text-green-800">
                               落札済み
                             </Badge>

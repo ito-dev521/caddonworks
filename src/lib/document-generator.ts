@@ -6,7 +6,7 @@ import fs from 'fs'
 import { PDFDocument as PDFLib, rgb, StandardFonts } from 'pdf-lib'
 
 export interface DocumentData {
-  type: 'order' | 'completion' | 'monthly_invoice'
+  type: 'order' | 'order_acceptance' | 'completion' | 'monthly_invoice'
 
   // 共通フィールド
   title?: string
@@ -569,6 +569,26 @@ export class DocumentGenerator {
         },
         calculateFormulas: true
       },
+      order_acceptance: {
+        templatePath: 'order_acceptance_template.xlsx',
+        cellMappings: {
+          'orderNumber': 'B5',          // 注文書番号
+          'orderDate': 'B6',            // 注文日
+          'contractorName': 'B8',       // 受注者（会社名）
+          'contractorEmail': 'B9',      // 受注者メールアドレス
+          'contractorAddress': 'B10',   // 受注者住所
+          'contractorPhone': 'B11',     // 受注者電話番号
+          'clientName': 'B13',          // 発注者（会社名）
+          'clientEmail': 'B14',         // 発注者メールアドレス
+          'projectTitle': 'B16',        // 工事名・業務名
+          'projectAmount': 'B17',       // 請負金額
+          'deadline': 'B18',            // 完成期日
+          'workLocation': 'B19',        // 工事場所
+          'acceptanceDate': 'B21',      // 受諾日
+          'createdAt': 'E2'             // 作成日
+        },
+        calculateFormulas: true
+      },
       completion: {
         templatePath: 'completion_template.xlsx',
         cellMappings: {
@@ -654,6 +674,22 @@ export class DocumentGenerator {
         'projectAmount': { x: 150, y: 470, size: 11 },
         'deadline': { x: 150, y: 440, size: 11 },
       },
+      order_acceptance: {
+        'createdAt': { x: 450, y: 750, size: 10 },
+        'orderNumber': { x: 200, y: 700, size: 11 },
+        'orderDate': { x: 200, y: 675, size: 11 },
+        'contractorName': { x: 200, y: 630, size: 12 },
+        'contractorAddress': { x: 200, y: 605, size: 10 },
+        'contractorPhone': { x: 200, y: 580, size: 10 },
+        'contractorEmail': { x: 200, y: 555, size: 10 },
+        'clientName': { x: 200, y: 510, size: 11 },
+        'clientEmail': { x: 200, y: 485, size: 10 },
+        'projectTitle': { x: 200, y: 440, size: 11 },
+        'projectAmount': { x: 200, y: 415, size: 12 },
+        'deadline': { x: 200, y: 390, size: 11 },
+        'workLocation': { x: 200, y: 365, size: 11 },
+        'acceptanceDate': { x: 200, y: 320, size: 11 },
+      },
       monthly_invoice: {
         'createdAt': { x: 450, y: 750, size: 10 },
         'contractorName': { x: 150, y: 650, size: 11 },
@@ -671,6 +707,9 @@ export class DocumentGenerator {
     switch (data.type) {
       case 'order':
         this.generateOrderDocument(doc, data)
+        break
+      case 'order_acceptance':
+        this.generateOrderAcceptanceDocument(doc, data)
         break
       case 'completion':
         this.generateCompletionDocument(doc, data)
@@ -730,6 +769,86 @@ export class DocumentGenerator {
     // 注意事項
     y += 80
     doc.fontSize(8).text('※ 本書面は電子署名により法的効力を有します', 50, y)
+  }
+
+  private generateOrderAcceptanceDocument(doc: PDFKit.PDFDocument, data: DocumentData): void {
+    // ヘッダー
+    doc.fontSize(20).text('注文請書', 50, 50)
+    doc.fontSize(12).text(`作成日: ${data.createdAt || new Date().toLocaleDateString('ja-JP')}`, 400, 50)
+
+    let y = 120
+
+    // 注文書情報
+    doc.fontSize(14).text('注文書情報', 50, y)
+    y += 25
+    doc.fontSize(10)
+      .text(`注文書番号: ${(data as any).orderNumber || '未設定'}`, 70, y)
+    y += 20
+    doc.text(`注文日: ${(data as any).orderDate || '未設定'}`, 70, y)
+    y += 40
+
+    // 受注者情報
+    doc.fontSize(14).text('受注者情報（請書作成者）', 50, y)
+    y += 25
+    doc.fontSize(10)
+      .text(`会社名: ${data.contractorName || '受注者名'}`, 70, y)
+    y += 20
+    doc.text(`住所: ${(data as any).contractorAddress || '住所未登録'}`, 70, y)
+    y += 20
+    doc.text(`電話番号: ${(data as any).contractorPhone || '電話番号未登録'}`, 70, y)
+    y += 20
+    doc.text(`メールアドレス: ${data.contractorEmail || 'メール未登録'}`, 70, y)
+    y += 40
+
+    // 発注者情報
+    doc.fontSize(14).text('発注者情報', 50, y)
+    y += 25
+    doc.fontSize(10)
+      .text(`会社名: ${data.clientName || '発注者名'}`, 70, y)
+    y += 20
+    doc.text(`メールアドレス: ${data.clientEmail || 'メール未登録'}`, 70, y)
+    y += 40
+
+    // 請負内容
+    doc.fontSize(14).text('請負内容', 50, y)
+    y += 25
+    doc.fontSize(10)
+      .text(`工事名・業務名: ${data.projectTitle || 'プロジェクト名'}`, 70, y)
+    y += 20
+    doc.text(`請負金額: ¥${((data as any).projectAmount || 0).toLocaleString()}`, 70, y)
+    y += 20
+    doc.text(`完成期日: ${data.deadline || '未設定'}`, 70, y)
+    y += 20
+    doc.text(`工事場所: ${(data as any).workLocation || '場所未設定'}`, 70, y)
+    y += 40
+
+    // 受諾内容
+    doc.fontSize(14).text('受諾内容', 50, y)
+    y += 25
+    doc.fontSize(10).text(
+      '上記注文書の内容を承諾し、記載された条件に従って業務を履行することをお約束いたします。',
+      70, y, { width: 450 }
+    )
+    y += 60
+
+    // 受諾日
+    doc.fontSize(12).text('受諾日', 50, y)
+    y += 20
+    doc.fontSize(10).text(`${(data as any).acceptanceDate || new Date().toLocaleDateString('ja-JP')}`, 70, y)
+    y += 60
+
+    // 署名欄
+    doc.fontSize(12).text('受注者署名:', 50, y)
+    doc.rect(150, y - 5, 200, 30).stroke()
+
+    y += 50
+    doc.text('発注者確認署名:', 50, y)
+    doc.rect(150, y - 5, 200, 30).stroke()
+
+    // 注意事項
+    y += 80
+    doc.fontSize(8).text('※ 本注文請書は電子署名により法的効力を有します', 50, y)
+    doc.text('※ 契約条件の詳細は別途契約書に記載されます', 50, y + 15)
   }
 
   private generateCompletionDocument(doc: PDFKit.PDFDocument, data: DocumentData): void {
@@ -868,6 +987,35 @@ export function createOrderDocumentData(project: any, contractor: any, client: a
     clientName: client.name,
     clientEmail: client.email,
     createdAt: new Date().toLocaleDateString('ja-JP')
+  }
+}
+
+export function createOrderAcceptanceDocumentData(
+  project: any,
+  contractor: any,
+  client: any,
+  orderInfo?: any
+): DocumentData {
+  return {
+    type: 'order_acceptance',
+    title: '注文請書',
+    projectTitle: project.title,
+    projectAmount: project.amount,
+    deadline: project.deadline,
+    contractorName: contractor.name,
+    contractorEmail: contractor.email,
+    clientName: client.name,
+    clientEmail: client.email,
+    createdAt: new Date().toLocaleDateString('ja-JP'),
+    // 注文請書特有のフィールド
+    ...(orderInfo && {
+      orderNumber: orderInfo.orderNumber,
+      orderDate: orderInfo.orderDate,
+      contractorAddress: contractor.address || contractor.postal_code || '住所未登録',
+      contractorPhone: contractor.phone_number || '電話番号未登録',
+      workLocation: project.location || '場所未設定',
+      acceptanceDate: new Date().toLocaleDateString('ja-JP')
+    })
   }
 }
 

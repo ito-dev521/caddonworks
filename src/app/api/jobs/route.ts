@@ -122,6 +122,37 @@ export async function GET(request: NextRequest) {
       .eq('status', 'bidding') // 入札中の案件のみ
       .order('created_at', { ascending: false })
 
+    // 1.5 優先招待（受注者宛て・保留中）を取得し、プロジェクト情報を付与
+    const { data: priorityInvitations } = await supabaseAdmin
+      .from('priority_invitations')
+      .select(`
+        project_id,
+        expires_at,
+        response,
+        projects (
+          id,
+          title,
+          description,
+          status,
+          budget,
+          start_date,
+          end_date,
+          category,
+          created_at,
+          assignee_name,
+          bidding_deadline,
+          requirements,
+          location,
+          org_id,
+          required_contractors,
+          contractor_id,
+          required_level,
+          support_enabled
+        )
+      `)
+      .eq('contractor_id', userProfile.id)
+      .eq('response', 'pending')
+
     // 2. 現在のユーザーの全契約を取得（プロジェクトごとの最新ステータス確認）
     const { data: allUserContracts, error: contractsError } = await supabaseAdmin
       .from('contracts')
@@ -241,6 +272,11 @@ export async function GET(request: NextRequest) {
       const requiredLevel = (job.required_level as MemberLevel) || 'beginner'
       return canAccessProject(userLevel as MemberLevel, requiredLevel)
     }) || []
+
+    // 優先招待案件（プロジェクト情報が取得できたもののみ）
+    const priorityInvitationJobs = (priorityInvitations || [])
+      .map((inv: any) => inv.projects)
+      .filter((p: any) => !!p)
     
     // 辞退した案件のIDを収集
     const allDeclinedProjectIds = [
@@ -253,8 +289,12 @@ export async function GET(request: NextRequest) {
       !allDeclinedProjectIds.includes(String(job.id))
     )
     
-    // フィルタリングされた入札可能な案件と落札した案件のみを結合（辞退した案件は除外）
-    let jobsData = [...filteredBiddingJobs, ...filteredAwardedJobs]
+    // フィルタリングされた入札可能な案件と落札した案件、優先招待案件を結合（辞退した案件は除外）
+    // 重複防止のため、同一IDが重なる場合は priority_invitation を優先
+    const combined = [...filteredBiddingJobs, ...filteredAwardedJobs]
+    const pidSet = new Set(combined.map((j: any) => String(j.id)))
+    const onlyPriorityNew = priorityInvitationJobs.filter((p: any) => !pidSet.has(String(p.id)))
+    let jobsData = [...combined, ...onlyPriorityNew]
 
     // 念のため、結合後にも辞退案件を全体から除外（型の違い等の取りこぼし対策）
     jobsData = jobsData.filter((job: any) => !allDeclinedProjectIds.includes(String(job.id)))
@@ -337,7 +377,7 @@ export async function GET(request: NextRequest) {
         id: job.id,
         title: job.title,
         description: job.description,
-        status: job.status,
+        status: job.status, // priority_invitation のまま返す
         budget: job.budget,
         start_date: job.start_date,
         end_date: job.end_date,
@@ -355,7 +395,7 @@ export async function GET(request: NextRequest) {
         is_full: isFull,
         is_expired: isExpired,
         is_declined: isDeclined,
-        can_bid: !isFull && !isExpired && job.status === 'bidding' && !isDeclined,
+        can_bid: !isFull && !isExpired && (job.status === 'bidding' || job.status === 'priority_invitation') && !isDeclined,
         advice: advice,
         contract_amount: job.contract_amount, // 契約金額を追加
         support_enabled: job.support_enabled || false, // プロジェクトレベルのサポート

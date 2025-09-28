@@ -1,3 +1,82 @@
+-- プロジェクトステータスに priority_invitation を追加し、
+-- 期限管理用の priority_invitation_active を導入します。
+
+-- 1) 既存のCHECK制約を priority_invitation を含む形に更新
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.table_constraints
+        WHERE constraint_name = 'projects_status_check'
+        AND table_name = 'projects'
+        AND table_schema = 'public'
+    ) THEN
+        ALTER TABLE public.projects DROP CONSTRAINT projects_status_check;
+    END IF;
+
+    ALTER TABLE public.projects
+    ADD CONSTRAINT projects_status_check
+    CHECK (status IN (
+        'draft',
+        'pending_approval',
+        'bidding',
+        'priority_invitation',
+        'in_progress',
+        'completed',
+        'cancelled',
+        'suspended'
+    ));
+END $$;
+
+-- 2) priority_invitation_active フラグ列の追加（なければ）
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'projects'
+          AND column_name = 'priority_invitation_active'
+    ) THEN
+        ALTER TABLE public.projects
+        ADD COLUMN priority_invitation_active BOOLEAN DEFAULT false;
+
+        CREATE INDEX IF NOT EXISTS idx_projects_priority_invitation_active
+          ON public.projects(priority_invitation_active);
+    END IF;
+END $$;
+
+-- 3) 期限切れ優先招待の自動処理（任意・関数のみ定義）
+CREATE OR REPLACE FUNCTION public.expire_priority_invitations()
+RETURNS void AS $$
+BEGIN
+    -- 期限切れの優先招待を自動的に拒否扱いにし、
+    -- プロジェクトのステータスを一般公開(bidding)へ戻す
+    UPDATE public.priority_invitations
+    SET
+        response = 'declined',
+        responded_at = NOW(),
+        response_notes = '期限切れによる自動拒否'
+    WHERE
+        response = 'pending'
+        AND expires_at < NOW();
+
+    UPDATE public.projects p
+    SET
+        status = 'bidding',
+        priority_invitation_active = false
+    WHERE
+        p.status = 'priority_invitation'
+        AND EXISTS (
+            SELECT 1 FROM public.priority_invitations i
+            WHERE i.project_id = p.id
+              AND i.response = 'declined'
+              AND i.response_notes = '期限切れによる自動拒否'
+        );
+END;
+$$ LANGUAGE plpgsql;
+
+-- 実行確認用
+SELECT 'priority_invitation ステータスと列、関数を準備しました' AS result;
+
 -- プロジェクトステータスに priority_invitation を追加
 -- 既存のCHECK制約を確認
 SELECT constraint_name, check_clause

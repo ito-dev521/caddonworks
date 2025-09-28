@@ -360,7 +360,7 @@ function ProjectsPageContent() {
 
     // ステータスフィルタ
     if (selectedTab === 'active') {
-      filtered = filtered.filter(p => p.status === 'in_progress' || p.status === 'bidding')
+      filtered = filtered.filter(p => p.status === 'in_progress' || p.status === 'bidding' || p.status === 'priority_invitation')
     } else if (selectedTab === 'completed') {
       filtered = filtered.filter(p => p.status === 'completed' || p.status === 'suspended')
     } else if (selectedTab === 'pending_approval') {
@@ -1067,6 +1067,8 @@ function ProjectsPageContent() {
     switch (status) {
       case 'bidding':
         return 'text-blue-600 bg-blue-100'
+      case 'priority_invitation':
+        return 'text-orange-700 bg-orange-100'
       case 'in_progress':
         return 'text-green-600 bg-green-100'
       case 'completed':
@@ -1084,6 +1086,8 @@ function ProjectsPageContent() {
     switch (status) {
       case 'bidding':
         return '入札中'
+      case 'priority_invitation':
+        return '優先招待中'
       case 'in_progress':
         return '進行中'
       case 'completed':
@@ -1201,7 +1205,7 @@ function ProjectsPageContent() {
               {/* タブナビゲーション */}
               <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg">
                 {[
-                  { id: 'active', label: '進行中', count: projects.filter(p => p.status === 'in_progress' || p.status === 'bidding').length },
+                  { id: 'active', label: '進行中', count: projects.filter(p => p.status === 'in_progress' || p.status === 'bidding' || p.status === 'priority_invitation').length },
                   { id: 'completed', label: '完了済み', count: projects.filter(p => p.status === 'completed' || p.status === 'suspended').length },
                   { id: 'pending_approval', label: '承認待ち', count: projects.filter(p => p.status === 'pending_approval').length },
                   { id: 'all', label: 'すべて', count: projects.length }
