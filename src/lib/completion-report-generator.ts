@@ -32,5 +32,6 @@ export async function generateCompletionReportPDF(data: CompletionReportData): P
   }
 
   console.log('📝 完了届データ:', templateData)
+  console.log('🎯 テンプレート検索: completion_template.pdf')
   return await documentGenerator.generateDocument('completion', templateData)
 }

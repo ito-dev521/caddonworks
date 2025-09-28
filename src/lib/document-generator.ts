@@ -3,6 +3,7 @@ import ExcelJS from 'exceljs'
 import puppeteer from 'puppeteer'
 import path from 'path'
 import fs from 'fs'
+import { PDFDocument as PDFLib, rgb, StandardFonts } from 'pdf-lib'
 
 export interface DocumentData {
   type: 'order' | 'completion' | 'monthly_invoice'
@@ -55,9 +56,17 @@ export class DocumentGenerator {
     }
   }
 
-  // メイン生成メソッド：Excelテンプレートがあれば使用、なければモックPDF生成
+  // メイン生成メソッド：PDFテンプレート優先、次にExcel、最後にモック
   async generateDocument(templateId: string, data: DocumentData): Promise<Buffer> {
     try {
+      // PDFテンプレートファイルを探す
+      const pdfTemplatePath = await this.findPDFTemplate(templateId, data.type)
+
+      if (pdfTemplatePath && fs.existsSync(pdfTemplatePath)) {
+        console.log('📄 PDF テンプレート使用:', pdfTemplatePath)
+        return await this.generateFromPDFTemplate(pdfTemplatePath, data)
+      }
+
       // Excelテンプレートファイルを探す
       const excelTemplatePath = await this.findExcelTemplate(templateId, data.type)
 
@@ -73,6 +82,25 @@ export class DocumentGenerator {
       // フォールバックとしてモックPDF生成
       return await this.generateMockPDF(data)
     }
+  }
+
+  // PDFテンプレートファイルを探す
+  private async findPDFTemplate(templateId: string, docType: string): Promise<string | null> {
+    const possibleNames = [
+      `${templateId}.pdf`,
+      `${docType}_template.pdf`,
+      `${docType}.pdf`,
+      `template_${docType}.pdf`
+    ]
+
+    for (const name of possibleNames) {
+      const fullPath = path.join(this.templatesPath, name)
+      if (fs.existsSync(fullPath)) {
+        return fullPath
+      }
+    }
+
+    return null
   }
 
   // Excelテンプレートファイルを探す
@@ -92,6 +120,56 @@ export class DocumentGenerator {
     }
 
     return null
+  }
+
+  // PDFテンプレート → データ埋め込みPDF生成
+  async generateFromPDFTemplate(templatePath: string, data: DocumentData): Promise<Buffer> {
+    try {
+      console.log('📋 PDFテンプレート処理開始:', templatePath)
+      console.log('📊 埋め込みデータ:', data)
+
+      // PDFテンプレートを読み込み
+      const templateBytes = fs.readFileSync(templatePath)
+      const pdfDoc = await PDFLib.load(templateBytes)
+
+      // フォントを埋め込み（日本語対応）
+      const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica)
+
+      // 最初のページを取得
+      const pages = pdfDoc.getPages()
+      const firstPage = pages[0]
+
+      // データを座標指定で埋め込み
+      const positions = this.getPDFFieldPositions(data.type)
+
+      // 各フィールドをPDFに描画
+      for (const [field, position] of Object.entries(positions)) {
+        const value = this.getFieldValue(data, field)
+        if (value !== undefined && value !== null && value !== '') {
+          console.log(`✏️ PDF描画: ${field} = "${value}" at (${position.x}, ${position.y})`)
+
+          firstPage.drawText(String(value), {
+            x: position.x,
+            y: position.y,
+            size: position.size || 10,
+            font: helveticaFont,
+            color: rgb(0, 0, 0),
+          })
+        } else {
+          console.log(`⚠️ フィールド ${field} の値が空です`)
+        }
+      }
+
+      // PDFを生成してBufferとして返す
+      const pdfBytes = await pdfDoc.save()
+      console.log('✅ PDFテンプレート処理完了')
+
+      return Buffer.from(pdfBytes)
+
+    } catch (error) {
+      console.error('❌ PDFテンプレート処理エラー:', error)
+      throw error
+    }
   }
 
   // Excel → PDF変換
@@ -177,10 +255,131 @@ export class DocumentGenerator {
       }
     }
 
+    // セル結合の適用（完了届専用）
+    if (data.type === 'completion') {
+      await this.applyCellMerging(worksheet, data)
+    }
+
     // テーブルデータの処理（プロジェクト一覧など）
     if (data.projectList && config.tableStartRow) {
       await this.fillTableData(worksheet, data.projectList, config.tableStartRow)
     }
+  }
+
+  // セル結合を適用（完了届専用）
+  private async applyCellMerging(worksheet: ExcelJS.Worksheet, data: DocumentData): Promise<void> {
+    try {
+      console.log('🔗 セル結合を適用中...')
+
+      // 1行目：業務完了届ヘッダーを結合（A1:E1）
+      worksheet.mergeCells('A1:E1')
+      const headerCell = worksheet.getCell('A1')
+      headerCell.value = '業務完了届'
+      headerCell.alignment = { horizontal: 'center', vertical: 'middle' }
+      headerCell.font = { bold: true, size: 14 }
+      console.log('✅ ヘッダーセル結合: A1:E1 = "業務完了届"')
+
+      // 4行目：プロジェクト情報ヘッダーを結合（A4:E4）
+      worksheet.mergeCells('A4:E4')
+      const projectHeaderCell = worksheet.getCell('A4')
+      projectHeaderCell.value = 'プロジェクト情報'
+      projectHeaderCell.alignment = { horizontal: 'center', vertical: 'middle' }
+      projectHeaderCell.font = { bold: true }
+      console.log('✅ プロジェクト情報ヘッダー結合: A4:E4 = "プロジェクト情報"')
+
+      // プロジェクト名：B5からE5まで結合
+      if (data.projectTitle) {
+        worksheet.mergeCells('B5:E5')
+        const mergedCell = worksheet.getCell('B5')
+        mergedCell.value = data.projectTitle
+        mergedCell.alignment = { horizontal: 'left', vertical: 'middle' }
+        console.log(`✅ プロジェクト名セル結合: B5:E5 = "${data.projectTitle}"`)
+      }
+
+      // 受注者名：B6からE6まで結合
+      if (data.contractorName) {
+        worksheet.mergeCells('B6:E6')
+        const mergedCell = worksheet.getCell('B6')
+        mergedCell.value = data.contractorName
+        mergedCell.alignment = { horizontal: 'left', vertical: 'middle' }
+        console.log(`✅ 受注者名セル結合: B6:E6 = "${data.contractorName}"`)
+      }
+
+      // 完了日：B7からE7まで結合
+      if (data.completionDate) {
+        worksheet.mergeCells('B7:E7')
+        const mergedCell = worksheet.getCell('B7')
+        mergedCell.value = data.completionDate
+        mergedCell.alignment = { horizontal: 'left', vertical: 'middle' }
+        console.log(`✅ 完了日セル結合: B7:E7 = "${data.completionDate}"`)
+      }
+
+      // 9行目：成果物一覧ヘッダーを結合（A9:E9）
+      worksheet.mergeCells('A9:E9')
+      const deliverableHeaderCell = worksheet.getCell('A9')
+      deliverableHeaderCell.value = '成果物一覧'
+      deliverableHeaderCell.alignment = { horizontal: 'center', vertical: 'middle' }
+      deliverableHeaderCell.font = { bold: true }
+      console.log('✅ 成果物一覧ヘッダー結合: A9:E9 = "成果物一覧"')
+
+      // 署名欄セクション（将来的に追加可能）
+
+    } catch (error) {
+      console.error('❌ セル結合エラー:', error)
+    }
+  }
+
+  // 重複する値のセルを結合
+  private async mergeDuplicateValues(worksheet: ExcelJS.Worksheet): Promise<void> {
+    try {
+      // 1行目の「業務完了届」ヘッダーを結合
+      const headerRow = 1
+      let startCol = 1
+      let currentValue = ''
+
+      for (let col = 1; col <= 6; col++) {
+        const cell = worksheet.getCell(headerRow, col)
+        const cellValue = cell.value
+        let value = ''
+        if (cellValue !== null && cellValue !== undefined) {
+          if (typeof cellValue === 'object' && 'result' in cellValue) {
+            value = String(cellValue.result || '')
+          } else {
+            value = String(cellValue)
+          }
+        }
+
+        if (value === '業務完了届' && currentValue === '') {
+          currentValue = value
+          startCol = col
+        } else if (value !== currentValue && currentValue === '業務完了届') {
+          // 同じ値の範囲を結合
+          if (col - startCol > 1) {
+            const range = `${this.getColumnLetter(startCol)}${headerRow}:${this.getColumnLetter(col - 1)}${headerRow}`
+            worksheet.mergeCells(range)
+            const mergedCell = worksheet.getCell(headerRow, startCol)
+            mergedCell.value = currentValue
+            mergedCell.alignment = { horizontal: 'center', vertical: 'middle' }
+            console.log(`✅ ヘッダー結合: ${range} = "${currentValue}"`)
+          }
+          currentValue = ''
+        }
+      }
+
+    } catch (error) {
+      console.error('❌ 重複値結合エラー:', error)
+    }
+  }
+
+  // 列番号を列文字に変換（A, B, C...）
+  private getColumnLetter(columnNumber: number): string {
+    let result = ''
+    while (columnNumber > 0) {
+      columnNumber--
+      result = String.fromCharCode(65 + (columnNumber % 26)) + result
+      columnNumber = Math.floor(columnNumber / 26)
+    }
+    return result
   }
 
   // テーブルデータを埋め込み
@@ -373,12 +572,12 @@ export class DocumentGenerator {
       completion: {
         templatePath: 'completion_template.xlsx',
         cellMappings: {
-          'projectTitle': 'B5',   // プロジェクト名の値入力セル
-          'contractorName': 'B6', // 受注者名の値入力セル
-          'completionDate': 'B7', // 完了日の値入力セル
-          'createdAt': 'E2'       // 作成日の値入力セル
+          'projectTitle': 'B5',      // プロジェクト名：セルB5
+          'contractorName': 'B6',    // 受注者名：セルB6
+          'completionDate': 'B7',    // 完了日：セルB7
+          'createdAt': 'E2'          // 作成日（右上）：セルE2
         },
-        tableStartRow: 11, // 成果物一覧の開始行（ヘッダーの次）
+        tableStartRow: 11, // 成果物一覧の開始行
         calculateFormulas: true
       },
       monthly_invoice: {
@@ -433,6 +632,39 @@ export class DocumentGenerator {
 
     // 文字列の場合はそのまま
     return String(value)
+  }
+
+  // PDFテンプレートのフィールド位置設定
+  private getPDFFieldPositions(docType: string): Record<string, { x: number; y: number; size?: number }> {
+    const positions: Record<string, Record<string, { x: number; y: number; size?: number }>> = {
+      completion: {
+        'createdAt': { x: 450, y: 750, size: 10 },        // 作成日（右上）
+        'projectTitle': { x: 220, y: 650, size: 11 },     // プロジェクト名
+        'contractorName': { x: 220, y: 620, size: 11 },   // 受注者名
+        'clientName': { x: 220, y: 590, size: 11 },       // 発注者名
+        'completionDate': { x: 220, y: 560, size: 11 },   // 完了日
+      },
+      order: {
+        'createdAt': { x: 450, y: 750, size: 10 },
+        'clientName': { x: 150, y: 650, size: 11 },
+        'clientEmail': { x: 150, y: 620, size: 10 },
+        'contractorName': { x: 150, y: 580, size: 11 },
+        'contractorEmail': { x: 150, y: 550, size: 10 },
+        'projectTitle': { x: 150, y: 500, size: 11 },
+        'projectAmount': { x: 150, y: 470, size: 11 },
+        'deadline': { x: 150, y: 440, size: 11 },
+      },
+      monthly_invoice: {
+        'createdAt': { x: 450, y: 750, size: 10 },
+        'contractorName': { x: 150, y: 650, size: 11 },
+        'contractorEmail': { x: 150, y: 620, size: 10 },
+        'billingPeriod': { x: 150, y: 580, size: 11 },
+        'systemFeeTotal': { x: 400, y: 300, size: 12 },
+        'totalAmount': { x: 400, y: 270, size: 14 },
+      }
+    }
+
+    return positions[docType] || {}
   }
 
   private generateDocumentContent(doc: PDFKit.PDFDocument, data: DocumentData): void {

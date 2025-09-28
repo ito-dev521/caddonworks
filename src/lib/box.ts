@@ -146,6 +146,96 @@ export async function downloadBoxFile(fileId: string): Promise<Response> {
   return res
 }
 
+// 既存ファイルIDを使用して直接新しいバージョンをアップロード
+async function uploadNewVersionDirectly(
+  fileData: ArrayBuffer,
+  existingFileId: string
+): Promise<string> {
+  try {
+    console.log(`🚀 新バージョンアップロード開始 - ファイルID: ${existingFileId}`)
+
+    const accessToken = await getAppAuthAccessToken()
+
+    const formData = new FormData()
+    formData.append('file', new Blob([new Uint8Array(fileData)]))
+
+    console.log(`📤 Box APIリクエスト: https://upload.box.com/api/2.0/files/${existingFileId}/content`)
+
+    const uploadRes = await fetch(`https://upload.box.com/api/2.0/files/${existingFileId}/content`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`
+      },
+      body: formData,
+      signal: AbortSignal.timeout(300000)
+    })
+
+    console.log(`📥 Box APIレスポンス: ${uploadRes.status} ${uploadRes.statusText}`)
+
+    if (!uploadRes.ok) {
+      const errorText = await uploadRes.text()
+      console.error(`❌ Box API エラー詳細: ${errorText}`)
+      throw new Error(`新しいバージョンのアップロードに失敗: ${uploadRes.status} - ${errorText}`)
+    }
+
+    const result = await uploadRes.json()
+    const fileId = result.entries?.[0]?.id || result.id
+    console.log('✅ 新しいバージョンのアップロード成功:', fileId)
+    return fileId
+  } catch (error) {
+    console.error('❌ uploadNewVersionDirectly エラー:', error)
+    throw error
+  }
+}
+
+// 同名ファイルが存在する場合に新しいバージョンをアップロード
+async function uploadNewVersionToBox(
+  fileData: ArrayBuffer,
+  fileName: string,
+  folderId: string
+): Promise<string> {
+  const accessToken = await getAppAuthAccessToken()
+
+  // まず既存ファイルを検索
+  const searchRes = await fetch(`https://api.box.com/2.0/folders/${folderId}/items?limit=1000`, {
+    headers: { 'Authorization': `Bearer ${accessToken}` }
+  })
+
+  if (!searchRes.ok) {
+    throw new Error('既存ファイルの検索に失敗しました')
+  }
+
+  const searchData = await searchRes.json()
+  const existingFile = searchData.entries.find((item: any) =>
+    item.type === 'file' && item.name === fileName
+  )
+
+  if (!existingFile) {
+    throw new Error('既存ファイルが見つかりません')
+  }
+
+  // 新しいバージョンをアップロード
+  const formData = new FormData()
+  formData.append('file', new Blob([new Uint8Array(fileData)]), fileName)
+
+  const uploadRes = await fetch(`https://upload.box.com/api/2.0/files/${existingFile.id}/content`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`
+    },
+    body: formData,
+    signal: AbortSignal.timeout(300000)
+  })
+
+  if (!uploadRes.ok) {
+    const errorText = await uploadRes.text()
+    throw new Error(`新しいバージョンのアップロードに失敗: ${uploadRes.status} - ${errorText}`)
+  }
+
+  const result = await uploadRes.json()
+  return result.entries?.[0]?.id || result.id
+}
+
 export async function uploadFileToBox(
   fileDataOrBuffer: ArrayBuffer | Buffer,
   fileName: string,
@@ -187,7 +277,45 @@ export async function uploadFileToBox(
       console.error('BOX upload error:', errorText)
 
       if (res.status === 409) {
-        throw new Error('同名のファイルが既に存在します')
+        // 同名ファイルが存在する場合は新しいバージョンとしてアップロード
+        console.log('同名ファイルが存在するため、新しいバージョンとしてアップロードを試行します')
+        console.log('🔍 エラーレスポンステキスト:', errorText)
+
+        try {
+          // エラーレスポンスから既存ファイルIDを取得
+          let errorData
+          try {
+            errorData = JSON.parse(errorText)
+          } catch (parseError) {
+            console.error('❌ JSON パースエラー:', parseError)
+            throw new Error('エラーレスポンスのJSONパースに失敗しました')
+          }
+
+          const existingFileId = errorData.context_info?.conflicts?.id
+
+          console.log('🔍 409エラー詳細:', {
+            errorData: JSON.stringify(errorData, null, 2),
+            existingFileId,
+            fileName: sanitizedFileName,
+            folderId
+          })
+
+          if (existingFileId) {
+            console.log(`📁 既存ファイルID: ${existingFileId} を使用して新バージョンをアップロード`)
+            return await uploadNewVersionDirectly(new Uint8Array(fileData).buffer as ArrayBuffer, existingFileId)
+          } else {
+            console.log('🔍 ファイルIDが見つからないため、検索でアップロード')
+            return await uploadNewVersionToBox(new Uint8Array(fileData).buffer as ArrayBuffer, sanitizedFileName, folderId)
+          }
+        } catch (versionError) {
+          console.error('❌ 新しいバージョンのアップロードに失敗しました:', versionError)
+          console.error('❌ エラー詳細:', {
+            name: versionError.name,
+            message: versionError.message,
+            stack: versionError.stack
+          })
+          throw new Error('同名のファイルが既に存在します')
+        }
       } else if (res.status === 413) {
         throw new Error('ファイルサイズが制限を超えています')
       } else if (res.status === 403) {
