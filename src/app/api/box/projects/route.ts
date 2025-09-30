@@ -1,6 +1,7 @@
 export const runtime = 'nodejs'
 
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createClient } from '@supabase/supabase-js'
 import { getBoxFolderItems, createCompanyFolder, createProjectFolderStructure } from '@/lib/box'
 
@@ -13,44 +14,47 @@ const supabaseAdmin = createClient(
 
 export async function GET(request: NextRequest) {
   try {
-
     let orgAdminMembership: any = null
-    let authenticatedUser = false
 
-    // Authorizationヘッダーからユーザー情報を取得
-    const authHeader = request.headers.get('authorization')
-    if (!authHeader) {
+    // サーバーサイドSupabaseクライアントを使用
+    const supabase = await createServerClient()
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+    if (authError || !user) {
+      console.log('🔐 [Box Projects] No authenticated user')
     } else {
-      const token = authHeader.replace('Bearer ', '')
+      console.log('✅ [Box Projects] User authenticated:', user.email)
 
-      const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
+      // ユーザープロフィールを取得
+      const { data: userProfile, error: userError } = await supabaseAdmin
+        .from('users')
+        .select('id')
+        .eq('auth_user_id', user.id)
+        .single()
 
-      if (authError || !user) {
-        console.error('Auth error:', authError)
+      if (userError || !userProfile) {
+        console.error('👤 [Box Projects] User profile not found:', userError)
       } else {
-        authenticatedUser = true
+        console.log('✅ [Box Projects] User profile found:', userProfile.id)
 
-        // ユーザープロフィールを取得
-        const { data: userProfile, error: userError } = await supabaseAdmin
-          .from('users')
-          .select('id')
-          .eq('auth_user_id', user.id)
-          .single()
+        // 組織情報を取得（発注者権限チェック）
+        const { data: memberships, error: membershipError } = await supabaseAdmin
+          .from('memberships')
+          .select('org_id, role')
+          .eq('user_id', userProfile.id)
 
-        if (userError || !userProfile) {
+        if (membershipError || !memberships) {
+          console.error('🏢 [Box Projects] Membership error:', membershipError)
         } else {
-          // 組織情報を取得（発注者権限チェック）
-          const { data: memberships, error: membershipError } = await supabaseAdmin
-            .from('memberships')
-            .select('org_id, role')
-            .eq('user_id', userProfile.id)
+          console.log('✅ [Box Projects] Memberships found:', memberships)
 
-          if (membershipError || !memberships) {
+          // OrgAdmin、Staff、またはContractor権限があれば実際のBoxデータにアクセス可能
+          orgAdminMembership = memberships.find(m => m.role === 'OrgAdmin' || m.role === 'Staff' || m.role === 'Contractor')
+          if (!orgAdminMembership) {
+            console.warn('⚠️ [Box Projects] No valid membership found')
           } else {
-            // OrgAdmin、Staff、またはContractor権限があれば実際のBoxデータにアクセス可能
-            orgAdminMembership = memberships.find(m => m.role === 'OrgAdmin' || m.role === 'Staff' || m.role === 'Contractor')
-            if (!orgAdminMembership) {
-            }
+            console.log('✅ [Box Projects] Valid membership found:', orgAdminMembership.role, 'org_id:', orgAdminMembership.org_id)
           }
         }
       }

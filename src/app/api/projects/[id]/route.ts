@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { deleteBoxFolder } from '@/lib/box'
+import { createBadgeChecker } from '@/lib/badge-checker'
 
 export async function GET(
   request: NextRequest,
@@ -271,6 +272,38 @@ export async function PUT(
               message: `案件「${updatedProject.title}」が完了しました。評価と業務完了届の作成をお待ちください。`,
               data: { project_id: projectId, project_title: updatedProject.title }
             })
+
+            // バッジチェック：受注者のバッジを確認して付与
+            try {
+              const badgeChecker = createBadgeChecker()
+              const newBadges = await badgeChecker.checkAndAwardBadges(contractor.id, projectId)
+
+              if (newBadges.length > 0) {
+                console.log(`✅ ${newBadges.length}件の新しいバッジを付与しました`)
+
+                // バッジ取得通知を送信
+                for (const badge of newBadges) {
+                  const { data: badgeInfo } = await supabaseAdmin
+                    .from('badges')
+                    .select('name, description')
+                    .eq('id', badge.badge_id)
+                    .single()
+
+                  if (badgeInfo) {
+                    await supabaseAdmin.from('notifications').insert({
+                      user_id: contractor.id,
+                      type: 'badge_earned',
+                      title: '🏆 新しいバッジを獲得しました！',
+                      message: `おめでとうございます！「${badgeInfo.name}」バッジを獲得しました。`,
+                      data: { badge_id: badge.badge_id, badge_name: badgeInfo.name }
+                    })
+                  }
+                }
+              }
+            } catch (badgeError) {
+              console.error('バッジチェックエラー:', badgeError)
+              // バッジエラーが発生しても処理は続行
+            }
           }
         }
 

@@ -404,10 +404,10 @@ export async function GET(request: NextRequest) {
     }) || []
 
     // 期限切れ案件の扱い:
-    // - 入札中(bidding)の案件のみ期限切れを除外
-    // - 既に落札済み/進行中/完了など bidding 以外は表示対象にする
+    // - 入札中(bidding) と 優先招待(priority_invitation) は期限切れを一覧から除外
+    // - 既に落札済み/進行中/完了などは表示対象（締切概念なし）
     const visibleJobs = formattedJobs.filter(job => {
-      if (job.status === 'bidding') {
+      if (job.status === 'bidding' || job.status === 'priority_invitation') {
         return !job.is_expired
       }
       return true

@@ -108,7 +108,8 @@ export async function POST(request: NextRequest) {
           project_id: projectId,
           name: project.title,
           description: `${project.title}のチャットルーム`,
-          created_by: userProfile.id
+          // created_by は auth.users.id を参照するため、セッションユーザーの auth ユーザーID を使う
+          created_by: user.id
         })
         .select('id')
         .single()
@@ -126,7 +127,8 @@ export async function POST(request: NextRequest) {
         .from('chat_participants')
         .insert({
           room_id: chatRoom.id,
-          user_id: userProfile.id,
+          // chat_participants.user_id は auth.users.id を参照
+          user_id: user.id,
           role: 'owner'
         })
 
@@ -139,7 +141,7 @@ export async function POST(request: NextRequest) {
         .from('chat_participants')
         .select('id')
         .eq('room_id', chatRoom.id)
-        .eq('user_id', userProfile.id)
+        .eq('user_id', user.id)
         .single()
 
       if (!currentUserParticipant) {
@@ -148,7 +150,7 @@ export async function POST(request: NextRequest) {
           .from('chat_participants')
           .insert({
             room_id: chatRoom.id,
-            user_id: userProfile.id,
+            user_id: user.id,
             role: 'owner'
           })
 
@@ -161,7 +163,8 @@ export async function POST(request: NextRequest) {
     // 招待するユーザーを検索
     const { data: inviteUsers, error: usersError } = await supabaseAdmin
       .from('users')
-      .select('id, email, display_name')
+      // auth_user_id を取得して chat_participants.user_id に用いる
+      .select('id, auth_user_id, email, display_name')
       .in('email', user_emails)
 
     if (usersError) {
@@ -183,7 +186,7 @@ export async function POST(request: NextRequest) {
           .from('chat_participants')
           .select('id')
           .eq('room_id', chatRoom.id)
-          .eq('user_id', inviteUser.id)
+          .eq('user_id', inviteUser.auth_user_id)
           .single()
 
         if (!existingParticipant) {
@@ -192,7 +195,7 @@ export async function POST(request: NextRequest) {
             .from('chat_participants')
             .insert({
               room_id: chatRoom.id,
-              user_id: inviteUser.id,
+              user_id: inviteUser.auth_user_id,
               role: 'member'
             })
 

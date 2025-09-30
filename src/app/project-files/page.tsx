@@ -104,13 +104,22 @@ export default function ProjectFilesPage() {
       // Supabaseから現在のセッションを取得
       const { data: { session }, error: sessionError } = await supabase.auth.getSession()
 
+      console.log('🔐 [Project Files] Session check:', {
+        hasSession: !!session,
+        hasAccessToken: !!session?.access_token,
+        sessionError
+      })
+
       if (sessionError || !session?.access_token) {
+        console.error('❌ [Project Files] No valid session')
         throw new Error('認証に失敗しました')
       }
 
+      console.log('✅ [Project Files] Fetching projects with token')
+
       const response = await fetch('/api/box/projects', {
+        credentials: 'include', // Cookieを含める
         headers: {
-          'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json'
         }
       })

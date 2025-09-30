@@ -48,6 +48,7 @@ export default function LoginPage() {
   // 認証状態の変更を監視してリダイレクト
   useEffect(() => {
     if (!loading && userRole && success) {
+      console.log('Login success: starting redirect process...')
       console.log('Login redirect: userRole =', userRole, 'loading =', loading, 'success =', success)
 
       // ユーザーロールに基づいてリダイレクト先を決定
@@ -61,10 +62,8 @@ export default function LoginPage() {
         sessionStorage.removeItem('currentPage')
       } catch {}
 
-      // 少し遅延を入れてリダイレクト実行
-      setTimeout(() => {
-        router.push(redirectPath)
-      }, 100)
+      // router.replace を使ってブラウザ履歴を置き換え、ループを防ぐ
+      router.replace(redirectPath)
     }
   }, [userRole, loading, success, router, getRedirectPath])
 
@@ -83,18 +82,19 @@ export default function LoginPage() {
     }
   }, [success, userRole, loading])
 
-  // 既にログイン済みユーザーの自動リダイレクトを防ぐ
+  // 既にログイン済みユーザーの自動リダイレクト（初回のみ）
   useEffect(() => {
-    if (!loading && userRole && !success) {
+    if (!loading && userRole && !success && !isLoading) {
+      console.log('Login fallback redirect to:', getRedirectPath())
       try {
         sessionStorage.removeItem('redirectAfterLogin')
         sessionStorage.removeItem('previousPage')
         sessionStorage.removeItem('currentPage')
       } catch {}
       const redirectPath = getRedirectPath()
-      router.push(redirectPath)
+      router.replace(redirectPath) // push → replace に変更してループを防ぐ
     }
-  }, [userRole, loading, success, router, getRedirectPath])
+  }, [userRole, loading, success, isLoading, router, getRedirectPath])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

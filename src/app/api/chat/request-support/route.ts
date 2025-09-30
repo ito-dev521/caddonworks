@@ -29,6 +29,7 @@ export async function POST(request: NextRequest) {
       .from('users')
       .select(`
         id,
+        auth_user_id,
         display_name,
         email,
         memberships (
@@ -114,6 +115,7 @@ export async function POST(request: NextRequest) {
       .from('users')
       .select(`
         id,
+        auth_user_id,
         display_name,
         email,
         member_level,
@@ -139,7 +141,8 @@ export async function POST(request: NextRequest) {
       .from('chat_participants')
       .insert({
         room_id: room_id,
-        user_id: selectedAuditor.id,
+        // chat_participants.user_id は auth.users.id を参照
+        user_id: selectedAuditor.auth_user_id,
         role: 'auditor'
       })
 
@@ -156,7 +159,8 @@ export async function POST(request: NextRequest) {
       .from('chat_messages')
       .insert({
         room_id: room_id,
-        user_id: user_id,
+        // chat_messages.sender_id を使うスキーマも存在するため互換対応
+        sender_id: requester.auth_user_id,
         content: message || `${requesterType}からサポートを要請します`,
         message_type: 'support_request'
       })
@@ -170,7 +174,7 @@ export async function POST(request: NextRequest) {
       .from('chat_messages')
       .insert({
         room_id: room_id,
-        user_id: selectedAuditor.id,
+        sender_id: selectedAuditor.auth_user_id,
         content: `${requesterType}からのサポート要請により監査員として参加しました（対応レベル: ${selectedAuditor.member_level}）`,
         message_type: 'system'
       })
