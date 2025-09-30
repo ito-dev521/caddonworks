@@ -177,10 +177,45 @@ export async function POST(request: NextRequest) {
     const foundEmails = inviteUsers?.map(u => u.email) || []
     const notFoundEmails = user_emails.filter(email => !foundEmails.includes(email))
 
+    // プロジェクトの組織メンバーシップを取得（基本参加者判定用）
+    const userIds = (inviteUsers || []).map(u => u.id)
+    const { data: orgMemberships } = await supabaseAdmin
+      .from('memberships')
+      .select('user_id, role')
+      .eq('org_id', project.org_id)
+      .in('user_id', userIds)
+
+    const membershipMap = new Map<string, string>()
+    orgMemberships?.forEach((m: any) => membershipMap.set(m.user_id, m.role))
+
     // 招待するユーザーをchat_participantsテーブルに追加
     const inviteResults = []
     for (const inviteUser of inviteUsers || []) {
       try {
+        // まず基本参加者に該当するかを判定（既にUIの一覧に表示されているケース）
+        const membershipRole = membershipMap.get(inviteUser.id as any)
+        const isSupportMember = membershipRole && ['Admin', 'Reviewer', 'Auditor'].includes(membershipRole)
+        const isContractor = String(project.contractor_id || '') === String(inviteUser.id)
+
+        if (isSupportMember || isContractor) {
+          inviteResults.push({
+            email: inviteUser.email,
+            success: true,
+            message: 'プロジェクト関係者として既に参加しています'
+          })
+          continue
+        }
+
+        // Supabase認証ユーザーが紐づいていない場合は案内メッセージを返す
+        if (!inviteUser.auth_user_id) {
+          inviteResults.push({
+            email: inviteUser.email,
+            success: false,
+            error: 'このユーザーにはログインアカウントがありません（authユーザー未作成）'
+          })
+          continue
+        }
+
         // 既に参加しているかチェック
         const { data: existingParticipant } = await supabaseAdmin
           .from('chat_participants')
@@ -204,7 +239,7 @@ export async function POST(request: NextRequest) {
             inviteResults.push({
               email: inviteUser.email,
               success: false,
-              error: '参加者の追加に失敗しました'
+              error: participantError.message || '参加者の追加に失敗しました'
             })
           } else {
             inviteResults.push({
