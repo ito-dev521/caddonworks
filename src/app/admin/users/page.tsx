@@ -85,11 +85,23 @@ function AdminUsersPageContent() {
   const fetchUsers = async () => {
     try {
       setIsLoading(true)
-      const { data: { session } } = await supabase.auth.getSession()
-      
-      if (!session) {
-        throw new Error('セッションが見つかりません')
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+
+      if (sessionError) {
+        console.error('セッション取得エラー:', sessionError)
+        throw new Error('セッションの取得に失敗しました')
       }
+
+      if (!session) {
+        console.warn('セッションが見つかりません。再ログインが必要です。')
+        // セッションがない場合は空のユーザーリストを表示（エラーにしない）
+        setUsers([])
+        setFilteredUsers([])
+        return
+      }
+
+      console.log('=== Admin Users API呼び出し ===')
+      console.log('セッショントークン:', session.access_token?.substring(0, 20) + '...')
 
       const response = await fetch('/api/admin/users', {
         headers: {
@@ -98,16 +110,28 @@ function AdminUsersPageContent() {
         }
       })
 
+      console.log('APIレスポンス:', {
+        ok: response.ok,
+        status: response.status,
+        statusText: response.statusText
+      })
+
       if (!response.ok) {
-        throw new Error('ユーザー一覧の取得に失敗しました')
+        const errorData = await response.json().catch(() => ({}))
+        console.error('ユーザー一覧取得エラー:', errorData)
+        throw new Error(errorData.message || 'ユーザー一覧の取得に失敗しました')
       }
 
       const data = await response.json()
+      console.log('取得したユーザー数:', data.users?.length || 0)
+      console.log('ユーザー一覧:', data.users)
       setUsers(data.users || [])
       setFilteredUsers(data.users || [])
     } catch (error) {
       console.error('ユーザー一覧取得エラー:', error)
-      alert('ユーザー一覧の取得に失敗しました')
+      // エラーメッセージを表示するがアプリケーションは継続
+      setUsers([])
+      setFilteredUsers([])
     } finally {
       setIsLoading(false)
     }

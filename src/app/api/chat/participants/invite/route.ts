@@ -122,40 +122,55 @@ export async function POST(request: NextRequest) {
       }
       chatRoom = newRoom
 
-      // チャットルーム作成者を自動的に参加者として追加
-      const { error: creatorParticipantError } = await supabaseAdmin
-        .from('chat_participants')
-        .insert({
-          room_id: chatRoom.id,
-          // chat_participants.user_id は auth.users.id を参照
-          user_id: user.id,
-          role: 'owner'
-        })
+      // 初期参加者：担当者と受注者のみを追加
 
-      if (creatorParticipantError) {
-        console.error('作成者の参加者追加エラー:', creatorParticipantError)
-      }
-    } else {
-      // 既存のチャットルームの場合、現在のユーザーが参加者として登録されているかチェック
-      const { data: currentUserParticipant } = await supabaseAdmin
-        .from('chat_participants')
-        .select('id')
-        .eq('room_id', chatRoom.id)
-        .eq('user_id', user.id)
+      // 担当者（assignee）を自動追加
+      const { data: projectDetail } = await supabaseAdmin
+        .from('projects')
+        .select('assignee_name')
+        .eq('id', projectId)
         .single()
 
-      if (!currentUserParticipant) {
-        // 現在のユーザーを参加者として追加
-        const { error: userParticipantError } = await supabaseAdmin
-          .from('chat_participants')
-          .insert({
-            room_id: chatRoom.id,
-            user_id: user.id,
-            role: 'owner'
-          })
+      if (projectDetail?.assignee_name) {
+        const { data: assignee } = await supabaseAdmin
+          .from('users')
+          .select('auth_user_id')
+          .eq('display_name', projectDetail.assignee_name)
+          .single()
 
-        if (userParticipantError) {
-          console.error('現在ユーザーの参加者追加エラー:', userParticipantError)
+        if (assignee?.auth_user_id) {
+          await supabaseAdmin
+            .from('chat_participants')
+            .insert({
+              room_id: chatRoom.id,
+              user_id: assignee.auth_user_id,
+              role: 'admin'
+            })
+            .then(({ error }) => {
+              if (error) console.error('担当者の参加者追加エラー:', error)
+            })
+        }
+      }
+
+      // 受注者（contractor）を自動追加
+      if (project.contractor_id) {
+        const { data: contractor } = await supabaseAdmin
+          .from('users')
+          .select('auth_user_id')
+          .eq('id', project.contractor_id)
+          .single()
+
+        if (contractor?.auth_user_id) {
+          await supabaseAdmin
+            .from('chat_participants')
+            .insert({
+              room_id: chatRoom.id,
+              user_id: contractor.auth_user_id,
+              role: 'member'
+            })
+            .then(({ error }) => {
+              if (error) console.error('受注者の参加者追加エラー:', error)
+            })
         }
       }
     }

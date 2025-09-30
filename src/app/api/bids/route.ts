@@ -99,7 +99,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (project.status !== 'bidding') {
+    // 入札可能なステータス：bidding（入札中）、priority_invitation（優先招待中）
+    const biddableStatuses = ['bidding', 'priority_invitation']
+    if (!biddableStatuses.includes(project.status)) {
       return NextResponse.json(
         { message: 'この案件は入札受付期間ではありません' },
         { status: 400 }

@@ -21,10 +21,22 @@ async function assertAdminAndGetOperatorOrgId(request: NextRequest) {
     .eq('auth_user_id', user.id)
     .maybeSingle()
 
+  console.log('認証ユーザー情報:', {
+    auth_user_id: user.id,
+    email: user.email,
+    userProfile: userProfile
+  })
+
   const adminEmails = (process.env.NEXT_PUBLIC_ADMIN_EMAILS || 'admin@demo.com')
     .split(',')
     .map(e => e.trim().toLowerCase())
   const isEmailAdmin = !!user.email && adminEmails.includes(user.email.toLowerCase())
+
+  console.log('管理者チェック:', {
+    isEmailAdmin,
+    adminEmails,
+    userEmail: user.email
+  })
 
   // 自分が所属する運営組織ID（Adminのmembership）を取得
   const userIdCandidates = [userProfile?.id, user.id].filter(Boolean) as string[]
@@ -36,13 +48,17 @@ async function assertAdminAndGetOperatorOrgId(request: NextRequest) {
       .eq('user_id', candidate)
       .eq('role', 'Admin')
       .maybeSingle()
+    console.log('メンバーシップチェック:', { candidate, membership })
     if (membership?.org_id) {
       operatorOrgId = membership.org_id
       break
     }
   }
 
+  console.log('運営組織ID:', operatorOrgId)
+
   if (!isEmailAdmin && !operatorOrgId) {
+    console.error('管理者権限なし:', { isEmailAdmin, operatorOrgId })
     return { error: NextResponse.json({ message: '管理者権限が必要です' }, { status: 403 }) }
   }
 
@@ -107,10 +123,17 @@ export async function GET(request: NextRequest) {
 
     const { data: rows, error } = await query
 
-    console.log('ユーザー一覧取得結果:', {
+    console.log('=== 運営ユーザー一覧取得 ===')
+    console.log('クエリパラメータ:', {
       finalOperatorOrgId,
+      rolesToFetch,
+      hasOperatorOrgIdFilter: !!finalOperatorOrgId
+    })
+    console.log('取得結果:', {
       rowsCount: rows?.length,
       error: error?.message,
+      errorDetails: error?.details,
+      errorHint: error?.hint,
       firstRow: rows?.[0]
     })
 
