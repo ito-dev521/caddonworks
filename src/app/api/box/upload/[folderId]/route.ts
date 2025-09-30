@@ -71,13 +71,18 @@ export async function POST(
     }
 
     // 実際のBOXにアップロード
-    const result = await uploadFileToBox(params.folderId, file.name, arrayBuffer)
-    
+    const fileId = await uploadFileToBox(arrayBuffer, file.name, params.folderId)
+
+    console.log('✅ ファイルアップロード成功:', { fileId, fileName: file.name })
 
     return NextResponse.json({
       success: true,
       message: 'ファイルをアップロードしました',
-      file: result.entries[0]
+      file: {
+        id: fileId,
+        name: file.name,
+        size: file.size
+      }
     }, { status: 200 })
 
   } catch (error: any) {

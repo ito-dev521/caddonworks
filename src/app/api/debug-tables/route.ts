@@ -5,6 +5,22 @@ const supabaseAdmin = createSupabaseAdmin()
 
 export async function GET(request: NextRequest) {
   try {
+    // Chat tables
+    const { error: chatRoomsError } = await supabaseAdmin
+      .from('chat_rooms')
+      .select('id')
+      .limit(1)
+
+    const { error: chatParticipantsError } = await supabaseAdmin
+      .from('chat_participants')
+      .select('id')
+      .limit(1)
+
+    const { error: chatMessagesError } = await supabaseAdmin
+      .from('chat_messages')
+      .select('id')
+      .limit(1)
+
     // Check if completion_reports table exists
     const { data: completionReportsTest, error: completionError } = await supabaseAdmin
       .from('completion_reports')
@@ -36,6 +52,18 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       tables: {
+        chat_rooms: {
+          exists: !chatRoomsError,
+          error: chatRoomsError?.message || null
+        },
+        chat_participants: {
+          exists: !chatParticipantsError,
+          error: chatParticipantsError?.message || null
+        },
+        chat_messages: {
+          exists: !chatMessagesError,
+          error: chatMessagesError?.message || null
+        },
         completion_reports: {
           exists: !completionError,
           error: completionError?.message || null

@@ -44,6 +44,7 @@ export function FileUploadZone({ isOpen, onClose }: FileUploadZoneProps) {
   const [dragActive, setDragActive] = useState(false)
   const [uploadFiles, setUploadFiles] = useState<UploadFile[]>([])
   const [selectedProject, setSelectedProject] = useState("")
+  const [selectedFolderId, setSelectedFolderId] = useState<string>("")
 
   const projects = [
     "東京都道路設計業務",
@@ -52,6 +53,73 @@ export function FileUploadZone({ isOpen, onClose }: FileUploadZoneProps) {
     "トンネル設計業務",
     "地下構造物設計"
   ]
+
+  // 実際のBoxへのアップロード関数
+  const uploadFileToBox = async (uploadFile: UploadFile) => {
+    try {
+      // フォルダIDが選択されていない場合はエラー
+      if (!selectedFolderId) {
+        setUploadFiles(prev => prev.map(f =>
+          f.id === uploadFile.id
+            ? { ...f, status: 'error' as const, progress: 0 }
+            : f
+        ))
+        console.error('フォルダIDが選択されていません')
+        return
+      }
+
+      // FormData作成
+      const formData = new FormData()
+      formData.append('file', uploadFile.file)
+
+      // セッショントークン取得
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        throw new Error('認証が必要です')
+      }
+
+      // アップロード進捗をシミュレート
+      const progressInterval = setInterval(() => {
+        setUploadFiles(prev => prev.map(f => {
+          if (f.id === uploadFile.id && f.status === 'uploading') {
+            return { ...f, progress: Math.min(f.progress + 10, 90) }
+          }
+          return f
+        }))
+      }, 300)
+
+      // 実際のAPIコール
+      const response = await fetch(`/api/box/upload/${selectedFolderId}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: formData
+      })
+
+      clearInterval(progressInterval)
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.message || 'アップロードに失敗しました')
+      }
+
+      // アップロード成功
+      setUploadFiles(prev => prev.map(f =>
+        f.id === uploadFile.id
+          ? { ...f, status: 'success' as const, progress: 100, scanResult: 'clean' as const }
+          : f
+      ))
+
+    } catch (error: any) {
+      console.error('Upload error:', error)
+      setUploadFiles(prev => prev.map(f =>
+        f.id === uploadFile.id
+          ? { ...f, status: 'error' as const, progress: 0 }
+          : f
+      ))
+    }
+  }
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -72,7 +140,7 @@ export function FileUploadZone({ isOpen, onClose }: FileUploadZoneProps) {
     handleFiles(droppedFiles)
   }, [])
 
-  const handleFiles = (files: File[]) => {
+  const handleFiles = async (files: File[]) => {
     const newUploadFiles: UploadFile[] = files.map((file, index) => ({
       id: `${Date.now()}-${index}`,
       file,
@@ -82,10 +150,10 @@ export function FileUploadZone({ isOpen, onClose }: FileUploadZoneProps) {
 
     setUploadFiles(prev => [...prev, ...newUploadFiles])
 
-    // Simulate upload and scan process
-    newUploadFiles.forEach((uploadFile, index) => {
-      simulateUpload(uploadFile.id, index * 500)
-    })
+    // 実際のアップロード処理
+    for (const uploadFile of newUploadFiles) {
+      await uploadFileToBox(uploadFile)
+    }
   }
 
   const simulateUpload = (fileId: string, delay: number) => {
@@ -232,18 +300,18 @@ export function FileUploadZone({ isOpen, onClose }: FileUploadZoneProps) {
             {/* Project Selection */}
             <div className="mb-6">
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                関連プロジェクト
+                アップロード先フォルダID
               </label>
-              <select
+              <input
+                type="text"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
-                value={selectedProject}
-                onChange={(e) => setSelectedProject(e.target.value)}
-              >
-                <option value="">プロジェクトを選択</option>
-                {projects.map(project => (
-                  <option key={project} value={project}>{project}</option>
-                ))}
-              </select>
+                value={selectedFolderId}
+                onChange={(e) => setSelectedFolderId(e.target.value)}
+                placeholder="Box フォルダID を入力"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                例: 123456789 (BoxのフォルダIDを入力してください)
+              </p>
             </div>
 
             {/* Upload Zone */}
@@ -267,7 +335,21 @@ export function FileUploadZone({ isOpen, onClose }: FileUploadZoneProps) {
                 ファイルをドラッグ&ドロップ
               </h3>
               <p className="text-gray-600 mb-4">
-                または <button className="text-engineering-blue hover:underline">クリックして選択</button>
+                または{' '}
+                <label htmlFor="file-input" className="text-engineering-blue hover:underline cursor-pointer">
+                  クリックして選択
+                </label>
+                <input
+                  id="file-input"
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files) {
+                      handleFiles(Array.from(e.target.files))
+                    }
+                  }}
+                />
               </p>
               <div className="flex items-center justify-center gap-4 text-sm text-gray-500">
                 <div className="flex items-center gap-1">

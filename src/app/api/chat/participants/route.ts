@@ -347,35 +347,54 @@ export async function GET(request: NextRequest) {
     // 招待された参加者を取得
     let invitedParticipants: any[] = []
     if (chatRoom) {
+      // chat_participants.user_id は auth.users.id を参照しているため、
+      // users テーブルの auth_user_id で結合する必要がある
       const { data: chatParticipants, error: chatParticipantsError } = await supabaseAdmin
         .from('chat_participants')
-        .select(`
-          user_id,
-          role,
-          joined_at,
-          is_active,
-          users!inner (
-            id,
-            display_name,
-            email,
-            avatar_url
-          )
-        `)
+        .select('user_id, role, joined_at, is_active')
         .eq('room_id', chatRoom.id)
         .eq('is_active', true)
 
-      if (!chatParticipantsError && chatParticipants) {
-        invitedParticipants = chatParticipants
-          .filter((cp: any) => !basicParticipants.some(bp => bp.id === cp.users.id))
-          .map((participant: any) => ({
-            id: participant.users.id,
-            display_name: participant.users.display_name || participant.users.email,
-            email: participant.users.email,
-            avatar_url: participant.users.avatar_url,
-            role: participant.role === 'owner' ? 'OrgAdmin' : 'Member',
-            joined_at: participant.joined_at,
-            is_basic: false
-          }))
+      if (!chatParticipantsError && chatParticipants && chatParticipants.length > 0) {
+        // auth.users.id のリストを取得
+        const authUserIds = chatParticipants.map((cp: any) => cp.user_id)
+
+        // auth_user_id で users テーブルを検索
+        const { data: participantUsers, error: usersError } = await supabaseAdmin
+          .from('users')
+          .select('id, auth_user_id, display_name, email, avatar_url')
+          .in('auth_user_id', authUserIds)
+
+        if (!usersError && participantUsers) {
+          // auth_user_id をキーにしたマップを作成
+          const userMap = new Map()
+          participantUsers.forEach((u: any) => {
+            userMap.set(u.auth_user_id, u)
+          })
+
+          // chat_participants と users を結合
+          invitedParticipants = chatParticipants
+            .map((cp: any) => {
+              const user = userMap.get(cp.user_id)
+              if (!user) return null
+
+              // 基本参加者に既に含まれているかチェック
+              if (basicParticipants.some(bp => bp.id === user.id)) {
+                return null
+              }
+
+              return {
+                id: user.id,
+                display_name: user.display_name || user.email,
+                email: user.email,
+                avatar_url: user.avatar_url,
+                role: cp.role === 'owner' ? 'OrgAdmin' : 'Member',
+                joined_at: cp.joined_at,
+                is_basic: false
+              }
+            })
+            .filter((p: any) => p !== null)
+        }
       }
     }
 

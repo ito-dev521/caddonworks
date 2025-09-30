@@ -43,14 +43,6 @@ export async function GET(
       )
     }
 
-    // 自分のバッジのみ取得可能
-    if (userProfile.id !== userId) {
-      return NextResponse.json(
-        { message: '他のユーザーのバッジは閲覧できません' },
-        { status: 403 }
-      )
-    }
-
     // ユーザーのバッジを取得
     const { data: userBadges, error: badgesError } = await supabaseAdmin
       .from('user_badges')
@@ -67,7 +59,8 @@ export async function GET(
           description,
           category,
           tier,
-          icon_name
+          icon_name,
+          requirements
         )
       `)
       .eq('user_id', userId)
@@ -81,8 +74,38 @@ export async function GET(
       )
     }
 
+    // ティア別に集計
+    const tierCounts = {
+      rainbow: 0,
+      platinum: 0,
+      gold: 0,
+      silver: 0,
+      bronze: 0
+    }
+
+    userBadges?.forEach((badge: any) => {
+      const tier = badge.badges.tier
+      if (tier in tierCounts) {
+        tierCounts[tier as keyof typeof tierCounts]++
+      }
+    })
+
+    // カテゴリ別に集計
+    const categoryCounts: Record<string, number> = {}
+
+    userBadges?.forEach((badge: any) => {
+      const category = badge.badges.category
+      categoryCounts[category] = (categoryCounts[category] || 0) + 1
+    })
+
     return NextResponse.json({
-      badges: userBadges || []
+      user_id: userId,
+      total_badges: userBadges?.length || 0,
+      badges: userBadges || [],
+      stats: {
+        by_tier: tierCounts,
+        by_category: categoryCounts
+      }
     })
 
   } catch (error) {
