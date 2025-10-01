@@ -224,7 +224,14 @@ function ContractsPageContent() {
           contractsResponse.json()
         ])
 
-        const projects = projectsResult.projects || []
+        const now = Date.now()
+        const projects = (projectsResult.projects || []).filter((project: any) => {
+          if (project.status !== 'completed') return true
+          if (!project.completed_at) return true
+          const completedAt = new Date(project.completed_at).getTime()
+          const diffDays = (now - completedAt) / (1000 * 60 * 60 * 24)
+          return diffDays <= 14
+        })
         const allContracts: Contract[] = contractsResult.contracts || []
 
         setCompletedProjects(projects)

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useRef } from "react"
 import { motion } from "framer-motion"
+import Link from "next/link"
 import {
   Building,
   Users,
@@ -29,7 +30,6 @@ import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { StatusIndicator } from "@/components/ui/status-indicator"
 import { ProjectChart } from "@/components/charts/project-chart"
-import { RevenueChart } from "@/components/charts/revenue-chart"
 import { formatCurrency } from "@/lib/utils"
 import { useAuth } from "@/contexts/auth-context"
 import { supabase } from "@/lib/supabase"
@@ -351,14 +351,10 @@ function DashboardPageContent() {
       trend: { value: 12, isPositive: true }
     },
     {
-      title: "月間支出",
-      value: formatCurrency(
-        billing
-          .filter(b => b.status === 'paid' && new Date(b.paid_date || '').getMonth() === new Date().getMonth())
-          .reduce((sum, b) => sum + b.amount, 0)
-      ),
-      icon: <DollarSign className="w-6 h-6" />,
-      trend: { value: 8, isPositive: false }
+      title: "契約件数",
+      value: contracts.length.toLocaleString('ja-JP'),
+      icon: <FileCheck className="w-6 h-6" />,
+      trend: { value: 0, isPositive: true }
     },
     {
       title: "契約済み受注者",
@@ -367,10 +363,12 @@ function DashboardPageContent() {
       trend: { value: 3, isPositive: true }
     },
     {
-      title: "案件完了率",
-      value: `${Math.round((projects.filter(p => p.status === 'completed').length / Math.max(projects.length, 1)) * 100)}%`,
-      icon: <Target className="w-6 h-6" />,
-      trend: { value: 2, isPositive: true }
+      title: "契約金額合計",
+      value: formatCurrency(
+        contracts.reduce((sum, contract) => sum + (contract.amount || 0), 0)
+      ),
+      icon: <DollarSign className="w-6 h-6" />,
+      trend: { value: 0, isPositive: true }
     }
   ]
 
@@ -444,15 +442,17 @@ function DashboardPageContent() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
             >
-              <Card className="hover-lift cursor-pointer group">
-                <CardContent className="p-6 text-center">
-                  <div className="w-12 h-12 bg-engineering-blue/10 rounded-lg flex items-center justify-center mx-auto mb-4 group-hover:bg-engineering-blue/20 transition-colors">
-                    <BarChart3 className="w-6 h-6 text-engineering-blue" />
-                  </div>
-                  <h3 className="font-semibold text-gray-900 mb-2">ダッシュボード</h3>
-                  <p className="text-sm text-gray-600">全体の概要と統計</p>
-                </CardContent>
-              </Card>
+              <Link href="/dashboard" className="block">
+                <Card className="hover-lift cursor-pointer group">
+                  <CardContent className="p-6 text-center">
+                    <div className="w-12 h-12 bg-engineering-blue/10 rounded-lg flex items-center justify-center mx-auto mb-4 group-hover:bg-engineering-blue/20 transition-colors">
+                      <BarChart3 className="w-6 h-6 text-engineering-blue" />
+                    </div>
+                    <h3 className="font-semibold text-gray-900 mb-2">ダッシュボード</h3>
+                    <p className="text-sm text-gray-600">全体の概要と統計</p>
+                  </CardContent>
+                </Card>
+              </Link>
             </motion.div>
 
             {/* 案件管理（プロジェクト） */}
@@ -461,15 +461,17 @@ function DashboardPageContent() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
             >
-              <Card className="hover-lift cursor-pointer group">
-                <CardContent className="p-6 text-center">
-                  <div className="w-12 h-12 bg-engineering-green/10 rounded-lg flex items-center justify-center mx-auto mb-4 group-hover:bg-engineering-green/20 transition-colors">
-                    <Briefcase className="w-6 h-6 text-engineering-green" />
-                  </div>
-                  <h3 className="font-semibold text-gray-900 mb-2">案件管理</h3>
-                  <p className="text-sm text-gray-600">プロジェクトの管理</p>
-                </CardContent>
-              </Card>
+              <Link href="/projects" className="block">
+                <Card className="hover-lift cursor-pointer group">
+                  <CardContent className="p-6 text-center">
+                    <div className="w-12 h-12 bg-engineering-green/10 rounded-lg flex items-center justify-center mx-auto mb-4 group-hover:bg-engineering-green/20 transition-colors">
+                      <Briefcase className="w-6 h-6 text-engineering-green" />
+                    </div>
+                    <h3 className="font-semibold text-gray-900 mb-2">案件管理</h3>
+                    <p className="text-sm text-gray-600">プロジェクトの管理</p>
+                  </CardContent>
+                </Card>
+              </Link>
             </motion.div>
 
             {/* 契約管理 */}
@@ -478,15 +480,17 @@ function DashboardPageContent() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
             >
-              <Card className="hover-lift cursor-pointer group">
-                <CardContent className="p-6 text-center">
-                  <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mx-auto mb-4 group-hover:bg-purple-200 transition-colors">
-                    <FileCheck className="w-6 h-6 text-purple-600" />
-                  </div>
-                  <h3 className="font-semibold text-gray-900 mb-2">契約管理</h3>
-                  <p className="text-sm text-gray-600">契約書の管理</p>
-                </CardContent>
-              </Card>
+              <Link href="/contracts" className="block">
+                <Card className="hover-lift cursor-pointer group">
+                  <CardContent className="p-6 text-center">
+                    <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mx-auto mb-4 group-hover:bg-purple-200 transition-colors">
+                      <FileCheck className="w-6 h-6 text-purple-600" />
+                    </div>
+                    <h3 className="font-semibold text-gray-900 mb-2">契約管理</h3>
+                    <p className="text-sm text-gray-600">契約書の管理</p>
+                  </CardContent>
+                </Card>
+              </Link>
             </motion.div>
 
             {/* 会計・請求 */}
@@ -495,15 +499,17 @@ function DashboardPageContent() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4 }}
             >
-              <Card className="hover-lift cursor-pointer group">
-                <CardContent className="p-6 text-center">
-                  <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mx-auto mb-4 group-hover:bg-green-200 transition-colors">
-                    <CreditCard className="w-6 h-6 text-green-600" />
-                  </div>
-                  <h3 className="font-semibold text-gray-900 mb-2">会計・請求</h3>
-                  <p className="text-sm text-gray-600">支払いと請求管理</p>
-                </CardContent>
-              </Card>
+              <Link href="/billing" className="block">
+                <Card className="hover-lift cursor-pointer group">
+                  <CardContent className="p-6 text-center">
+                    <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mx-auto mb-4 group-hover:bg-green-200 transition-colors">
+                      <CreditCard className="w-6 h-6 text-green-600" />
+                    </div>
+                    <h3 className="font-semibold text-gray-900 mb-2">会計・請求</h3>
+                    <p className="text-sm text-gray-600">支払いと請求管理</p>
+                  </CardContent>
+                </Card>
+              </Link>
             </motion.div>
 
             {/* お気に入り会員 */}
@@ -512,15 +518,17 @@ function DashboardPageContent() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.5 }}
             >
-              <Card className="hover-lift cursor-pointer group">
-                <CardContent className="p-6 text-center">
-                  <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center mx-auto mb-4 group-hover:bg-red-200 transition-colors">
-                    <Heart className="w-6 h-6 text-red-600" />
-                  </div>
-                  <h3 className="font-semibold text-gray-900 mb-2">お気に入り会員</h3>
-                  <p className="text-sm text-gray-600">信頼できる受注者</p>
-                </CardContent>
-              </Card>
+              <Link href="/favorite-members" className="block">
+                <Card className="hover-lift cursor-pointer group">
+                  <CardContent className="p-6 text-center">
+                    <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center mx-auto mb-4 group-hover:bg-red-200 transition-colors">
+                      <Heart className="w-6 h-6 text-red-600" />
+                    </div>
+                    <h3 className="font-semibold text-gray-900 mb-2">お気に入り会員</h3>
+                    <p className="text-sm text-gray-600">信頼できる受注者</p>
+                  </CardContent>
+                </Card>
+              </Link>
             </motion.div>
           </div>
 
@@ -541,7 +549,55 @@ function DashboardPageContent() {
           {/* Charts Section */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
             <ProjectChart />
-            <RevenueChart />
+            <Card className="hover-lift">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <DollarSign className="w-5 h-5 text-engineering-blue" />
+                  契約状況
+                </CardTitle>
+                <CardDescription>組織全体の契約概要</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="p-4 bg-engineering-blue/5 rounded-lg">
+                    <p className="text-sm text-gray-600">契約数</p>
+                    <p className="text-2xl font-semibold text-gray-900">{contracts.length.toLocaleString('ja-JP')}件</p>
+                    <p className="text-xs text-gray-500">承認済み・締結済みの契約数</p>
+                  </div>
+                  <div className="p-4 bg-emerald-50 rounded-lg">
+                    <p className="text-sm text-gray-600">契約金額合計</p>
+                    <p className="text-2xl font-semibold text-gray-900">{formatCurrency(contracts.reduce((sum, contract) => sum + (contract.amount || 0), 0))}</p>
+                    <p className="text-xs text-gray-500">現在有効な契約金額の合計</p>
+                  </div>
+                </div>
+                <div className="mt-6 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-engineering-blue/10 flex items-center justify-center">
+                        <FileCheck className="w-5 h-5 text-engineering-blue" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-gray-900">締結済み契約</p>
+                        <p className="text-sm text-gray-600">署名が完了した契約</p>
+                      </div>
+                    </div>
+                    <span className="font-semibold text-engineering-blue">{contracts.filter(contract => contract.status === 'signed').length.toLocaleString('ja-JP')}件</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center">
+                        <Clock className="w-5 h-5 text-orange-500" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-gray-900">締結待ち契約</p>
+                        <p className="text-sm text-gray-600">署名待ちの契約</p>
+                      </div>
+                    </div>
+                    <span className="font-semibold text-orange-500">{contracts.filter(contract => contract.status !== 'signed').length.toLocaleString('ja-JP')}件</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
 
           {/* Recent Projects & Tasks */}

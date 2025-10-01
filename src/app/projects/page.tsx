@@ -294,8 +294,16 @@ function ProjectsPageContent() {
       if (response.ok) {
         const projectsData = result.projects || []
         console.log('取得した案件とステータス:', projectsData.map((p: any) => ({ title: p.title, status: p.status })))
-        setProjects(projectsData)
-        setFilteredProjects(projectsData)
+        const now = Date.now()
+        const visibleProjects = projectsData.filter((p: ProjectData) => {
+          if (p.status !== 'completed') return true
+          if (!p.completed_at) return true
+          const completedAt = new Date(p.completed_at).getTime()
+          const diffDays = (now - completedAt) / (1000 * 60 * 60 * 24)
+          return diffDays <= 14
+        })
+        setProjects(visibleProjects)
+        setFilteredProjects(visibleProjects)
 
         // 期限切れ案件の通知設定
         const expiredCount = projectsData.filter((p: ProjectData) => p.is_expired).length
@@ -390,7 +398,16 @@ function ProjectsPageContent() {
       })
     }
 
-    setFilteredProjects(filtered)
+    const now = Date.now()
+    const visibleFiltered = filtered.filter(p => {
+      if (p.status !== 'completed') return true
+      if (!p.completed_at) return true
+      const completedAt = new Date(p.completed_at).getTime()
+      const diffDays = (now - completedAt) / (1000 * 60 * 60 * 24)
+      return diffDays <= 14
+    })
+
+    setFilteredProjects(visibleFiltered)
   }, [projects, selectedTab, searchTerm])
 
   const handleNewProject = async (e: React.FormEvent) => {

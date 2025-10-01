@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
 
     const orgId = memberships.org_id
 
-    // 組織内のOrgAdminとStaffを取得（承認者として選択可能）
+    // 組織内のOrgAdminのみを取得（承認者として選択可能）
     const { data: orgAdmins, error: orgAdminsError } = await supabaseAdmin
       .from('memberships')
       .select(`
@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
         )
       `)
       .eq('org_id', orgId)
-      .in('role', ['OrgAdmin', 'Staff'])
+      .eq('role', 'OrgAdmin')
 
     if (orgAdminsError) {
       return NextResponse.json({ message: 'OrgAdmin一覧の取得に失敗しました' }, { status: 500 })

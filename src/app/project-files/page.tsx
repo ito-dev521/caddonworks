@@ -131,6 +131,7 @@ export default function ProjectFilesPage() {
       }
 
       const data = await response.json()
+      const now = Date.now()
       const projectsWithArchive = (data.projects || []).map((project: BoxProject) => {
         const archiveStatus = getProjectArchiveStatus(project, archiveSettings)
         const visibleFiles = filterVisibleFiles(project.box_items || [], archiveStatus)
@@ -139,6 +140,12 @@ export default function ProjectFilesPage() {
           archive_status: archiveStatus,
           box_items: visibleFiles
         }
+      }).filter(project => {
+        if (project.status !== 'completed') return true
+        if (!project.completed_at) return true
+        const completedAt = new Date(project.completed_at).getTime()
+        const diffDays = (now - completedAt) / (1000 * 60 * 60 * 24)
+        return diffDays <= 14
       })
       setProjects(projectsWithArchive)
     } catch (err: any) {
