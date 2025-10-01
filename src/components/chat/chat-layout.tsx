@@ -7,6 +7,7 @@ import { Button } from "../ui/button"
 import { ChatRoomList } from "./chat-room-list"
 import { ChatMessageInterface } from "./chat-message-interface"
 import { ChatParticipantsPanel } from "./chat-participants-panel"
+import { supabase } from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
 interface ChatLayoutProps {
@@ -15,6 +16,7 @@ interface ChatLayoutProps {
 
 export function ChatLayout({ className = "" }: ChatLayoutProps) {
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null)
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const [showParticipants, setShowParticipants] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
 
@@ -42,8 +44,35 @@ export function ChatLayout({ className = "" }: ChatLayoutProps) {
     }
   }, [])
 
-  const handleRoomSelect = (roomId: string) => {
+  const handleRoomSelect = async (roomId: string) => {
     setSelectedRoomId(roomId)
+
+    // roomIdからproject_idを取得（APIを使用してRLS回避）
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) {
+        console.warn('セッションが取得できません')
+        setSelectedProjectId(null)
+        return
+      }
+
+      const response = await fetch(`/api/chat/rooms/${roomId}`, {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`
+        }
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setSelectedProjectId(data.project_id)
+      } else {
+        console.warn('プロジェクトID取得エラー:', response.statusText)
+        setSelectedProjectId(null)
+      }
+    } catch (error) {
+      console.warn('プロジェクトID取得エラー:', error)
+      setSelectedProjectId(null)
+    }
   }
 
   return (
@@ -116,10 +145,10 @@ export function ChatLayout({ className = "" }: ChatLayoutProps) {
               </div>
 
               {/* Participants Panel */}
-              {showParticipants && (
+              {showParticipants && selectedProjectId && (
                 <ChatParticipantsPanel
                   roomId={selectedRoomId}
-                  projectId={selectedRoomId.replace('project_', '')}
+                  projectId={selectedProjectId}
                   isVisible={showParticipants}
                   onClose={() => setShowParticipants(false)}
                 />

@@ -59,9 +59,22 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // プロジェクトIDを取得
-    const projectId = roomId.replace('project_', '')
-    
+    // ルームIDからプロジェクトIDを取得
+    const { data: chatRoom, error: roomError } = await supabaseAdmin
+      .from('chat_rooms')
+      .select('project_id, id')
+      .eq('id', roomId)
+      .single()
+
+    if (roomError || !chatRoom) {
+      return NextResponse.json(
+        { message: 'チャットルームが見つかりません' },
+        { status: 404 }
+      )
+    }
+
+    const projectId = chatRoom.project_id
+
     // 返信情報を取得
     const replyTo = formData.get('reply_to') as string
 
@@ -172,16 +185,12 @@ export async function POST(request: NextRequest) {
     const { data: messageData, error: messageError } = await supabaseAdmin
       .from('chat_messages')
       .insert({
-        project_id: projectId,
+        room_id: chatRoom.id,
         sender_id: userProfile.id,
-        sender_type: senderType,
-        message: messageContent,
+        content: messageContent,
         file_url: publicUrl,
         file_name: file.name,
-        file_size: file.size,
-        reply_to: replyTo || null,
-        message_type: file.type.startsWith('image/') ? 'image' : 
-                     file.type.startsWith('video/') ? 'video' : 'file'
+        file_size: file.size
       })
       .select()
       .single()

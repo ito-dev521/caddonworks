@@ -49,85 +49,86 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // 署名済み契約のプロジェクトのみを取得
-    const { data: contracts, error: contractsError } = await supabaseAdmin
-      .from('contracts')
+    // デバッグ用：ユーザー情報を確認
+    console.log('チャット一覧取得 - ユーザーID:', user.id, 'Email:', user.email, 'Profile ID:', userProfile.id)
+
+    // chat_participantsテーブルから参加しているチャットルームを取得
+    // 注意: chat_participants.user_idにはusers.auth_user_idが格納されている
+    const { data: participantRooms, error: participantError } = await supabaseAdmin
+      .from('chat_participants')
       .select(`
-        project_id,
-        status,
-        projects (
+        room_id,
+        role,
+        joined_at,
+        user_id,
+        chat_rooms!inner (
           id,
-          title,
+          project_id,
+          name,
           description,
-          status,
-          org_id,
-          contractor_id,
           created_at,
-          organizations (
-            name
+          updated_at,
+          is_active,
+          projects!inner (
+            id,
+            title,
+            description,
+            status,
+            org_id,
+            contractor_id,
+            created_at,
+            organizations (
+              name
+            )
           )
         )
       `)
-      .eq('status', 'signed')
+      .eq('user_id', user.id) // user.idはauth_user_idと同じ
+      .eq('is_active', true)
 
-    if (contractsError) {
-      console.error('契約取得エラー:', contractsError)
+    console.log('参加ルーム取得結果:', {
+      count: participantRooms?.length || 0,
+      error: participantError,
+      rooms: participantRooms,
+      firstRoom: participantRooms?.[0]
+    })
+
+    // デバッグ：全てのchat_participantsを確認
+    const { data: allParticipants } = await supabaseAdmin
+      .from('chat_participants')
+      .select('id, room_id, user_id, is_active')
+      .eq('user_id', user.id)
+
+    console.log('全chat_participants (user_id=' + user.id + '):', allParticipants)
+
+    if (participantError) {
+      console.error('参加ルーム取得エラー:', participantError)
       return NextResponse.json(
-        { message: '契約の取得に失敗しました' },
+        { message: 'チャットルームの取得に失敗しました', error: participantError.message },
         { status: 400 }
       )
     }
 
-    // ユーザーの組織メンバーシップを確認
-    const { data: membership } = await supabaseAdmin
-      .from('memberships')
-      .select('org_id, role')
-      .eq('user_id', userProfile.id)
-      .single()
-
-    // 複数受注者対応：プロジェクト参加者としてのアクセス権限をチェック
-    const { data: projectParticipants } = await supabaseAdmin
-      .from('project_participants')
-      .select('project_id, role, status')
-      .eq('user_id', userProfile.id)
-      .eq('status', 'active')
-
-    const userParticipantProjectIds = projectParticipants?.map(pp => pp.project_id) || []
-
-    // ユーザーがアクセス可能な契約のプロジェクトをフィルタリング
-    const accessibleProjects = contracts?.filter(contract => {
-      const project = contract.projects as any
-      return project && (
-        membership?.org_id === project.org_id || 
-        project.contractor_id === userProfile.id ||
-        userParticipantProjectIds.includes(project.id)
-      )
-    }).map(contract => contract.projects as any) || []
-
-
-    // プロジェクトIDで重複を除去（同じプロジェクトの複数契約を統合）
-    const uniqueProjects = accessibleProjects.reduce((acc, project) => {
-      if (!acc.find((p: any) => p.id === project.id)) {
-        acc.push(project)
-      }
-      return acc
-    }, [] as any[])
-
-    // 各プロジェクトのチャットルーム情報を構築
+    // チャットルーム情報を構築
     const chatRooms = await Promise.all(
-      uniqueProjects.map(async (project: any) => {
+      (participantRooms || []).map(async (participant: any) => {
+        const room = participant.chat_rooms
+        const project = room.projects
+
         // 最新メッセージを取得
         const { data: lastMessage } = await supabaseAdmin
           .from('chat_messages')
           .select(`
-            message,
+            content,
             created_at,
-            users:sender_id (
+            sender_id,
+            users (
               display_name,
               email
             )
           `)
-          .eq('project_id', project.id)
+          .eq('room_id', room.id)
+          .eq('is_deleted', false)
           .order('created_at', { ascending: false })
           .limit(1)
           .single()
@@ -135,29 +136,29 @@ export async function GET(request: NextRequest) {
         // 未読メッセージ数を計算
         const unreadCount = 0 // TODO: 実装
 
-        // プロジェクトの参加者数を計算（複数受注者対応）
-        const { data: projectParticipants } = await supabaseAdmin
-          .from('project_participants')
+        // チャット参加者数を取得
+        const { data: roomParticipants } = await supabaseAdmin
+          .from('chat_participants')
           .select('id')
-          .eq('project_id', project.id)
-          .eq('status', 'active')
-        
-        const participantCount = (projectParticipants?.length || 0) + 1 // 参加者 + 発注者組織
+          .eq('room_id', room.id)
+          .eq('is_active', true)
+
+        const participantCount = roomParticipants?.length || 0
 
         return {
-          id: `project_${project.id}`,
-          name: project.title,
-          description: project.description,
+          id: room.id,
+          name: room.name || project.title,
+          description: room.description || project.description,
           project_id: project.id,
           project_name: project.title,
           project_status: project.status,
-          created_at: project.created_at || new Date().toISOString(),
-          updated_at: lastMessage ? lastMessage.created_at : (project.created_at || new Date().toISOString()),
-          is_active: project.status === 'in_progress',
+          created_at: room.created_at || new Date().toISOString(),
+          updated_at: lastMessage?.created_at || room.updated_at || new Date().toISOString(),
+          is_active: room.is_active && project.status === 'in_progress',
           participant_count: participantCount,
           unread_count: unreadCount,
           last_message: lastMessage ? {
-            content: lastMessage.message,
+            content: lastMessage.content,
             sender_name: (lastMessage.users as any)?.display_name || 'Unknown',
             created_at: lastMessage.created_at
           } : null

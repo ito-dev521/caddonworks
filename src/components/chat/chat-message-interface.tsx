@@ -88,9 +88,42 @@ export function ChatMessageInterface({
   const [fileComment, setFileComment] = useState("")
   const [showFileCommentModal, setShowFileCommentModal] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [projectId, setProjectId] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // roomIdからprojectIdを取得（APIを使用してRLS回避）
+  useEffect(() => {
+    const fetchProjectId = async () => {
+      if (!roomId) return
+
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session?.access_token) {
+          console.warn('セッションが取得できません')
+          return
+        }
+
+        const response = await fetch(`/api/chat/rooms/${roomId}`, {
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`
+          }
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          setProjectId(data.project_id)
+        } else {
+          console.warn('projectId取得エラー:', response.statusText)
+        }
+      } catch (error) {
+        console.warn('projectId取得エラー:', error)
+      }
+    }
+
+    fetchProjectId()
+  }, [roomId])
 
   useEffect(() => {
     if (roomId) {
@@ -196,7 +229,8 @@ export function ChatMessageInterface({
         p_room_id: roomId
       })
     } catch (error) {
-      console.error('Error marking messages as read:', error)
+      // RPC関数がまだ実装されていない場合のエラーをサイレントに処理
+      console.warn('mark_messages_as_read RPC not implemented yet:', error)
     }
   }
 
@@ -748,7 +782,7 @@ export function ChatMessageInterface({
                   }
                 }, 100)
               }}
-              projectId={roomId?.replace('project_', '')}
+              projectId={projectId || undefined}
             />
             
             {/* ファイル添付ボタン */}

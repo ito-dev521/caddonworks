@@ -27,9 +27,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // ルームIDからプロジェクトIDを抽出
-    const projectId = room_id.replace('project_', '')
-
     // ユーザーの認証
     const authHeader = request.headers.get('authorization')
     if (!authHeader) {
@@ -62,6 +59,22 @@ export async function POST(request: NextRequest) {
         { status: 403 }
       )
     }
+
+    // ルームIDからプロジェクトIDを取得
+    const { data: initialChatRoom, error: initialRoomError } = await supabaseAdmin
+      .from('chat_rooms')
+      .select('project_id')
+      .eq('id', room_id)
+      .single()
+
+    if (initialRoomError || !initialChatRoom) {
+      return NextResponse.json(
+        { message: 'チャットルームが見つかりません' },
+        { status: 404 }
+      )
+    }
+
+    const projectId = initialChatRoom.project_id
 
     // プロジェクトの存在確認
     const { data: project, error: projectError } = await supabaseAdmin
@@ -97,7 +110,7 @@ export async function POST(request: NextRequest) {
     let { data: chatRoom, error: roomError } = await supabaseAdmin
       .from('chat_rooms')
       .select('id')
-      .eq('project_id', projectId)
+      .eq('id', room_id)
       .single()
 
     if (roomError || !chatRoom) {

@@ -5,17 +5,15 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const roomId = searchParams.get('room_id')
+    const projectIdParam = searchParams.get('project_id')
 
-    if (!roomId) {
+    // room_id または project_id のいずれかが必要
+    if (!roomId && !projectIdParam) {
       return NextResponse.json(
-        { message: 'ルームIDが必要です' },
+        { message: 'room_id または project_id が必要です' },
         { status: 400 }
       )
     }
-
-    // ルームIDからプロジェクトIDを抽出
-    const projectId = roomId.replace('project_', '')
-    
 
     // ユーザーの認証
     const authHeader = request.headers.get('authorization')
@@ -50,7 +48,44 @@ export async function GET(request: NextRequest) {
         { status: 404 }
       )
     }
-    
+
+    // チャットルームとプロジェクトIDを取得
+    let chatRoom = null
+    let projectId = projectIdParam
+
+    if (roomId) {
+      const { data, error: chatRoomError } = await supabaseAdmin
+        .from('chat_rooms')
+        .select('id, project_id')
+        .eq('id', roomId)
+        .single()
+
+      if (chatRoomError || !data) {
+        return NextResponse.json(
+          { message: 'チャットルームが見つかりません' },
+          { status: 404 }
+        )
+      }
+
+      chatRoom = data
+      projectId = data.project_id
+    } else if (projectId) {
+      // project_id から room_id を取得
+      const { data } = await supabaseAdmin
+        .from('chat_rooms')
+        .select('id, project_id')
+        .eq('project_id', projectId)
+        .single()
+
+      chatRoom = data || null
+    }
+
+    if (!projectId) {
+      return NextResponse.json(
+        { message: 'プロジェクトIDが取得できません' },
+        { status: 400 }
+      )
+    }
 
     // プロジェクトの存在確認（created_byカラムが存在しない場合に備えて段階的に取得）
     let project, projectError
@@ -336,13 +371,6 @@ export async function GET(request: NextRequest) {
         })
       }
     }
-
-    // チャットルームを取得または作成
-    let { data: chatRoom, error: roomError } = await supabaseAdmin
-      .from('chat_rooms')
-      .select('id')
-      .eq('project_id', projectId)
-      .single()
 
     // 招待された参加者を取得
     let invitedParticipants: any[] = []

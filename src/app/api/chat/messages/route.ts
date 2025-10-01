@@ -26,9 +26,6 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // ルームIDからプロジェクトIDを抽出
-    const projectId = roomId.replace('project_', '')
-
     // ユーザーの認証
     const authHeader = request.headers.get('authorization')
     if (!authHeader) {
@@ -62,42 +59,51 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // プロジェクトの存在確認
-    const { data: project, error: projectError } = await supabaseAdmin
-      .from('projects')
-      .select('id, title, org_id, contractor_id')
-      .eq('id', projectId)
+    // チャットルームを取得してproject_idを確認
+    const { data: chatRoom, error: chatRoomError } = await supabaseAdmin
+      .from('chat_rooms')
+      .select(`
+        id,
+        project_id,
+        projects (
+          id,
+          title,
+          org_id,
+          contractor_id
+        )
+      `)
+      .eq('id', roomId)
       .single()
 
-    if (projectError || !project) {
+    if (chatRoomError || !chatRoom) {
+      return NextResponse.json(
+        { message: 'チャットルームが見つかりません' },
+        { status: 404 }
+      )
+    }
+
+    const project = chatRoom.projects as any
+    const projectId = chatRoom.project_id
+
+    if (!project) {
       return NextResponse.json(
         { message: 'プロジェクトが見つかりません' },
         { status: 404 }
       )
     }
 
-    // アクセス権限をチェック
-    const { data: membership } = await supabaseAdmin
-      .from('memberships')
-      .select('org_id, role')
-      .eq('user_id', userProfile.id)
+    // チャット参加者としてのアクセス権限をチェック
+    const { data: participant, error: participantError } = await supabaseAdmin
+      .from('chat_participants')
+      .select('id, role')
+      .eq('room_id', chatRoom.id)
+      .eq('user_id', user.id)
+      .eq('is_active', true)
       .single()
 
-    // 複数受注者対応：プロジェクト参加者としてのアクセス権限をチェック
-    const { data: projectParticipant } = await supabaseAdmin
-      .from('project_participants')
-      .select('id, role, status')
-      .eq('project_id', projectId)
-      .eq('user_id', userProfile.id)
-      .single()
-
-    const hasAccess = membership?.org_id === project.org_id || 
-                     project.contractor_id === userProfile.id || 
-                     (projectParticipant && projectParticipant.status === 'active')
-
-    if (!hasAccess) {
+    if (participantError || !participant) {
       return NextResponse.json(
-        { message: 'このプロジェクトへのアクセス権限がありません' },
+        { message: 'このチャットルームへのアクセス権限がありません（招待されていません）' },
         { status: 403 }
       )
     }
@@ -107,8 +113,9 @@ export async function GET(request: NextRequest) {
       .from('chat_messages')
       .select(`
         id,
+        project_id,
+        sender_id,
         message,
-        sender_type,
         message_type,
         file_url,
         file_name,
@@ -129,9 +136,11 @@ export async function GET(request: NextRequest) {
     if (messagesError) {
       console.error('メッセージ取得エラー:', messagesError)
       console.error('プロジェクトID:', projectId)
-      console.error('ルームID:', roomId)
+      console.error('取得クエリ:', {
+        project_id: projectId
+      })
       return NextResponse.json(
-        { 
+        {
           message: 'メッセージの取得に失敗しました',
           error: messagesError.message,
           details: messagesError
@@ -140,67 +149,25 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // 返信先メッセージの情報を取得
-    const replyMessageIds = messages?.filter(msg => msg.reply_to).map(msg => msg.reply_to) || []
-    let replyMessages: any[] = []
-    
-    
-    if (replyMessageIds.length > 0) {
-      const { data: replyData, error: replyError } = await supabaseAdmin
-        .from('chat_messages')
-        .select(`
-          id,
-          message,
-          project_id,
-          users:sender_id (
-            display_name,
-            email
-          )
-        `)
-        .in('id', replyMessageIds)
-      
-      if (replyError) {
-        console.error('返信先メッセージ取得エラー:', replyError)
-      }
-      
-      replyMessages = replyData || []
-    }
-
     const formattedMessages = messages?.map(msg => {
-      const replyMessage = replyMessages.find(rm => rm.id === msg.reply_to)
-      
       return {
-        msgId: msg.id,
-        replyTo: msg.reply_to,
-        replyMessageFound: !!replyMessage,
-        replyMessage: replyMessage ? {
-          id: replyMessage.id,
-          content: replyMessage.message,
-          sender: (replyMessage.users as any)?.display_name || (replyMessage.users as any)?.email
-        } : null,
-        allReplyMessages: replyMessages.map(rm => ({ id: rm.id, message: rm.message })),
         id: msg.id,
         room_id: roomId,
-        content: msg.message,
-        sender_id: (msg.users as any)?.id,
+        content: msg.message || '',
+        sender_id: msg.sender_id,
         sender_name: (msg.users as any)?.display_name || 'Unknown',
         sender_email: (msg.users as any)?.email,
         sender_avatar_url: (msg.users as any)?.avatar_url,
-        sender_type: msg.sender_type,
         created_at: msg.created_at,
+        updated_at: msg.updated_at,
         is_deleted: false,
         message_type: msg.message_type || 'text',
         file_url: msg.file_url,
         file_name: msg.file_name,
         file_size: msg.file_size,
         reply_to: msg.reply_to,
-        reply_message: replyMessage ? {
-          id: replyMessage.id,
-          content: replyMessage.message,
-          sender_name: (replyMessage.users as any)?.display_name || (replyMessage.users as any)?.email || 'Unknown'
-        } : null,
         sender: {
-          id: (msg.users as any)?.id,
+          id: msg.sender_id,
           display_name: (msg.users as any)?.display_name || 'Unknown',
           email: (msg.users as any)?.email,
           avatar_url: (msg.users as any)?.avatar_url
@@ -235,9 +202,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // ルームIDからプロジェクトIDを抽出
-    const projectId = room_id.replace('project_', '')
-
     // ユーザーの認証
     const authHeader = request.headers.get('authorization')
     if (!authHeader) {
@@ -271,65 +235,77 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // プロジェクトの存在確認
-    const { data: project, error: projectError } = await supabaseAdmin
-      .from('projects')
-      .select('id, title, org_id, contractor_id')
-      .eq('id', projectId)
+    // チャットルームを取得してproject_idを確認
+    const { data: chatRoom, error: chatRoomError } = await supabaseAdmin
+      .from('chat_rooms')
+      .select(`
+        id,
+        project_id,
+        projects (
+          id,
+          title,
+          org_id,
+          contractor_id
+        )
+      `)
+      .eq('id', room_id)
       .single()
 
-    if (projectError || !project) {
+    if (chatRoomError || !chatRoom) {
+      return NextResponse.json(
+        { message: 'チャットルームが見つかりません' },
+        { status: 404 }
+      )
+    }
+
+    const project = chatRoom.projects as any
+    const projectId = chatRoom.project_id
+
+    if (!project) {
       return NextResponse.json(
         { message: 'プロジェクトが見つかりません' },
         { status: 404 }
       )
     }
 
-    // アクセス権限をチェック
-    const { data: membership } = await supabaseAdmin
-      .from('memberships')
-      .select('org_id, role')
-      .eq('user_id', userProfile.id)
+    // チャット参加者としてのアクセス権限をチェック
+    const { data: participant, error: participantError } = await supabaseAdmin
+      .from('chat_participants')
+      .select('id, role')
+      .eq('room_id', chatRoom.id)
+      .eq('user_id', user.id)
+      .eq('is_active', true)
       .single()
 
-    // 複数受注者対応：プロジェクト参加者としてのアクセス権限をチェック
-    const { data: projectParticipant } = await supabaseAdmin
-      .from('project_participants')
-      .select('id, role, status')
-      .eq('project_id', projectId)
-      .eq('user_id', userProfile.id)
-      .single()
-
-    const hasAccess = membership?.org_id === project.org_id || 
-                     project.contractor_id === userProfile.id || 
-                     (projectParticipant && projectParticipant.status === 'active')
-
-    if (!hasAccess) {
+    if (participantError || !participant) {
       return NextResponse.json(
-        { message: 'このプロジェクトへのアクセス権限がありません' },
+        { message: 'このチャットルームへのアクセス権限がありません（招待されていません）' },
         { status: 403 }
       )
     }
 
-    // sender_typeを決定（組織メンバーは'client'、受注者は'contractor'）
-    const senderType = membership?.org_id === project.org_id ? 'client' : 'contractor'
-
-    // チャットメッセージを保存
+    // チャットメッセージを保存（sender_idはusers.idを使用）
     const { data: messageData, error: messageError } = await supabaseAdmin
       .from('chat_messages')
       .insert({
         project_id: projectId,
         sender_id: userProfile.id,
-        sender_type: senderType,
+        sender_type: membership?.org_id === project.org_id ? 'client' : 'contractor',
         message: content,
+        message_type: message_type || 'text',
         reply_to: reply_to || null,
         created_at: new Date().toISOString()
       })
       .select(`
         id,
-        message,
+        project_id,
+        sender_id,
         sender_type,
+        message,
+        message_type,
+        reply_to,
         created_at,
+        updated_at,
         users:sender_id (
           id,
           display_name,
@@ -341,24 +317,48 @@ export async function POST(request: NextRequest) {
 
     if (messageError) {
       console.error('メッセージ保存エラー:', messageError)
+      console.error('メッセージ保存データ:', {
+        project_id: projectId,
+        sender_id: userProfile.id,
+        message: content
+      })
       return NextResponse.json(
-        { message: 'メッセージの保存に失敗しました' },
+        {
+          message: 'メッセージの保存に失敗しました',
+          error: messageError.message,
+          details: messageError
+        },
         { status: 400 }
       )
     }
 
+    // sender_typeの取得
+    const { data: membership } = await supabaseAdmin
+      .from('memberships')
+      .select('org_id, role')
+      .eq('user_id', userProfile.id)
+      .single()
+
     const formattedMessage = {
       id: messageData.id,
-      room_id,
+      room_id: room_id,
       content: messageData.message,
-      sender_id: (messageData.users as any)?.id,
+      sender_id: messageData.sender_id,
       sender_name: (messageData.users as any)?.display_name || 'Unknown',
       sender_email: (messageData.users as any)?.email,
       sender_avatar_url: (messageData.users as any)?.avatar_url,
       sender_type: messageData.sender_type,
       created_at: messageData.created_at,
+      updated_at: messageData.updated_at,
       is_deleted: false,
-      message_type
+      message_type: messageData.message_type || 'text',
+      reply_to: messageData.reply_to,
+      sender: {
+        id: messageData.sender_id,
+        display_name: (messageData.users as any)?.display_name || 'Unknown',
+        email: (messageData.users as any)?.email,
+        avatar_url: (messageData.users as any)?.avatar_url
+      }
     }
 
     return NextResponse.json({

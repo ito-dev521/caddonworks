@@ -34,7 +34,7 @@ export const MentionPicker: React.FC<MentionPickerProps> = ({
   const { user } = useAuth()
   const searchInputRef = useRef<HTMLInputElement>(null)
 
-  // チャットルームの参加者を取得
+  // チャットルームの参加者を取得（APIベースで取得してRLS回避）
   useEffect(() => {
     const fetchChatParticipants = async () => {
       if (!projectId) return
@@ -42,18 +42,19 @@ export const MentionPicker: React.FC<MentionPickerProps> = ({
       try {
         const { data: { session } } = await supabase.auth.getSession()
         if (!session?.access_token) {
-          console.error('認証トークンが取得できません')
+          console.warn('認証トークンが取得できません')
           return
         }
 
-        const response = await fetch(`/api/chat/participants?room_id=project_${projectId}`, {
+        // project_idから直接参加者を取得するAPIを使用
+        const response = await fetch(`/api/chat/participants?project_id=${projectId}`, {
           headers: {
             'Authorization': `Bearer ${session.access_token}`
           }
         })
 
         if (!response.ok) {
-          console.error('参加者取得エラー:', response.statusText)
+          console.warn('参加者取得エラー:', response.statusText)
           return
         }
 
@@ -61,7 +62,7 @@ export const MentionPicker: React.FC<MentionPickerProps> = ({
         setUsers(result.participants || [])
         setFilteredUsers(result.participants || [])
       } catch (error) {
-        console.error('チャット参加者取得エラー:', error)
+        console.warn('チャット参加者取得エラー:', error)
       }
     }
 

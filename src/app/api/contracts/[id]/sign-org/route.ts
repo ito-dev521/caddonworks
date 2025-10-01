@@ -116,12 +116,108 @@ export async function POST(
     }
 
     // 案件のステータスを進行中に更新
-    await supabaseAdmin
+    const { data: project } = await supabaseAdmin
       .from('projects')
-      .update({ 
+      .update({
         status: 'in_progress'
       })
       .eq('id', contract.project_id)
+      .select('id, title, assignee_name')
+      .single()
+
+    // チャットルーム作成と担当者自動招待
+    if (project) {
+      console.log('チャットルーム作成開始 - プロジェクトID:', project.id, 'プロジェクト名:', project.title)
+
+      // チャットルームが既に存在するかチェック
+      const { data: existingRoom } = await supabaseAdmin
+        .from('chat_rooms')
+        .select('id')
+        .eq('project_id', project.id)
+        .single()
+
+      let chatRoomId = existingRoom?.id
+
+      // チャットルームが存在しない場合は作成
+      if (!chatRoomId) {
+        const { data: newRoom, error: roomError } = await supabaseAdmin
+          .from('chat_rooms')
+          .insert({
+            project_id: project.id,
+            name: project.title,
+            description: `${project.title}のチャットルーム`,
+            created_by: user.id,
+            is_active: true
+          })
+          .select('id')
+          .single()
+
+        if (roomError) {
+          console.error('チャットルーム作成エラー:', roomError)
+        } else if (newRoom) {
+          chatRoomId = newRoom.id
+          console.log('チャットルーム作成成功 - ルームID:', chatRoomId)
+
+          // 案件担当者を自動招待（admin権限）
+          if (project.assignee_name) {
+            const { data: assignee } = await supabaseAdmin
+              .from('users')
+              .select('auth_user_id, display_name')
+              .eq('display_name', project.assignee_name)
+              .single()
+
+            console.log('担当者検索結果:', assignee)
+
+            if (assignee?.auth_user_id) {
+              const { data: participantData, error: participantError } = await supabaseAdmin
+                .from('chat_participants')
+                .insert({
+                  room_id: chatRoomId,
+                  user_id: assignee.auth_user_id,
+                  role: 'admin'
+                })
+                .select()
+
+              if (participantError) {
+                console.error('担当者の参加者追加エラー:', participantError)
+              } else {
+                console.log('担当者の参加者追加成功:', participantData)
+              }
+            }
+          }
+
+          // 受注者を自動招待（member権限）
+          if (contract.contractor_id) {
+            const { data: contractor } = await supabaseAdmin
+              .from('users')
+              .select('auth_user_id, display_name')
+              .eq('id', contract.contractor_id)
+              .single()
+
+            console.log('受注者検索結果:', contractor)
+
+            if (contractor?.auth_user_id) {
+              const { data: participantData, error: participantError } = await supabaseAdmin
+                .from('chat_participants')
+                .insert({
+                  room_id: chatRoomId,
+                  user_id: contractor.auth_user_id,
+                  role: 'member'
+                })
+                .select()
+
+              if (participantError) {
+                console.error('受注者の参加者追加エラー:', participantError)
+              } else {
+                console.log('受注者の参加者追加成功:', participantData)
+              }
+            }
+          }
+        }
+      } else {
+        console.log('チャットルームは既に存在します - ルームID:', chatRoomId)
+      }
+    }
 
     // 受注者に署名完了通知を送信
     const { data: contractorUser, error: contractorUserError } = await supabaseAdmin

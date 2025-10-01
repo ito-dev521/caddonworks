@@ -111,7 +111,17 @@ export function ChatParticipantsPanel({
   const checkInvitePermission = async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      if (!session) return
+      if (!session) {
+        console.log('招待権限確認: セッションなし')
+        return
+      }
+
+      if (!projectId) {
+        console.log('招待権限確認: projectIdなし')
+        return
+      }
+
+      console.log('招待権限確認: projectId =', projectId)
 
       // プロジェクト情報を取得してユーザーが発注者側かチェック
       const response = await fetch(`/api/projects/${projectId}`, {
@@ -121,9 +131,13 @@ export function ChatParticipantsPanel({
         }
       })
 
+      console.log('招待権限確認: API response status =', response.status)
+
       if (response.ok) {
         const result = await response.json()
         const project = result.project
+
+        console.log('招待権限確認: project =', project)
 
         // ユーザープロフィールを取得
         const { data: userProfile } = await supabase
@@ -132,6 +146,8 @@ export function ChatParticipantsPanel({
           .eq('auth_user_id', user?.id)
           .single()
 
+        console.log('招待権限確認: userProfile =', userProfile)
+
         // 組織メンバーシップをチェック
         const { data: membership } = await supabase
           .from('memberships')
@@ -139,8 +155,16 @@ export function ChatParticipantsPanel({
           .eq('user_id', userProfile?.id)
           .single()
 
+        console.log('招待権限確認: membership =', membership)
+        console.log('招待権限確認: project.org_id =', project.org_id)
+
         // 発注者側の組織メンバーなら招待可能
-        setCanInvite(membership?.org_id === project.org_id)
+        const canInviteFlag = membership?.org_id === project.org_id
+        console.log('招待権限確認: canInvite =', canInviteFlag)
+        setCanInvite(canInviteFlag)
+      } else {
+        console.error('招待権限確認: API error', response.status, await response.text())
+        setCanInvite(false)
       }
     } catch (error) {
       console.error('権限確認エラー:', error)
