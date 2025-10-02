@@ -83,6 +83,7 @@ User is missing permissions: sign_and_send
 
 ## 注意事項
 
-- Box Sign権限の有効化には Box Enterprise プランが必要です
+- Box Sign機能は無料プラン（Individual）でも月5ドキュメントまで利用可能です
+- 月5ドキュメントを超える場合はBusinessプラン（月額$15～）が必要です
 - 権限変更後は必ずアプリケーションの再承認を行ってください
 - 本番環境での変更は事前にテスト環境で検証してください

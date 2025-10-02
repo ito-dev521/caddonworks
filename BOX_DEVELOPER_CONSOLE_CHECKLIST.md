@@ -44,8 +44,8 @@ https://app.box.com/developers/console
 1. Box管理画面にログイン
 2. **Admin Console** → **Account Settings**
 3. 現在のプランを確認
-   - ❌ 無料プラン → Box Sign利用不可
-   - ✅ Business以上 → Box Sign利用可能
+   - ✅ Individual（無料） → 月5ドキュメントまで利用可能
+   - ✅ Business以上 → 無制限に利用可能
 
 ### ステップ2: Box Sign権限の有効化
 1. Box Developer Console → 対象アプリを選択
@@ -83,18 +83,20 @@ curl http://localhost:3000/api/debug/box-sign/test
 3. 最大30分待機（権限伝播に時間がかかる場合あり）
 
 ### エラー: "403 Forbidden"
-**原因**: アカウントプランがBusinessプラン未満
+**原因**: アプリ承認が必要、または月5ドキュメント制限に達している
 
 **対処法**:
-1. BoxアカウントをBusinessプラン以上にアップグレード
-2. または `BOX_SIGN_ENABLED=false` に設定して機能を無効化
+1. Box Developer Consoleでアプリを再承認
+2. 権限設定を再確認
+3. 無料プランで月5ドキュメント制限に達している場合は、翌月まで待つかBusinessプランにアップグレード
 
 ### エラー: "404 Not Found"
-**原因**: Box Sign APIエンドポイントが存在しない（アカウント・プラン問題）
+**原因**: Box Sign APIエンドポイントが存在しない
 
 **対処法**:
 1. Box管理画面でBox Sign機能が有効か確認
 2. Admin Console → Box Sign設定を確認
+3. Application Scopesで署名権限が有効か確認
 
 ## 参考リンク
 - [Box Developer Documentation](https://developer.box.com/)
