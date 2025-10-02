@@ -12,15 +12,24 @@ export interface DocumentData {
   title?: string
   contractorName?: string
   contractorEmail?: string
+  contractorAddress?: string
+  contractorPhone?: string
   clientName?: string
   clientEmail?: string
 
   // プロジェクト関連
   projectTitle?: string
   projectAmount?: number
+  startDate?: string
   deadline?: string
   completionDate?: string
   deliverables?: string[]
+  workLocation?: string
+
+  // 注文請書関連
+  orderNumber?: string
+  orderDate?: string
+  acceptanceDate?: string
 
   // 月次請求書関連
   billingPeriod?: string
@@ -400,38 +409,67 @@ export class DocumentGenerator {
 
   // Excel → PDF変換（Puppeteer使用）
   private async convertExcelToPDF(excelPath: string): Promise<Buffer> {
-    // 注意: 実際の運用では専用のExcel→PDF変換サービスやライブラリの使用を推奨
-    // ここではHTMLプレビュー経由でPDF変換する簡易実装
+    console.log('🔄 Puppeteer起動中...')
 
     const browser = await puppeteer.launch({
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--disable-gpu'
+      ]
     })
 
     try {
       const page = await browser.newPage()
 
-      // ExcelファイルをHTMLとして表示するための簡易実装
-      // 実際の運用では、ExcelJS でHTMLを生成するか、専用変換ツールを使用
+      console.log('📄 ExcelをHTMLに変換中...')
       const htmlContent = await this.convertExcelToHTML(excelPath)
 
-      await page.setContent(htmlContent, { waitUntil: 'networkidle0' })
+      // デバッグ用: HTMLを一時保存
+      if (process.env.NODE_ENV === 'development') {
+        const fs = require('fs')
+        const debugHtmlPath = excelPath.replace('.xlsx', '_debug.html')
+        fs.writeFileSync(debugHtmlPath, htmlContent)
+        console.log(`📝 デバッグ用HTML保存: ${debugHtmlPath}`)
+      }
 
+      console.log('🌐 HTMLをブラウザにロード中...')
+      await page.setContent(htmlContent, {
+        waitUntil: 'networkidle0',
+        timeout: 30000
+      })
+
+      // ページサイズを取得して調整
+      await page.evaluateHandle('document.fonts.ready')
+
+      console.log('🖨️ PDFを生成中...')
       const pdfBuffer = await page.pdf({
         format: 'A4',
         printBackground: true,
+        preferCSSPageSize: false,
+        displayHeaderFooter: false,
         margin: {
-          top: '20mm',
+          top: '15mm',
           right: '15mm',
-          bottom: '20mm',
+          bottom: '15mm',
           left: '15mm'
-        }
+        },
+        scale: 1.0
       })
+
+      console.log(`✅ PDF生成完了: ${pdfBuffer.length} bytes`)
 
       return Buffer.from(pdfBuffer)
 
+    } catch (error) {
+      console.error('❌ Excel→PDF変換エラー:', error)
+      throw error
     } finally {
       await browser.close()
+      console.log('🔚 Puppeteer終了')
     }
   }
 
@@ -441,83 +479,226 @@ export class DocumentGenerator {
     await workbook.xlsx.readFile(excelPath)
     const worksheet = workbook.getWorksheet(1)
 
+    if (!worksheet) {
+      throw new Error('ワークシートが見つかりません')
+    }
+
+    // セル結合情報を取得
+    const mergedCells = new Map<string, { rowspan: number; colspan: number }>()
+    const skipCells = new Set<string>()
+
+    worksheet.model.merges?.forEach((merge: string) => {
+      // 例: "A1:C1" → startCell="A1", endCell="C1"
+      const [startCell, endCell] = merge.split(':')
+      const startRef = this.parseCellRef(startCell)
+      const endRef = this.parseCellRef(endCell)
+
+      const rowspan = endRef.row - startRef.row + 1
+      const colspan = endRef.col - startRef.col + 1
+
+      mergedCells.set(startCell, { rowspan, colspan })
+
+      // 結合範囲内のセルをスキップリストに追加
+      for (let r = startRef.row; r <= endRef.row; r++) {
+        for (let c = startRef.col; c <= endRef.col; c++) {
+          if (r !== startRef.row || c !== startRef.col) {
+            skipCells.add(this.getCellAddress(r, c))
+          }
+        }
+      }
+    })
+
+    // 列幅情報を取得してCSSに変換
+    const colWidths: string[] = []
+    const maxCols = worksheet.columnCount || 10
+
+    // 全列の合計幅を計算
+    let totalWidth = 0
+    const columnWidths: number[] = []
+    for (let col = 1; col <= maxCols; col++) {
+      const column = worksheet.getColumn(col)
+      const width = column.width || 10
+      columnWidths.push(width)
+      totalWidth += width
+    }
+
+    // 各列の幅をパーセンテージに変換
+    for (let col = 1; col <= maxCols; col++) {
+      const widthPercent = (columnWidths[col - 1] / totalWidth * 100).toFixed(2)
+      colWidths.push(`.col-${col} { width: ${widthPercent}%; }`)
+    }
+
     let html = `
+      <!DOCTYPE html>
       <html>
         <head>
           <meta charset="utf-8">
           <style>
+            @page {
+              size: A4;
+              margin: 20mm;
+            }
             body {
-              font-family: 'MS PGothic', 'Hiragino Sans', 'Arial', sans-serif;
-              font-size: 11px;
-              margin: 20px;
+              font-family: 'Noto Sans JP', 'Yu Gothic', 'MS PGothic', 'Hiragino Sans', sans-serif;
+              font-size: 10pt;
+              margin: 0;
+              padding: 20px;
               background: white;
+              color: #000;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
             }
             table {
               width: 100%;
               border-collapse: collapse;
-              margin: 0;
+              table-layout: fixed;
             }
-            td, th {
-              border: 1px solid #000;
-              padding: 4px 6px;
-              vertical-align: top;
+            td {
+              border: 1px solid #333;
+              padding: 6px 8px;
+              vertical-align: middle;
               word-wrap: break-word;
-              height: auto;
-              min-height: 20px;
+              overflow-wrap: break-word;
+              line-height: 1.6;
             }
-            .number { text-align: right; }
-            .center { text-align: center; }
-            .header { background-color: #f0f0f0; font-weight: bold; }
-            .no-border { border: none; }
-            .thick-border { border: 2px solid #000; }
+            ${colWidths.join('\n            ')}
+            .text-left { text-align: left; }
+            .text-center { text-align: center; }
+            .text-right { text-align: right; }
+            .valign-top { vertical-align: top; }
+            .valign-middle { vertical-align: middle; }
+            .valign-bottom { vertical-align: bottom; }
+            .font-bold { font-weight: bold; }
+            .font-large { font-size: 14pt; }
+            .font-xlarge { font-size: 18pt; }
+            .no-border { border: none !important; }
+            .border-thick { border-width: 2px; }
           </style>
         </head>
         <body>
           <table>
     `
 
-    if (worksheet) {
-      const maxRow = worksheet.rowCount
-      const maxCol = worksheet.columnCount
+    const maxRow = worksheet.rowCount
+    const maxCol = worksheet.columnCount
 
-      for (let rowNum = 1; rowNum <= maxRow; rowNum++) {
-        html += '<tr>'
-        const row = worksheet.getRow(rowNum)
+    for (let rowNum = 1; rowNum <= maxRow; rowNum++) {
+      const row = worksheet.getRow(rowNum)
+      const rowHeight = row.height ? `style="height: ${row.height * 1.33}px;"` : ''
 
-        for (let colNum = 1; colNum <= maxCol; colNum++) {
-          const cell = worksheet.getCell(rowNum, colNum)
-          let value = ''
+      html += `<tr ${rowHeight}>`
 
-          // セル値の処理
-          if (cell.value !== null && cell.value !== undefined) {
-            if (typeof cell.value === 'object' && 'result' in cell.value) {
-              // 数式の場合は結果を表示
-              value = cell.value.result || ''
-            } else if (cell.value instanceof Date) {
-              // 日付の場合は日本語形式でフォーマット
-              value = cell.value.toLocaleDateString('ja-JP')
-            } else {
-              value = String(cell.value)
-            }
-          }
+      for (let colNum = 1; colNum <= maxCol; colNum++) {
+        const cellAddress = this.getCellAddress(rowNum, colNum)
 
-          // セルスタイルを取得
-          let cellClass = ''
-          if (cell.alignment?.horizontal === 'center') {
-            cellClass = 'center'
-          } else if (cell.alignment?.horizontal === 'right') {
-            cellClass = 'number'
-          }
-
-          // セルの背景色をチェック
-          if (cell.fill && cell.fill.type === 'pattern' && cell.fill.fgColor) {
-            cellClass += ' header'
-          }
-
-          html += `<td class="${cellClass}">${value}</td>`
+        // スキップするセル（結合範囲内）
+        if (skipCells.has(cellAddress)) {
+          continue
         }
-        html += '</tr>'
+
+        const cell = worksheet.getCell(rowNum, colNum)
+
+        // セル結合属性
+        let colspan = 1
+        let rowspan = 1
+        if (mergedCells.has(cellAddress)) {
+          const merge = mergedCells.get(cellAddress)!
+          rowspan = merge.rowspan
+          colspan = merge.colspan
+        }
+
+        // セル値の取得
+        let value = ''
+        if (cell.value !== null && cell.value !== undefined) {
+          if (typeof cell.value === 'object' && 'result' in cell.value) {
+            value = String(cell.value.result || '')
+          } else if (cell.value instanceof Date) {
+            value = cell.value.toLocaleDateString('ja-JP')
+          } else {
+            value = String(cell.value)
+          }
+        }
+
+        // HTML エスケープ
+        value = value
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/\n/g, '<br>')
+
+        // セルスタイルのクラス構築
+        const classes: string[] = []
+
+        // 列幅クラスを追加
+        classes.push(`col-${colNum}`)
+
+        // 水平方向の配置
+        if (cell.alignment?.horizontal === 'center') {
+          classes.push('text-center')
+        } else if (cell.alignment?.horizontal === 'right') {
+          classes.push('text-right')
+        } else {
+          classes.push('text-left')
+        }
+
+        // 垂直方向の配置
+        if (cell.alignment?.vertical === 'top') {
+          classes.push('valign-top')
+        } else if (cell.alignment?.vertical === 'bottom') {
+          classes.push('valign-bottom')
+        } else {
+          classes.push('valign-middle')
+        }
+
+        // フォントスタイル
+        if (cell.font?.bold) {
+          classes.push('font-bold')
+        }
+
+        if (cell.font?.size && cell.font.size >= 14) {
+          classes.push('font-large')
+        }
+
+        if (cell.font?.size && cell.font.size >= 18) {
+          classes.push('font-xlarge')
+        }
+
+        // インラインスタイルの構築
+        const styles: string[] = []
+
+        // 背景色
+        if (cell.fill && cell.fill.type === 'pattern') {
+          const fillColor = (cell.fill as any).fgColor
+          if (fillColor && fillColor.argb) {
+            const color = this.argbToHex(fillColor.argb)
+            styles.push(`background-color: ${color}`)
+          }
+        }
+
+        // フォント色
+        if (cell.font?.color && (cell.font.color as any).argb) {
+          const color = this.argbToHex((cell.font.color as any).argb)
+          styles.push(`color: ${color}`)
+        }
+
+        // フォントサイズ（クラスで対応しきれない場合）
+        if (cell.font?.size && cell.font.size < 14 && cell.font.size !== 10) {
+          styles.push(`font-size: ${cell.font.size}pt`)
+        }
+
+        // 罫線なし
+        if (cell.border && Object.keys(cell.border).length === 0) {
+          classes.push('no-border')
+        }
+
+        const classAttr = classes.length > 0 ? `class="${classes.join(' ')}"` : ''
+        const styleAttr = styles.length > 0 ? `style="${styles.join('; ')}"` : ''
+        const spanAttrs = `${rowspan > 1 ? `rowspan="${rowspan}"` : ''} ${colspan > 1 ? `colspan="${colspan}"` : ''}`
+
+        html += `<td ${classAttr} ${styleAttr} ${spanAttrs}>${value}</td>`
       }
+
+      html += '</tr>'
     }
 
     html += `
@@ -527,6 +708,50 @@ export class DocumentGenerator {
     `
 
     return html
+  }
+
+  // セル参照文字列（例: "A1"）をパース
+  private parseCellRef(cellRef: string): { row: number; col: number } {
+    const match = cellRef.match(/^([A-Z]+)(\d+)$/)
+    if (!match) {
+      throw new Error(`Invalid cell reference: ${cellRef}`)
+    }
+
+    const colStr = match[1]
+    const rowStr = match[2]
+
+    let col = 0
+    for (let i = 0; i < colStr.length; i++) {
+      col = col * 26 + (colStr.charCodeAt(i) - 64)
+    }
+
+    const row = parseInt(rowStr, 10)
+
+    return { row, col }
+  }
+
+  // 行列番号からセルアドレスを生成（例: 1,1 → "A1"）
+  private getCellAddress(row: number, col: number): string {
+    let colStr = ''
+    let c = col
+    while (c > 0) {
+      const mod = (c - 1) % 26
+      colStr = String.fromCharCode(65 + mod) + colStr
+      c = Math.floor((c - 1) / 26)
+    }
+    return `${colStr}${row}`
+  }
+
+  // ARGB色コードをHEXに変換
+  private argbToHex(argb: string): string {
+    if (argb.length === 8) {
+      // ARGB形式（例: "FFFF0000"）
+      const r = argb.substring(2, 4)
+      const g = argb.substring(4, 6)
+      const b = argb.substring(6, 8)
+      return `#${r}${g}${b}`
+    }
+    return '#000000'
   }
 
   // モック用のPDF生成（既存の実装）
@@ -572,20 +797,16 @@ export class DocumentGenerator {
       order_acceptance: {
         templatePath: 'order_acceptance_template.xlsx',
         cellMappings: {
-          'orderNumber': 'B5',          // 注文書番号
-          'orderDate': 'B6',            // 注文日
-          'contractorName': 'B8',       // 受注者（会社名）
-          'contractorEmail': 'B9',      // 受注者メールアドレス
-          'contractorAddress': 'B10',   // 受注者住所
-          'contractorPhone': 'B11',     // 受注者電話番号
-          'clientName': 'B13',          // 発注者（会社名）
-          'clientEmail': 'B14',         // 発注者メールアドレス
-          'projectTitle': 'B16',        // 工事名・業務名
-          'projectAmount': 'B17',       // 請負金額
-          'deadline': 'B18',            // 完成期日
-          'workLocation': 'B19',        // 工事場所
-          'acceptanceDate': 'B21',      // 受諾日
-          'createdAt': 'E2'             // 作成日
+          'orderNumber': 'B2',          // 注文書番号
+          'orderDate': 'B3',            // 注文日
+          'contractorName': 'B5',       // 発注者（請書作成者）会社名
+          'contractorEmail': 'B6',      // 発注者（請書作成者）メールアドレス
+          'clientName': 'B8',           // 受注者会社名
+          'clientEmail': 'B9',          // 受注者メールアドレス
+          'projectTitle': 'B11',        // 案件名
+          'projectAmount': 'B12',       // 契約金額
+          'startDate': 'B13',           // 開始日
+          'deadline': 'B14'             // 納期日
         },
         calculateFormulas: true
       },
@@ -772,83 +993,155 @@ export class DocumentGenerator {
   }
 
   private generateOrderAcceptanceDocument(doc: PDFKit.PDFDocument, data: DocumentData): void {
-    // ヘッダー
-    doc.fontSize(20).text('注文請書', 50, 50)
-    doc.fontSize(12).text(`作成日: ${data.createdAt || new Date().toLocaleDateString('ja-JP')}`, 400, 50)
+    const pageWidth = doc.page.width
+    const margin = 50
+    const contentWidth = pageWidth - (margin * 2)
 
-    let y = 120
+    // ============================================
+    // ヘッダー部分
+    // ============================================
+    doc.fontSize(24).text('注文請書', margin, 40, {
+      align: 'center',
+      width: contentWidth
+    })
 
-    // 注文書情報
-    doc.fontSize(14).text('注文書情報', 50, y)
-    y += 25
-    doc.fontSize(10)
-      .text(`注文書番号: ${(data as any).orderNumber || '未設定'}`, 70, y)
-    y += 20
-    doc.text(`注文日: ${(data as any).orderDate || '未設定'}`, 70, y)
-    y += 40
-
-    // 受注者情報
-    doc.fontSize(14).text('受注者情報（請書作成者）', 50, y)
-    y += 25
-    doc.fontSize(10)
-      .text(`会社名: ${data.contractorName || '受注者名'}`, 70, y)
-    y += 20
-    doc.text(`住所: ${(data as any).contractorAddress || '住所未登録'}`, 70, y)
-    y += 20
-    doc.text(`電話番号: ${(data as any).contractorPhone || '電話番号未登録'}`, 70, y)
-    y += 20
-    doc.text(`メールアドレス: ${data.contractorEmail || 'メール未登録'}`, 70, y)
-    y += 40
-
-    // 発注者情報
-    doc.fontSize(14).text('発注者情報', 50, y)
-    y += 25
-    doc.fontSize(10)
-      .text(`会社名: ${data.clientName || '発注者名'}`, 70, y)
-    y += 20
-    doc.text(`メールアドレス: ${data.clientEmail || 'メール未登録'}`, 70, y)
-    y += 40
-
-    // 請負内容
-    doc.fontSize(14).text('請負内容', 50, y)
-    y += 25
-    doc.fontSize(10)
-      .text(`工事名・業務名: ${data.projectTitle || 'プロジェクト名'}`, 70, y)
-    y += 20
-    doc.text(`請負金額: ¥${((data as any).projectAmount || 0).toLocaleString()}`, 70, y)
-    y += 20
-    doc.text(`完成期日: ${data.deadline || '未設定'}`, 70, y)
-    y += 20
-    doc.text(`工事場所: ${(data as any).workLocation || '場所未設定'}`, 70, y)
-    y += 40
-
-    // 受諾内容
-    doc.fontSize(14).text('受諾内容', 50, y)
-    y += 25
-    doc.fontSize(10).text(
-      '上記注文書の内容を承諾し、記載された条件に従って業務を履行することをお約束いたします。',
-      70, y, { width: 450 }
+    // 作成日（右上）
+    doc.fontSize(9).text(
+      `作成日: ${data.createdAt || new Date().toLocaleDateString('ja-JP')}`,
+      pageWidth - 150, 40
     )
-    y += 60
 
-    // 受諾日
-    doc.fontSize(12).text('受諾日', 50, y)
+    // ヘッダー下の線
+    doc.moveTo(margin, 70).lineTo(pageWidth - margin, 70).stroke()
+
+    let y = 90
+
+    // ============================================
+    // 注文書情報セクション
+    // ============================================
+    doc.fontSize(12).fillColor('#333333').text('【注文書情報】', margin, y)
     y += 20
-    doc.fontSize(10).text(`${(data as any).acceptanceDate || new Date().toLocaleDateString('ja-JP')}`, 70, y)
-    y += 60
 
+    doc.fontSize(10).fillColor('#000000')
+    doc.text(`注文書番号: ${data.orderNumber || '未設定'}`, margin + 20, y)
+    y += 18
+    doc.text(`注文日: ${data.orderDate || '未設定'}`, margin + 20, y)
+    y += 30
+
+    // ============================================
+    // 受注者情報セクション（請書作成者）
+    // ============================================
+    doc.fontSize(12).fillColor('#333333').text('【受注者情報】', margin, y)
+    doc.fontSize(9).fillColor('#666666').text('（本注文請書作成者）', margin + 90, y)
+    y += 20
+
+    doc.fontSize(10).fillColor('#000000')
+    doc.text(`会社名: ${data.contractorName || '受注者名'}`, margin + 20, y)
+    y += 18
+    doc.text(`住所: ${data.contractorAddress || '住所未登録'}`, margin + 20, y)
+    y += 18
+    doc.text(`電話番号: ${data.contractorPhone || '電話番号未登録'}`, margin + 20, y)
+    y += 18
+    doc.text(`メールアドレス: ${data.contractorEmail || 'メール未登録'}`, margin + 20, y)
+    y += 30
+
+    // ============================================
+    // 発注者情報セクション
+    // ============================================
+    doc.fontSize(12).fillColor('#333333').text('【発注者情報】', margin, y)
+    y += 20
+
+    doc.fontSize(10).fillColor('#000000')
+    doc.text(`会社名: ${data.clientName || '発注者名'}`, margin + 20, y)
+    y += 18
+    doc.text(`メールアドレス: ${data.clientEmail || 'メール未登録'}`, margin + 20, y)
+    y += 30
+
+    // ============================================
+    // 請負内容セクション
+    // ============================================
+    doc.fontSize(12).fillColor('#333333').text('【請負内容】', margin, y)
+    y += 20
+
+    doc.fontSize(10).fillColor('#000000')
+    doc.text(`工事名・業務名: ${data.projectTitle || 'プロジェクト名'}`, margin + 20, y)
+    y += 18
+    doc.fontSize(11).fillColor('#CC0000').text(
+      `請負金額: ¥${(data.projectAmount || 0).toLocaleString()} 円（税込）`,
+      margin + 20, y
+    )
+    y += 20
+    doc.fontSize(10).fillColor('#000000')
+    doc.text(`完成期日: ${data.deadline || '未設定'}`, margin + 20, y)
+    y += 18
+    doc.text(`工事場所: ${data.workLocation || '場所未設定'}`, margin + 20, y)
+    y += 30
+
+    // ============================================
+    // 受諾内容セクション
+    // ============================================
+    doc.fontSize(12).fillColor('#333333').text('【受諾内容】', margin, y)
+    y += 20
+
+    // 背景色付きのボックス
+    doc.rect(margin + 10, y - 5, contentWidth - 20, 50).fillAndStroke('#F5F5F5', '#CCCCCC')
+
+    doc.fontSize(10).fillColor('#000000').text(
+      '上記注文書の内容を承諾し、記載された条件に従って誠実に業務を履行することをお約束いたします。',
+      margin + 20, y + 10, { width: contentWidth - 40, align: 'left' }
+    )
+    y += 65
+
+    // ============================================
+    // 受諾日
+    // ============================================
+    doc.fontSize(10).text(
+      `受諾日: ${data.acceptanceDate || new Date().toLocaleDateString('ja-JP')}`,
+      margin + 20, y
+    )
+    y += 35
+
+    // ============================================
     // 署名欄
-    doc.fontSize(12).text('受注者署名:', 50, y)
-    doc.rect(150, y - 5, 200, 30).stroke()
+    // ============================================
+    const signatureY = y
+    const signatureBoxWidth = 180
+    const signatureBoxHeight = 50
 
-    y += 50
-    doc.text('発注者確認署名:', 50, y)
-    doc.rect(150, y - 5, 200, 30).stroke()
+    // 受注者署名欄（左側）
+    doc.fontSize(11).fillColor('#000000').text('受注者署名:', margin, signatureY)
+    doc.rect(margin, signatureY + 20, signatureBoxWidth, signatureBoxHeight).stroke()
+    doc.fontSize(8).fillColor('#999999').text('※ 電子署名により捺印', margin + 5, signatureY + 25)
 
-    // 注意事項
-    y += 80
-    doc.fontSize(8).text('※ 本注文請書は電子署名により法的効力を有します', 50, y)
-    doc.text('※ 契約条件の詳細は別途契約書に記載されます', 50, y + 15)
+    // 発注者確認署名欄（右側）
+    const rightX = pageWidth - margin - signatureBoxWidth
+    doc.fontSize(11).fillColor('#000000').text('発注者確認署名:', rightX, signatureY)
+    doc.rect(rightX, signatureY + 20, signatureBoxWidth, signatureBoxHeight).stroke()
+    doc.fontSize(8).fillColor('#999999').text('※ 電子署名により捺印', rightX + 5, signatureY + 25)
+
+    y = signatureY + signatureBoxHeight + 40
+
+    // ============================================
+    // フッター（注意事項）
+    // ============================================
+    // フッター背景
+    doc.rect(margin, y, contentWidth, 35).fillAndStroke('#EEEEEE', '#CCCCCC')
+
+    doc.fontSize(8).fillColor('#666666')
+    doc.text('※ 本注文請書は電子署名により法的効力を有します', margin + 10, y + 8, {
+      width: contentWidth - 20
+    })
+    doc.text('※ 契約条件の詳細は別途契約書に記載されます', margin + 10, y + 20, {
+      width: contentWidth - 20
+    })
+
+    // ページ番号（オプション）
+    doc.fontSize(8).fillColor('#999999').text(
+      '1 / 1',
+      pageWidth / 2 - 20,
+      doc.page.height - 30,
+      { width: 40, align: 'center' }
+    )
   }
 
   private generateCompletionDocument(doc: PDFKit.PDFDocument, data: DocumentData): void {
@@ -1002,6 +1295,7 @@ export function createOrderAcceptanceDocumentData(
     projectTitle: project.title,
     projectAmount: project.amount,
     deadline: project.deadline,
+    startDate: project.start_date || project.startDate,
     contractorName: contractor.name,
     contractorEmail: contractor.email,
     clientName: client.name,
@@ -1010,11 +1304,7 @@ export function createOrderAcceptanceDocumentData(
     // 注文請書特有のフィールド
     ...(orderInfo && {
       orderNumber: orderInfo.orderNumber,
-      orderDate: orderInfo.orderDate,
-      contractorAddress: contractor.address || contractor.postal_code || '住所未登録',
-      contractorPhone: contractor.phone_number || '電話番号未登録',
-      workLocation: project.location || '場所未設定',
-      acceptanceDate: new Date().toLocaleDateString('ja-JP')
+      orderDate: orderInfo.orderDate
     })
   }
 }
