@@ -201,6 +201,8 @@ export function NotificationBell() {
         return <Check className="w-4 h-4 text-green-600" />
       case 'project_rejected':
         return <X className="w-4 h-4 text-red-600" />
+      case 'member_level_change_request':
+        return <AlertCircle className="w-4 h-4 text-orange-600" />
       default:
         return <AlertCircle className="w-4 h-4 text-gray-600" />
     }
@@ -324,6 +326,13 @@ export function NotificationBell() {
     } else if (notification.type === 'project_rejected') {
       // 案件承認却下通知の場合は案件ページの完了済みタブへ
       router.push('/projects?tab=completed')
+    } else if (notification.type === 'member_level_change_request') {
+      // 会員レベル変更申請通知の場合は個人事業主管理ページへ
+      if (notification.data?.contractor_id) {
+        router.push(`/admin/contractors?highlight=${notification.data.contractor_id}`)
+      } else {
+        router.push('/admin/contractors')
+      }
     }
 
     // 通知モーダルを閉じる

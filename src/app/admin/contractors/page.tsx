@@ -7,6 +7,7 @@ import { Users, Search, CheckCircle2, XCircle, User, Play, Pause, Trash2 } from 
 import { AuthGuard } from "@/components/auth/auth-guard"
 import { Badge } from "@/components/ui/badge"
 import { getMemberLevelInfo } from "@/lib/member-level"
+import { useSearchParams } from "next/navigation"
 
 interface Contractor {
   id: string
@@ -25,6 +26,8 @@ interface Contractor {
 }
 
 function AdminContractorsPageContent() {
+  const searchParams = useSearchParams()
+  const highlightId = searchParams.get('highlight')
   const [contractors, setContractors] = useState<Contractor[]>([])
   const [q, setQ] = useState("")
   const [filterStatus, setFilterStatus] = useState<string>("all")
@@ -62,6 +65,18 @@ function AdminContractorsPageContent() {
     }
     fetchContractors()
   }, [])
+
+  // ハイライトされたユーザーまでスクロール
+  useEffect(() => {
+    if (highlightId && !loading) {
+      setTimeout(() => {
+        const element = document.getElementById(`contractor-${highlightId}`)
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }
+      }, 100)
+    }
+  }, [highlightId, loading])
 
   const handleActiveToggle = async (contractorId: string, currentActive: boolean) => {
     if (!confirm(`受注者を${currentActive ? '停止' : '有効化'}しますか？`)) return
@@ -233,7 +248,15 @@ function AdminContractorsPageContent() {
               <p className="text-gray-600">読み込み中...</p>
             ) : (
               filtered.map(contractor => (
-                <div key={contractor.id} className="bg-white border border-gray-200 rounded-xl p-6">
+                <div
+                  key={contractor.id}
+                  id={`contractor-${contractor.id}`}
+                  className={`bg-white border rounded-xl p-6 transition-all ${
+                    highlightId === contractor.id
+                      ? 'border-yellow-400 bg-yellow-50 shadow-lg'
+                      : 'border-gray-200'
+                  }`}
+                >
                   <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-2">

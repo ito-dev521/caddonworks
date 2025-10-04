@@ -454,3 +454,104 @@ export const sendLevelChangedByAdminEmail = async (
     throw error
   }
 }
+
+// 運営者への会員レベル変更申請通知メール
+export const sendLevelChangeRequestNotificationToAdmin = async (
+  contractorEmail: string,
+  contractorName: string,
+  currentLevel: string,
+  requestedLevel: 'beginner' | 'intermediate' | 'advanced',
+  adminEmails: string[]
+) => {
+  const currentLevelLabel = currentLevel === 'beginner' ? '初級' : currentLevel === 'intermediate' ? '中級' : currentLevel === 'advanced' ? '上級' : '未設定'
+  const requestedLevelLabel = requestedLevel === 'beginner' ? '初級' : requestedLevel === 'intermediate' ? '中級' : '上級'
+
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>会員レベル変更申請の通知</title>
+        <style>
+            body { font-family: 'Hiragino Sans', 'Yu Gothic', sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: white; padding: 30px 20px; text-align: center; border-radius: 8px 8px 0 0; }
+            .content { background: white; padding: 30px; border: 1px solid #e5e7eb; border-radius: 0 0 8px 8px; }
+            .info-box { background: #fffbeb; border: 1px solid #fbbf24; border-radius: 8px; padding: 20px; margin: 20px 0; }
+            .detail-row { display: flex; margin: 10px 0; }
+            .detail-label { font-weight: bold; min-width: 150px; color: #6b7280; }
+            .detail-value { color: #111827; }
+            .button { display: inline-block; background: #0066CC; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 10px 20px 0; }
+            .footer { text-align: center; color: #6b7280; font-size: 14px; margin-top: 30px; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>🔔 会員レベル変更申請</h1>
+                <p>土木設計業務プラットフォーム</p>
+            </div>
+
+            <div class="content">
+                <p>運営者 様</p>
+
+                <p>個人事業主から会員レベル変更の申請がありました。</p>
+
+                <div class="info-box">
+                    <div class="detail-row">
+                        <div class="detail-label">申請者:</div>
+                        <div class="detail-value">${contractorName}</div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">メールアドレス:</div>
+                        <div class="detail-value">${contractorEmail}</div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">現在のレベル:</div>
+                        <div class="detail-value">${currentLevelLabel}</div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">申請レベル:</div>
+                        <div class="detail-value"><strong style="color: #d97706;">${requestedLevelLabel}</strong></div>
+                    </div>
+                </div>
+
+                <p>個人事業主管理画面から承認・却下の処理を行ってください。</p>
+
+                <div class="footer">
+                    <p>土木設計業務プラットフォーム運営チーム<br>
+                    Civil Engineering Platform</p>
+                </div>
+            </div>
+        </div>
+    </body>
+    </html>
+  `
+
+  const mailgunClient = await initMailgun()
+
+  if (!mailgunClient || !DOMAIN) {
+    console.warn('Mailgun not configured, skipping admin notification email send')
+    return { message: 'Admin notification email sending skipped (Mailgun not configured)' }
+  }
+
+  if (adminEmails.length === 0) {
+    console.warn('No admin emails configured, skipping admin notification')
+    return { message: 'No admin emails configured' }
+  }
+
+  try {
+    const result = await mailgunClient.messages.create(DOMAIN, {
+      from: `土木設計業務プラットフォーム <noreply@${DOMAIN}>`,
+      to: adminEmails,
+      subject: `【Caddon Works】会員レベル変更申請 - ${contractorName}`,
+      html: htmlContent
+    })
+
+    console.log('Admin notification email sent successfully:', result)
+    return result
+  } catch (error) {
+    console.error('Failed to send admin notification email:', error)
+    throw error
+  }
+}

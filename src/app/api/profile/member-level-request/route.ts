@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { sendLevelChangeRequestNotificationToAdmin } from '@/lib/mailgun'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -25,7 +26,7 @@ export async function POST(request: NextRequest) {
     // ユーザープロフィール取得
     const { data: userProfile } = await supabaseAdmin
       .from('users')
-      .select('id, member_level, level_change_status')
+      .select('id, email, display_name, member_level, level_change_status')
       .eq('auth_user_id', user.id)
       .maybeSingle()
 
@@ -72,6 +73,70 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         message: 'レベル変更リクエストの保存に失敗しました'
       }, { status: 500 })
+    }
+
+    // 運営者へメール通知送信
+    const adminEmails = (process.env.NEXT_PUBLIC_ADMIN_EMAILS || '')
+      .split(',')
+      .map(e => e.trim())
+      .filter(e => e.length > 0)
+
+    if (adminEmails.length > 0) {
+      try {
+        await sendLevelChangeRequestNotificationToAdmin(
+          userProfile.email,
+          userProfile.display_name || userProfile.email,
+          userProfile.member_level || 'beginner',
+          requested_level as 'beginner' | 'intermediate' | 'advanced',
+          adminEmails
+        )
+      } catch (emailError) {
+        console.error('運営者通知メール送信エラー:', emailError)
+        // メール送信エラーでもリクエスト自体は成功とする
+      }
+    }
+
+    // 運営者へシステム通知送信
+    try {
+      // 運営会社のOrgAdminメンバーを取得
+      const { data: operatorOrg } = await supabaseAdmin
+        .from('organizations')
+        .select('id')
+        .eq('name', '運営会社')
+        .maybeSingle()
+
+      if (operatorOrg) {
+        const { data: adminMemberships } = await supabaseAdmin
+          .from('memberships')
+          .select('user_id')
+          .eq('org_id', operatorOrg.id)
+          .eq('role', 'OrgAdmin')
+
+        if (adminMemberships && adminMemberships.length > 0) {
+          const levelLabel = requested_level === 'beginner' ? '初級' : requested_level === 'intermediate' ? '中級' : '上級'
+          const currentLevelLabel = userProfile.member_level === 'beginner' ? '初級' : userProfile.member_level === 'intermediate' ? '中級' : userProfile.member_level === 'advanced' ? '上級' : '未設定'
+
+          // 各運営者に通知を作成
+          const notifications = adminMemberships.map(membership => ({
+            user_id: membership.user_id,
+            type: 'member_level_change_request',
+            title: '会員レベル変更申請',
+            message: `${userProfile.display_name || userProfile.email} から会員レベル変更の申請がありました。（現在: ${currentLevelLabel} → 申請: ${levelLabel}）`,
+            data: {
+              contractor_id: userProfile.id,
+              contractor_email: userProfile.email,
+              contractor_name: userProfile.display_name || userProfile.email,
+              current_level: userProfile.member_level || 'beginner',
+              requested_level
+            }
+          }))
+
+          await supabaseAdmin.from('notifications').insert(notifications)
+        }
+      }
+    } catch (notificationError) {
+      console.error('運営者システム通知送信エラー:', notificationError)
+      // 通知エラーでもリクエスト自体は成功とする
     }
 
     return NextResponse.json({

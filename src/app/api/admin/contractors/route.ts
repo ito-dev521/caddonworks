@@ -68,7 +68,10 @@ export async function GET(request: NextRequest) {
           auth_user_id,
           formal_name,
           phone_number,
-          member_level
+          member_level,
+          requested_member_level,
+          level_change_status,
+          level_change_notes
         )
       `)
       .eq('role', 'Contractor')
@@ -127,14 +130,17 @@ export async function GET(request: NextRequest) {
         created_at: (membership.users as any)?.created_at,
         formal_name: (membership.users as any)?.formal_name,
         phone_number: (membership.users as any)?.phone_number,
-        member_level: (membership.users as any)?.member_level
+        member_level: (membership.users as any)?.member_level,
+        requested_member_level: (membership.users as any)?.requested_member_level,
+        level_change_status: (membership.users as any)?.level_change_status,
+        level_change_notes: (membership.users as any)?.level_change_notes
       }))
 
     // フォールバック: memberships に該当がない場合、users.role から推定
     if (!contractors || contractors.length === 0) {
       const { data: roleUsers, error: roleUsersError } = await supabaseAdmin
         .from('users')
-        .select('id, email, display_name, organization, created_at, formal_name, phone_number, member_level, role')
+        .select('id, email, display_name, organization, created_at, formal_name, phone_number, member_level, requested_member_level, level_change_status, level_change_notes, role')
         .eq('role', 'Contractor')
         .order('created_at', { ascending: false })
 
@@ -149,7 +155,10 @@ export async function GET(request: NextRequest) {
           created_at: user.created_at,
           formal_name: user.formal_name,
           phone_number: user.phone_number,
-          member_level: user.member_level
+          member_level: user.member_level,
+          requested_member_level: user.requested_member_level,
+          level_change_status: user.level_change_status,
+          level_change_notes: user.level_change_notes
         }))
       }
     }
