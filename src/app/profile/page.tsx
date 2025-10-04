@@ -52,8 +52,6 @@ function ProfilePageContent() {
   const [badgeData, setBadgeData] = useState<any[]>([])
   const [badgeLoading, setBadgeLoading] = useState(false)
   const [showLevelChangeModal, setShowLevelChangeModal] = useState(false)
-  const [requestedLevel, setRequestedLevel] = useState<MemberLevel>('intermediate')
-  const [levelChangeLoading, setLevelChangeLoading] = useState(false)
   const [formData, setFormData] = useState({
     display_name: userProfile?.display_name || '',
     specialties: userProfile?.specialties || [],
@@ -551,23 +549,12 @@ function ProfilePageContent() {
                                   variant="outline"
                                   onClick={() => setShowLevelChangeModal(true)}
                                   className="text-xs"
-                                  disabled={userProfile?.level_change_status === 'pending'}
                                 >
-                                  {userProfile?.level_change_status === 'pending' ? '変更申請中' : 'レベル変更申請'}
+                                  レベル変更申請
                                 </Button>
                               )}
                             </div>
-                            {userProfile?.level_change_status === 'pending' && (
-                              <p className="text-xs text-yellow-600 mt-1">
-                                {userProfile.requested_member_level === 'beginner' ? '初級' :
-                                 userProfile.requested_member_level === 'intermediate' ? '中級' : '上級'}への変更リクエストが承認待ちです
-                              </p>
-                            )}
-                            {userProfile?.level_change_status === 'rejected' && (
-                              <p className="text-xs text-red-600 mt-1">
-                                レベル変更リクエストが却下されました: {userProfile.level_change_notes}
-                              </p>
-                            )}
+                            {/* レベル変更申請の審査状態表示は将来的な拡張に備えて管理画面に集約 */}
                           </div>
                         )}
                         {/* 組織内ユーザーの場合は氏名を表示 */}

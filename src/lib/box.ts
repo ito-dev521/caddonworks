@@ -664,6 +664,10 @@ export async function createProjectFolderStructure(projectTitle: string, project
           try {
             await renameBoxFolder(currentId, standardName)
             subfolderNames[category] = standardName
+            const targetItem = existingItems.find((it: any) => it.id === currentId)
+            if (targetItem) {
+              targetItem.name = standardName
+            }
             console.log(`🔁 Renamed subfolder: ${currentName} -> ${standardName}`)
           } catch (e: any) {
             // 競合などで失敗した場合は標準名で新規作成にフォールバック

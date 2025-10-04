@@ -25,7 +25,7 @@ export async function GET(
     // ユーザープロフィールを取得
     const { data: userProfile, error: userError } = await supabaseAdmin
       .from('users')
-      .select('id, display_name')
+      .select('id, display_name, email')
       .eq('auth_user_id', user.id)
       .single()
 
@@ -110,7 +110,7 @@ export async function GET(
     })
 
     // PDFレスポンスを返す
-    return new NextResponse(pdfBuffer, {
+    return new NextResponse(pdfBuffer as unknown as ArrayBuffer, {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `inline; filename="completion-report-${params.id}.pdf"`

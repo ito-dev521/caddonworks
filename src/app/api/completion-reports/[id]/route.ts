@@ -417,6 +417,20 @@ export async function PUT(
             .from('notifications')
             .insert(notifications)
         }
+
+        // 受注者にも通知（再確認用）
+        await supabaseAdmin
+          .from('notifications')
+          .insert({
+            user_id: existingReport.contractor_id,
+            type: 'completion_report_created',
+            title: '業務完了届が提出されました',
+            message: `プロジェクト「${updatedReport.projects.title}」の業務完了届が提出されました。内容を確認してください。`,
+            data: {
+              project_id: existingReport.project_id,
+              completion_report_id: reportId
+            }
+          })
       }
 
       return NextResponse.json(updatedReport)

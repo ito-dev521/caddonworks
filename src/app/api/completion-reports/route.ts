@@ -150,7 +150,7 @@ export async function POST(request: NextRequest) {
     // プロジェクトと契約の存在確認
     const { data: project, error: projectError } = await supabaseAdmin
       .from('projects')
-      .select('id, org_id, contractor_id')
+      .select('id, org_id, contractor_id, title')
       .eq('id', project_id)
       .single()
 
@@ -247,7 +247,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: '完了届の作成に失敗しました' }, { status: 500 })
     }
 
-    // 提出時は発注者に通知
+    // 提出時は発注者・受注者それぞれに通知
     if (status === 'submitted') {
       const { data: orgAdmins } = await supabaseAdmin
         .from('memberships')
@@ -273,6 +273,21 @@ export async function POST(request: NextRequest) {
           .from('notifications')
           .insert(notifications)
       }
+
+      // 受注者への通知
+      await supabaseAdmin
+        .from('notifications')
+        .insert({
+          user_id: contract.contractor_id,
+          type: 'completion_report_created',
+          title: '業務完了届が発行されました',
+          message: `プロジェクト「${project.title}」の業務完了届が発行されました。内容を確認してください。`,
+          data: {
+            project_id,
+            completion_report_id: newReport.id,
+            org_id: project.org_id
+          }
+        })
     }
 
     return NextResponse.json(newReport, { status: 201 })

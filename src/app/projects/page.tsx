@@ -52,6 +52,7 @@ interface ProjectData {
   progress: number
   category: string
   created_at: string
+  completed_at?: string | null
   assignee_name?: string
   bidding_deadline?: string
   required_contractors?: number

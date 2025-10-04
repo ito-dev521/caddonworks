@@ -1,11 +1,19 @@
-import { Project, Organization } from '@/types/database.types'
 import { documentGenerator, DocumentData } from './document-generator'
 
+interface CompletionReportOrganization {
+  id: string
+  name: string
+}
+
+interface CompletionReportProject {
+  id: string
+  title: string
+  client_organization?: CompletionReportOrganization | null
+  contractor_organization?: CompletionReportOrganization | null
+}
+
 export interface CompletionReportData {
-  project: Project & {
-    client_organization?: Organization
-    contractor_organization?: Organization
-  }
+  project: CompletionReportProject
   contract?: {
     id: string
     bid_amount: number

@@ -37,6 +37,14 @@ import {
   type ProjectArchiveStatus
 } from "@/lib/archive-manager"
 
+interface BoxItem {
+  id: string
+  name: string
+  type: string
+  modified_at?: string
+  [key: string]: any
+}
+
 interface BoxProject {
   id: string
   title: string
@@ -50,18 +58,6 @@ interface BoxProject {
   recent_files?: BoxItem[]
   error?: string
   archive_status?: ProjectArchiveStatus
-}
-
-interface BoxItem {
-  id: string
-  name: string
-  type: 'file' | 'folder'
-  size?: number
-  modified_at: string
-  created_at: string
-  path_collection: {
-    entries: Array<{ name: string }>
-  }
 }
 
 export default function ProjectFilesPage() {
