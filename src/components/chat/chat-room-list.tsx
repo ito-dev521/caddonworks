@@ -73,12 +73,9 @@ export function ChatRoomList({
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
-        console.error('セッションが見つかりません')
         setLoading(false)
         return
       }
-
-      console.log('チャット一覧取得開始 - ユーザー:', user.email)
 
       const response = await fetch('/api/chat/rooms', {
         method: 'GET',
@@ -88,17 +85,13 @@ export function ChatRoomList({
       })
 
       const result = await response.json()
-      console.log('チャット一覧取得レスポンス:', { status: response.status, result })
 
       if (response.ok) {
-        console.log('取得したチャットルーム数:', result.rooms?.length || 0)
         setRooms(result.rooms)
       } else {
-        console.error('チャットルーム取得エラー:', result.message, result)
         setRooms([])
       }
     } catch (error) {
-      console.error('チャットルーム取得エラー:', error)
       setRooms([])
     } finally {
       setLoading(false)

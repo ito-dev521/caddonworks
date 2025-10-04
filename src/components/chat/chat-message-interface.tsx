@@ -101,7 +101,6 @@ export function ChatMessageInterface({
       try {
         const { data: { session } } = await supabase.auth.getSession()
         if (!session?.access_token) {
-          console.warn('セッションが取得できません')
           return
         }
 
@@ -114,11 +113,9 @@ export function ChatMessageInterface({
         if (response.ok) {
           const data = await response.json()
           setProjectId(data.project_id)
-        } else {
-          console.warn('projectId取得エラー:', response.statusText)
         }
       } catch (error) {
-        console.warn('projectId取得エラー:', error)
+        // エラーは無視
       }
     }
 
@@ -143,7 +140,6 @@ export function ChatMessageInterface({
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
-        console.error('セッションが見つかりません')
         setLoading(false)
         return
       }
@@ -182,11 +178,9 @@ export function ChatMessageInterface({
         })) || []
         setMessages(formattedMessages)
       } else {
-        console.error('メッセージ取得エラー:', result.message)
         setMessages([])
       }
     } catch (error) {
-      console.error('Error fetching messages:', error)
       setMessages([])
     } finally {
       setLoading(false)
@@ -224,6 +218,11 @@ export function ChatMessageInterface({
   const markMessagesAsRead = async () => {
     if (!roomId || !user) return
 
+    // TODO: 既読管理機能を実装する場合は、Supabaseにmark_messages_as_read RPC関数を作成する
+    // 現時点では機能を無効化してエラーを防ぐ
+    return
+
+    /*
     try {
       await supabase.rpc('mark_messages_as_read', {
         p_room_id: roomId
@@ -232,6 +231,7 @@ export function ChatMessageInterface({
       // RPC関数がまだ実装されていない場合のエラーをサイレントに処理
       console.warn('mark_messages_as_read RPC not implemented yet:', error)
     }
+    */
   }
 
   const scrollToBottom = () => {
@@ -273,11 +273,9 @@ export function ChatMessageInterface({
         setReplyingTo(null)
         setReplyTo(null)
         fetchMessages() // Refresh messages
-      } else {
-        console.error('メッセージ送信エラー:', result.message)
       }
     } catch (error) {
-      console.error('Error sending message:', error)
+      // エラーは無視
     } finally {
       setSending(false)
     }
@@ -297,7 +295,6 @@ export function ChatMessageInterface({
 
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
-        console.error('セッションが見つかりません')
         return
       }
 
@@ -330,12 +327,10 @@ export function ChatMessageInterface({
         setFileComment("")
         setReplyingTo(null) // 返信状態をリセット
       } else {
-        console.error('ファイルアップロードエラー:', result.message)
         alert('ファイルのアップロードに失敗しました: ' + result.message)
       }
 
     } catch (error) {
-      console.error('Error uploading file:', error)
       alert('ファイルのアップロードに失敗しました: ' + (error instanceof Error ? error.message : '不明なエラー'))
     } finally {
       setSending(false)
@@ -356,7 +351,7 @@ export function ChatMessageInterface({
       if (error) throw error
       setEditingMessage(null)
     } catch (error) {
-      console.error('Error editing message:', error)
+      // エラーは無視
     }
   }
 
@@ -370,7 +365,7 @@ export function ChatMessageInterface({
 
       if (error) throw error
     } catch (error) {
-      console.error('Error deleting message:', error)
+      // エラーは無視
     }
   }
 

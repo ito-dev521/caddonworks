@@ -17,6 +17,7 @@ import {
   FileText,
   Image,
   Archive,
+  Download,
   RefreshCw
 } from "lucide-react"
 import { Navigation } from "@/components/layouts/navigation"
@@ -339,6 +340,39 @@ export default function ProjectFilesPage() {
     }
   }
 
+  const handleDownload = async (fileId: string, fileName: string) => {
+    try {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      if (sessionError || !session?.access_token) {
+        throw new Error('認証情報を取得できませんでした')
+      }
+
+      const response = await fetch(`/api/box/download/${fileId}`, {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`
+        }
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null)
+        throw new Error(errorData?.message || 'ファイルのダウンロードに失敗しました')
+      }
+
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = fileName
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+    } catch (error: any) {
+      console.error('File download error:', error)
+      alert(error?.message || 'ファイルのダウンロードに失敗しました')
+    }
+  }
+
   // フォルダ階層の表示
   const renderFileHierarchy = (items: BoxItem[], projectId: string, parentPath: string, level: number = 0) => {
     return items.map((item) => {
@@ -373,6 +407,12 @@ export default function ProjectFilesPage() {
                     {new Date(item.modified_at).toLocaleDateString('ja-JP')}
                   </p>
                 </div>
+                <button
+                  onClick={() => handleDownload(item.id, item.name)}
+                  className="ml-auto p-1.5 rounded hover:bg-gray-100 text-gray-500 hover:text-engineering-blue"
+                >
+                  <Download className="w-4 h-4" />
+                </button>
               </>
             )}
           </div>

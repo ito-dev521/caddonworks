@@ -5,6 +5,7 @@ import {
   sendLevelChangeRejectedEmail,
   sendLevelChangedByAdminEmail
 } from '@/lib/mailgun'
+  import { getMemberLevelInfo } from '@/lib/member-level'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -82,12 +83,15 @@ export async function PUT(
 
     let updateData: any = {}
 
+    let approvedLevel: string | null = null
+
     if (action === 'approve') {
       // 承認
       if (!targetUser.requested_member_level) {
         return NextResponse.json({ message: '変更リクエストが見つかりません' }, { status: 400 })
       }
 
+      approvedLevel = targetUser.requested_member_level
       updateData = {
         member_level: targetUser.requested_member_level,
         level_change_status: 'approved',
@@ -139,24 +143,76 @@ export async function PUT(
 
     // メール送信
     const userName = targetUser.display_name || targetUser.email
+    const levelLabel = (level?: string | null) => level ? getMemberLevelInfo(level as any).label : ''
+
     if (action === 'approve') {
+      const approved = approvedLevel || targetUser.requested_member_level
       await sendLevelChangeApprovedEmail(
         targetUser.email,
         userName,
-        targetUser.requested_member_level as 'beginner' | 'intermediate' | 'advanced'
+        approved as 'beginner' | 'intermediate' | 'advanced'
       )
+
+      const { error: notificationError } = await supabaseAdmin
+        .from('notifications')
+        .insert({
+          user_id: targetUser.id,
+          type: 'member_level_request_approved',
+          title: '会員レベル申請が承認されました',
+          message: `会員レベルが ${levelLabel(approved)} に更新されました。`,
+          data: {
+            new_level: approved
+          }
+        })
+
+      if (notificationError) {
+        console.error('レベル変更承認通知の作成に失敗しました:', notificationError)
+      }
     } else if (action === 'reject') {
+      const reason = rejection_reason || '運営側により却下されました'
       await sendLevelChangeRejectedEmail(
         targetUser.email,
         userName,
-        rejection_reason || '運営側により却下されました'
+        reason
       )
+
+      const { error: notificationError } = await supabaseAdmin
+        .from('notifications')
+        .insert({
+          user_id: targetUser.id,
+          type: 'member_level_request_rejected',
+          title: '会員レベル申請が却下されました',
+          message: `会員レベル申請が却下されました。理由: ${reason}`,
+          data: {
+            reason
+          }
+        })
+
+      if (notificationError) {
+        console.error('レベル変更却下通知の作成に失敗しました:', notificationError)
+      }
     } else if (action === 'change') {
       await sendLevelChangedByAdminEmail(
         targetUser.email,
         userName,
         new_level as 'beginner' | 'intermediate' | 'advanced'
       )
+
+      const { error: notificationError } = await supabaseAdmin
+        .from('notifications')
+        .insert({
+          user_id: targetUser.id,
+          type: 'member_level_changed',
+          title: '会員レベルが更新されました',
+          message: `会員レベルが ${levelLabel(new_level)} に更新されました。`,
+          data: {
+            new_level
+          }
+        })
+
+      if (notificationError) {
+        console.error('レベル変更通知の作成に失敗しました:', notificationError)
+      }
     }
 
     return NextResponse.json({

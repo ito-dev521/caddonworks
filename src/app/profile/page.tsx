@@ -52,6 +52,8 @@ function ProfilePageContent() {
   const [badgeData, setBadgeData] = useState<any[]>([])
   const [badgeLoading, setBadgeLoading] = useState(false)
   const [showLevelChangeModal, setShowLevelChangeModal] = useState(false)
+  const [levelChangeLoading, setLevelChangeLoading] = useState(false)
+  const [requestedLevel, setRequestedLevel] = useState<MemberLevel>(userProfile?.member_level ?? 'beginner')
   const [formData, setFormData] = useState({
     display_name: userProfile?.display_name || '',
     specialties: userProfile?.specialties || [],
@@ -187,6 +189,12 @@ function ProfilePageContent() {
     fetchEvaluationData()
     fetchBadgeData()
   }, [userProfile, userRole])
+
+  React.useEffect(() => {
+    if (userProfile?.member_level) {
+      setRequestedLevel(userProfile.member_level as MemberLevel)
+    }
+  }, [userProfile?.member_level])
 
   const handleCancel = () => {
     setFormData({
@@ -534,25 +542,58 @@ function ProfilePageContent() {
                               会員レベル
                             </label>
                             <div className="flex items-center gap-2">
-                              {(() => {
-                                const currentLevel = userProfile?.member_level || calculateMemberLevel(formData.experience_years, formData.specialties)
-                                const levelInfo = getMemberLevelInfo(currentLevel as MemberLevel)
-                                return (
-                                  <Badge className={levelInfo.color}>
-                                    {levelInfo.label}
-                                  </Badge>
-                                )
-                              })()}
-                              {!isEditing && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => setShowLevelChangeModal(true)}
-                                  className="text-xs"
-                                >
-                                  レベル変更申請
-                                </Button>
-                              )}
+                              <div className="flex flex-wrap items-center gap-2">
+                                {(() => {
+                                  const currentLevel = userProfile?.member_level || calculateMemberLevel(formData.experience_years, formData.specialties)
+                                  const levelInfo = getMemberLevelInfo(currentLevel as MemberLevel)
+                                  return (
+                                    <Badge className={levelInfo.color}>
+                                      {levelInfo.label}
+                                    </Badge>
+                                  )
+                                })()}
+                                {!isEditing && (
+                                  <>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => setShowLevelChangeModal(true)}
+                                      className="text-xs"
+                                    >
+                                      レベル変更申請
+                                    </Button>
+                                    {userProfile?.level_change_status && (
+                                      <div className="flex items-center gap-2">
+                                        <Badge
+                                          className={`text-xs px-3 py-1 ${
+                                            userProfile.level_change_status === 'pending'
+                                              ? 'bg-yellow-100 text-yellow-800'
+                                              : userProfile.level_change_status === 'approved'
+                                                ? 'bg-green-100 text-green-800'
+                                                : 'bg-red-100 text-red-800'
+                                          }`}
+                                        >
+                                          {userProfile.level_change_status === 'pending'
+                                            ? '申請中'
+                                            : userProfile.level_change_status === 'approved'
+                                              ? '承認済み'
+                                              : '却下'}
+                                        </Badge>
+                                        {userProfile.level_change_status === 'rejected' && userProfile.level_change_notes && (
+                                          <span className="text-xs text-red-600">
+                                            却下理由: {userProfile.level_change_notes}
+                                          </span>
+                                        )}
+                                      </div>
+                                    )}
+                                    {userProfile?.requested_member_level && (
+                                      <span className="text-xs text-gray-500">
+                                        申請レベル: {getMemberLevelInfo(userProfile.requested_member_level as MemberLevel).label}
+                                      </span>
+                                    )}
+                                  </>
+                                )}
+                              </div>
                             </div>
                             {/* レベル変更申請の審査状態表示は将来的な拡張に備えて管理画面に集約 */}
                           </div>

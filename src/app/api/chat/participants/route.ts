@@ -363,7 +363,7 @@ export async function GET(request: NextRequest) {
               display_name: u.display_name || u.email,
               email: u.email,
               avatar_url: u.avatar_url,
-              role: 'Staff',
+              role: u.memberships?.[0]?.role || 'Staff',
               joined_at: new Date().toISOString(),
               is_basic: true
             })

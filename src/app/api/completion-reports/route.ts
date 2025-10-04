@@ -150,7 +150,7 @@ export async function POST(request: NextRequest) {
     // プロジェクトと契約の存在確認
     const { data: project, error: projectError } = await supabaseAdmin
       .from('projects')
-      .select('id, org_id, contractor_id, title')
+      .select('id, org_id, contractor_id, title, budget, support_enabled')
       .eq('id', project_id)
       .single()
 
@@ -160,7 +160,7 @@ export async function POST(request: NextRequest) {
 
     const { data: contract, error: contractError } = await supabaseAdmin
       .from('contracts')
-      .select('id, contractor_id')
+      .select('id, contractor_id, bid_amount, support_enabled')
       .eq('id', contract_id)
       .eq('project_id', project_id)
       .single()
@@ -223,11 +223,14 @@ export async function POST(request: NextRequest) {
           category,
           start_date,
           end_date,
-          budget
+          budget,
+          support_enabled
         ),
         contracts!inner(
           id,
+          contractor_id,
           bid_amount,
+          support_enabled,
           start_date,
           end_date,
           signed_at
@@ -247,7 +250,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: '完了届の作成に失敗しました' }, { status: 500 })
     }
 
-    // 提出時は発注者・受注者それぞれに通知
+    // 提出時は発注者・受注者への通知と運営向け請求書の自動発行
     if (status === 'submitted') {
       const { data: orgAdmins } = await supabaseAdmin
         .from('memberships')
@@ -288,6 +291,98 @@ export async function POST(request: NextRequest) {
             org_id: project.org_id
           }
         })
+
+      // 運営向け請求書を自動生成
+      try {
+        const { data: existingInvoice } = await supabaseAdmin
+          .from('invoices')
+          .select('id')
+          .eq('contract_id', contract.id)
+          .eq('direction', 'to_operator')
+          .maybeSingle()
+
+        if (!existingInvoice) {
+          const { data: sysSettings } = await supabaseAdmin
+            .from('system_settings')
+            .select('support_fee_percent')
+            .eq('id', 'global')
+            .maybeSingle()
+          const supportPercent = Number(sysSettings?.support_fee_percent ?? 8)
+
+          const contractAmount = contract.bid_amount || project.budget || 0
+          const projectSupportEnabled = !!project.support_enabled
+          const contractSupportEnabled = !!contract.support_enabled
+          const supportFee = Math.round((contractAmount * supportPercent) / 100)
+          const baseAmount = contractSupportEnabled
+            ? Math.max(0, contractAmount - supportFee)
+            : contractAmount
+          const systemFee = projectSupportEnabled ? supportFee : 0
+          const totalAmount = baseAmount + systemFee
+          const invoiceNumber = `INV-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`
+
+          const invoiceData: Record<string, any> = {
+            project_id: project.id,
+            client_org_id: project.org_id,
+            base_amount: baseAmount,
+            fee_amount: 0,
+            system_fee: systemFee,
+            total_amount: totalAmount,
+            status: 'issued',
+            issue_date: new Date().toISOString().split('T')[0],
+            due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            org_id: project.org_id,
+            contractor_id: contract.contractor_id,
+            contract_id: contract.id,
+            direction: 'to_operator',
+            memo: contractSupportEnabled
+              ? `受注者サポート控除 ${supportPercent}%`
+              : (projectSupportEnabled ? `発注者サポート手数料 ${supportPercent}%` : null)
+          }
+
+          const { error: invoiceNumberProbe } = await supabaseAdmin
+            .from('invoices')
+            .select('invoice_number')
+            .limit(1)
+          if (!invoiceNumberProbe) {
+            invoiceData.invoice_number = invoiceNumber
+          }
+
+          const { error: subtotalProbe } = await supabaseAdmin
+            .from('invoices')
+            .select('subtotal')
+            .limit(1)
+          if (!subtotalProbe) {
+            invoiceData.subtotal = invoiceData.base_amount ?? contractAmount
+          }
+
+          const { data: insertedInvoice, error: invoiceInsertError } = await supabaseAdmin
+            .from('invoices')
+            .insert(invoiceData)
+            .select()
+            .single()
+
+          if (!invoiceInsertError && insertedInvoice) {
+            const adminNotifications = (orgAdmins || []).map(admin => ({
+              user_id: admin.user_id,
+              type: 'invoice_created',
+              title: '業務完了届に伴う請求書を作成しました',
+              message: `プロジェクト「${project.title}」の業務完了届に伴い、運営宛の請求書を作成しました。請求書ページで内容を確認してください。`,
+              data: {
+                project_id,
+                invoice_id: insertedInvoice.id
+              }
+            }))
+
+            if (adminNotifications.length > 0) {
+              await supabaseAdmin
+                .from('notifications')
+                .insert(adminNotifications)
+            }
+          }
+        }
+      } catch (invoiceAutoError) {
+        console.error('completion report invoice auto creation error:', invoiceAutoError)
+      }
     }
 
     return NextResponse.json(newReport, { status: 201 })
