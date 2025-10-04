@@ -98,7 +98,6 @@ export async function GET(request: NextRequest) {
       .select('id, role')
       .eq('room_id', chatRoom.id)
       .eq('user_id', user.id)
-      .eq('is_active', true)
       .single()
 
     if (participantError || !participant) {
@@ -274,7 +273,6 @@ export async function POST(request: NextRequest) {
       .select('id, role')
       .eq('room_id', chatRoom.id)
       .eq('user_id', user.id)
-      .eq('is_active', true)
       .single()
 
     if (participantError || !participant) {
@@ -283,6 +281,13 @@ export async function POST(request: NextRequest) {
         { status: 403 }
       )
     }
+
+    // sender_typeの取得（メッセージ保存前に実行）
+    const { data: membership } = await supabaseAdmin
+      .from('memberships')
+      .select('org_id, role')
+      .eq('user_id', userProfile.id)
+      .single()
 
     // チャットメッセージを保存（sender_idはusers.idを使用）
     const { data: messageData, error: messageError } = await supabaseAdmin
@@ -331,13 +336,6 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-
-    // sender_typeの取得
-    const { data: membership } = await supabaseAdmin
-      .from('memberships')
-      .select('org_id, role')
-      .eq('user_id', userProfile.id)
-      .single()
 
     const formattedMessage = {
       id: messageData.id,

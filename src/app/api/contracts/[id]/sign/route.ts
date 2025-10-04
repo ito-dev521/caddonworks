@@ -122,22 +122,38 @@ export async function POST(
       })
       .eq('id', contract.project_id)
 
-    // 発注者に署名完了通知を送信
-    const { data: orgAdmins, error: orgAdminsError } = await supabaseAdmin
-      .from('memberships')
-      .select('user_id')
-      .eq('org_id', contract.org_id)
-      .eq('role', 'OrgAdmin')
+    // 案件を承認した管理者に署名完了通知を送信
+    const { data: project, error: projectError } = await supabaseAdmin
+      .from('projects')
+      .select('title, approved_by')
+      .eq('id', contract.project_id)
+      .single()
 
-    if (!orgAdminsError && orgAdmins && orgAdmins.length > 0) {
-      // 案件情報を取得
-      const { data: project, error: projectError } = await supabaseAdmin
-        .from('projects')
-        .select('title')
-        .eq('id', contract.project_id)
-        .single()
+    if (!projectError && project && project.approved_by) {
+      // 承認した管理者のみに通知
+      await supabaseAdmin
+        .from('notifications')
+        .insert({
+          user_id: project.approved_by,
+          type: 'contract_signed',
+          title: '契約が署名されました',
+          message: `案件「${project.title}」の契約が受注者によって署名されました。チャットルームでやりとりを開始できます。`,
+          data: {
+            project_id: contract.project_id,
+            contract_id: contractId,
+            contractor_id: userProfile.id,
+            contractor_name: userProfile.display_name
+          }
+        })
+    } else if (!projectError && project && !project.approved_by) {
+      // フォールバック: approved_byが無い場合は全OrgAdminに通知（後方互換性）
+      const { data: orgAdmins, error: orgAdminsError } = await supabaseAdmin
+        .from('memberships')
+        .select('user_id')
+        .eq('org_id', contract.org_id)
+        .eq('role', 'OrgAdmin')
 
-      if (!projectError && project) {
+      if (!orgAdminsError && orgAdmins && orgAdmins.length > 0) {
         const notifications = orgAdmins.map(admin => ({
           user_id: admin.user_id,
           type: 'contract_signed',

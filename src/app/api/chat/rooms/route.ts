@@ -84,7 +84,6 @@ export async function GET(request: NextRequest) {
         )
       `)
       .eq('user_id', user.id) // user.idはauth_user_idと同じ
-      .eq('is_active', true)
 
     console.log('参加ルーム取得結果:', {
       count: participantRooms?.length || 0,

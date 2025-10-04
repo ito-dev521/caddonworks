@@ -85,7 +85,6 @@ function ProjectsPageContent() {
   const [selectedTab, setSelectedTab] = useState<'active' | 'completed' | 'pending_approval' | 'all'>('active')
   const [searchTerm, setSearchTerm] = useState('')
   const [showNewProjectForm, setShowNewProjectForm] = useState(false)
-  const [showChatModal, setShowChatModal] = useState<string | null>(null)
   const [dataLoading, setDataLoading] = useState(true)
   const [newProject, setNewProject] = useState({
     title: '',
@@ -116,10 +115,6 @@ function ProjectsPageContent() {
     }
     load()
   }, [])
-  const [chatMessages, setChatMessages] = useState<any[]>([])
-  const [newMessage, setNewMessage] = useState('')
-  const [isLoadingMessages, setIsLoadingMessages] = useState(false)
-  const [isSendingMessage, setIsSendingMessage] = useState(false)
   const [showProjectDetail, setShowProjectDetail] = useState<string | null>(null)
   const [editingProject, setEditingProject] = useState<ProjectData | null>(null)
   const [showAttachmentsModal, setShowAttachmentsModal] = useState<string | null>(null)
@@ -477,83 +472,6 @@ function ProjectsPageContent() {
     }
   }
 
-  const loadChatMessages = async (projectId: string) => {
-    setIsLoadingMessages(true)
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) {
-        alert('ログインが必要です')
-        return
-      }
-
-      const response = await fetch(`/api/chat?project_id=${projectId}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`
-        }
-      })
-
-      const result = await response.json()
-
-      if (response.ok) {
-        setChatMessages(result.messages)
-      } else {
-        console.error('メッセージ取得エラー:', result.message)
-        setChatMessages([])
-      }
-    } catch (error) {
-      console.error('メッセージ取得エラー:', error)
-      setChatMessages([])
-    } finally {
-      setIsLoadingMessages(false)
-    }
-  }
-
-  const sendMessage = async (projectId: string) => {
-    if (!newMessage.trim()) return
-
-    setIsSendingMessage(true)
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) {
-        alert('ログインが必要です')
-        return
-      }
-
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`
-        },
-        body: JSON.stringify({
-          project_id: projectId,
-          message: newMessage,
-          sender_type: 'client' // 発注者側
-        })
-      })
-
-      const result = await response.json()
-
-      if (response.ok) {
-        setNewMessage('')
-        // メッセージ一覧を再読み込み
-        await loadChatMessages(projectId)
-      } else {
-        alert('メッセージの送信に失敗しました: ' + result.message)
-      }
-    } catch (error) {
-      console.error('メッセージ送信エラー:', error)
-      alert('ネットワークエラーが発生しました')
-    } finally {
-      setIsSendingMessage(false)
-    }
-  }
-
-  const openChatModal = (projectId: string) => {
-    setShowChatModal(projectId)
-    loadChatMessages(projectId)
-  }
 
   const openProjectDetail = (projectId: string) => {
     const project = projects.find(p => p.id === projectId)
@@ -1512,20 +1430,6 @@ function ProjectsPageContent() {
                           >
                             <Paperclip className="w-4 h-4" />
                           </Button>
-                          {/* チャットボタン - 受注者が割り当てられている場合のみ表示 */}
-                          {project.status === 'in_progress' && (project.contracts && project.contracts.length > 0 || project.contractor_id) && (
-                            <Button
-                              variant="engineering"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                openChatModal(project.id)
-                              }}
-                            >
-                              <MessageSquare className="w-4 h-4 mr-1" />
-                              チャット
-                            </Button>
-                          )}
                           {/* 期限切れ案件の再登録ボタン */}
                           {project.is_expired && project.status === 'bidding' && (
                             <Button
@@ -1839,110 +1743,6 @@ function ProjectsPageContent() {
                   </form>
                 </CardContent>
               </Card>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* チャットモーダル */}
-      <AnimatePresence>
-        {showChatModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-lg w-full max-w-4xl h-[80vh] flex flex-col"
-            >
-              <div className="flex items-center justify-between p-4 border-b border-gray-200">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-engineering-blue/10 rounded-full flex items-center justify-center">
-                    <MessageSquare className="w-5 h-5 text-engineering-blue" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-gray-900">受注者とのチャット</h3>
-                    <p className="text-sm text-gray-600">
-                      {projects.find(p => p.id === showChatModal)?.contractor_name}
-                    </p>
-                  </div>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowChatModal(null)}
-                >
-                  ×
-                </Button>
-              </div>
-
-              <div className="flex-1 p-4 overflow-y-auto">
-                <div className="space-y-4">
-                  {isLoadingMessages ? (
-                    <div className="text-center text-gray-500 py-8">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-engineering-blue mx-auto mb-4"></div>
-                      <p>メッセージを読み込み中...</p>
-                    </div>
-                  ) : chatMessages.length === 0 ? (
-                    <div className="text-center text-gray-500 py-8">
-                      <MessageSquare className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                      <p>まだメッセージがありません</p>
-                      <p className="text-sm">受注者とのコミュニケーションを開始しましょう</p>
-                    </div>
-                  ) : (
-                    chatMessages.map((message, index) => (
-                      <div
-                        key={message.id}
-                        className={`flex ${message.sender_type === 'client' ? 'justify-end' : 'justify-start'}`}
-                      >
-                        <div
-                          className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                            message.sender_type === 'client'
-                              ? 'bg-engineering-blue text-white'
-                              : 'bg-gray-100 text-gray-900'
-                          }`}
-                        >
-                          <p className="text-sm">{message.message}</p>
-                          <p className={`text-xs mt-1 ${
-                            message.sender_type === 'client' ? 'text-blue-100' : 'text-gray-500'
-                          }`}>
-                            {new Date(message.created_at).toLocaleString('ja-JP')}
-                          </p>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              <div className="p-4 border-t border-gray-200">
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="メッセージを入力..."
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    onKeyPress={(e) => {
-                      if (e.key === 'Enter' && showChatModal) {
-                        sendMessage(showChatModal)
-                      }
-                    }}
-                    className="flex-1 px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
-                    disabled={isSendingMessage}
-                  />
-                  <Button 
-                    variant="engineering" 
-                    onClick={() => showChatModal && sendMessage(showChatModal)}
-                    disabled={isSendingMessage || !newMessage.trim()}
-                  >
-                    {isSendingMessage ? '送信中...' : '送信'}
-                  </Button>
-                </div>
-              </div>
             </motion.div>
           </motion.div>
         )}

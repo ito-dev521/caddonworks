@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
     // 案件情報を取得
     const { data: project, error: projectError } = await supabaseAdmin
       .from('projects')
-      .select('id, title, org_id')
+      .select('id, title, org_id, approved_by')
       .eq('id', project_id)
       .eq('org_id', orgMembership.org_id)
       .single()
@@ -99,6 +99,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { message: '案件が見つかりません' },
         { status: 404 }
+      )
+    }
+
+    // 承認者のみが契約書を作成できる（approved_byが無い場合は後方互換性のため全管理者が作成可能）
+    if (project.approved_by && project.approved_by !== userProfile.id) {
+      return NextResponse.json(
+        { message: 'この案件の契約書を作成する権限がありません（承認者のみが作成できます）' },
+        { status: 403 }
       )
     }
 

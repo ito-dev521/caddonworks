@@ -189,6 +189,7 @@ export async function POST(
     const updateData: any = {
       status: newStatus,
       approver_ids: null, // 承認後は承認者IDをクリア
+      approved_by: action === 'approve' ? userProfile.id : null, // 承認者のIDを保存
       priority_invitation_active: shouldStartPriority
     }
 
