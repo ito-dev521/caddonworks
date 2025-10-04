@@ -35,6 +35,7 @@ export async function generateCompletionReportPDF(data: CompletionReportData): P
     projectTitle: data.project.title,
     contractorName: data.contractor?.display_name || data.project.contractor_organization?.name || '',
     clientName: data.project.client_organization?.name || '',
+    projectAmount: data.contract?.bid_amount,
     completionDate: data.completionDate,
     createdAt: new Date(data.createdAt).toLocaleDateString('ja-JP')
   }

@@ -280,7 +280,20 @@ export class DocumentGenerator {
     try {
       console.log('🔗 セル結合を適用中...')
 
+      // 各セル結合の前に、既存の結合をチェックして解除
+      const unmergeIfNeeded = (range: string) => {
+        try {
+          // 既に結合されている場合は解除
+          if (worksheet.model.merges && worksheet.model.merges.includes(range)) {
+            worksheet.unMergeCells(range)
+          }
+        } catch (e) {
+          // エラーは無視（既に解除されている）
+        }
+      }
+
       // 1行目：業務完了届ヘッダーを結合（A1:E1）
+      unmergeIfNeeded('A1:E1')
       worksheet.mergeCells('A1:E1')
       const headerCell = worksheet.getCell('A1')
       headerCell.value = '業務完了届'
@@ -289,6 +302,7 @@ export class DocumentGenerator {
       console.log('✅ ヘッダーセル結合: A1:E1 = "業務完了届"')
 
       // 4行目：プロジェクト情報ヘッダーを結合（A4:E4）
+      unmergeIfNeeded('A4:E4')
       worksheet.mergeCells('A4:E4')
       const projectHeaderCell = worksheet.getCell('A4')
       projectHeaderCell.value = 'プロジェクト情報'
@@ -298,6 +312,7 @@ export class DocumentGenerator {
 
       // プロジェクト名：B5からE5まで結合
       if (data.projectTitle) {
+        unmergeIfNeeded('B5:E5')
         worksheet.mergeCells('B5:E5')
         const mergedCell = worksheet.getCell('B5')
         mergedCell.value = data.projectTitle
@@ -307,6 +322,7 @@ export class DocumentGenerator {
 
       // 受注者名：B6からE6まで結合
       if (data.contractorName) {
+        unmergeIfNeeded('B6:E6')
         worksheet.mergeCells('B6:E6')
         const mergedCell = worksheet.getCell('B6')
         mergedCell.value = data.contractorName
@@ -316,6 +332,7 @@ export class DocumentGenerator {
 
       // 完了日：B7からE7まで結合
       if (data.completionDate) {
+        unmergeIfNeeded('B7:E7')
         worksheet.mergeCells('B7:E7')
         const mergedCell = worksheet.getCell('B7')
         mergedCell.value = data.completionDate
@@ -323,15 +340,24 @@ export class DocumentGenerator {
         console.log(`✅ 完了日セル結合: B7:E7 = "${data.completionDate}"`)
       }
 
-      // 9行目：成果物一覧ヘッダーを結合（A9:E9）
-      worksheet.mergeCells('A9:E9')
-      const deliverableHeaderCell = worksheet.getCell('A9')
-      deliverableHeaderCell.value = '成果物一覧'
+      // 契約金額：B8からE8まで結合
+      if (data.projectAmount) {
+        unmergeIfNeeded('B8:E8')
+        worksheet.mergeCells('B8:E8')
+        const mergedCell = worksheet.getCell('B8')
+        mergedCell.value = `¥${Number(data.projectAmount).toLocaleString('ja-JP')}`
+        mergedCell.alignment = { horizontal: 'left', vertical: 'middle' }
+        console.log(`✅ 契約金額セル結合: B8:E8 = "¥${Number(data.projectAmount).toLocaleString('ja-JP')}"`)
+      }
+
+      // 10行目：成果物一覧ヘッダーを結合（A10:E10）
+      unmergeIfNeeded('A10:E10')
+      worksheet.mergeCells('A10:E10')
+      const deliverableHeaderCell = worksheet.getCell('A10')
+      deliverableHeaderCell.value = '成果物'
       deliverableHeaderCell.alignment = { horizontal: 'center', vertical: 'middle' }
       deliverableHeaderCell.font = { bold: true }
-      console.log('✅ 成果物一覧ヘッダー結合: A9:E9 = "成果物一覧"')
-
-      // 署名欄セクション（将来的に追加可能）
+      console.log('✅ 成果物ヘッダー結合: A10:E10 = "成果物"')
 
     } catch (error) {
       console.error('❌ セル結合エラー:', error)
@@ -816,9 +842,10 @@ export class DocumentGenerator {
           'projectTitle': 'B5',      // プロジェクト名：セルB5
           'contractorName': 'B6',    // 受注者名：セルB6
           'completionDate': 'B7',    // 完了日：セルB7
+          'projectAmount': 'B8',     // 契約金額：セルB8
           'createdAt': 'E2'          // 作成日（右上）：セルE2
         },
-        tableStartRow: 11, // 成果物一覧の開始行
+        tableStartRow: 12, // 成果物一覧の開始行（10行目がヘッダー、11行目が備考、12行目からデータ）
         calculateFormulas: true
       },
       monthly_invoice: {
@@ -1145,49 +1172,73 @@ export class DocumentGenerator {
   }
 
   private generateCompletionDocument(doc: PDFKit.PDFDocument, data: DocumentData): void {
+    const pageWidth = doc.page.width
+    const margin = 50
+    const contentWidth = pageWidth - (margin * 2)
+
     // ヘッダー
-    doc.fontSize(20).text('完了届', 50, 50)
-    doc.fontSize(12).text(`作成日: ${data.createdAt || new Date().toLocaleDateString('ja-JP')}`, 400, 50)
+    doc.fontSize(24).text('業務完了届', margin, 40, {
+      align: 'center',
+      width: contentWidth
+    })
+    doc.fontSize(10).text(`作成日: ${data.createdAt || new Date().toLocaleDateString('ja-JP')}`, pageWidth - 150, 40)
 
-    let y = 120
+    // ヘッダー下の線
+    doc.moveTo(margin, 70).lineTo(pageWidth - margin, 70).stroke()
 
-    // プロジェクト情報
-    doc.fontSize(14).text('完了プロジェクト情報', 50, y)
+    let y = 100
+
+    // プロジェクト情報セクション
+    doc.fontSize(12).fillColor('#4A5568').text('プロジェクト情報', margin, y)
+    doc.moveTo(margin, y + 18).lineTo(pageWidth - margin, y + 18).stroke()
+    y += 30
+
+    // プロジェクト名
+    doc.fontSize(10).fillColor('#000000').text('プロジェクト名:', margin + 20, y)
+    doc.fontSize(11).text(data.projectTitle || 'プロジェクト名', margin + 150, y)
     y += 25
-    doc.fontSize(10)
-      .text(`プロジェクト名: ${data.projectTitle || 'プロジェクト名'}`, 70, y)
-    y += 20
-    doc.text(`受注者: ${data.contractorName || '受注者名'}`, 70, y)
-    y += 20
-    doc.text(`完了日: ${data.completionDate || new Date().toLocaleDateString('ja-JP')}`, 70, y)
-    y += 40
 
-    // 成果物リスト
+    // 受注者名
+    doc.fontSize(10).text('受注者名:', margin + 20, y)
+    doc.fontSize(11).text(data.contractorName || '受注者名', margin + 150, y)
+    y += 25
+
+    // 完了日
+    doc.fontSize(10).text('完了日:', margin + 20, y)
+    doc.fontSize(11).text(data.completionDate || new Date().toLocaleDateString('ja-JP'), margin + 150, y)
+    y += 25
+
+    // 契約金額
+    if (data.projectAmount) {
+      doc.fontSize(10).text('契約金額:', margin + 20, y)
+      doc.fontSize(12).fillColor('#2D3748').text(`¥${Number(data.projectAmount).toLocaleString('ja-JP')}`, margin + 150, y)
+      y += 30
+    } else {
+      y += 15
+    }
+
+    // 成果物セクション
+    doc.fontSize(12).fillColor('#4A5568').text('成果物', margin, y)
+    doc.moveTo(margin, y + 18).lineTo(pageWidth - margin, y + 18).stroke()
+    y += 30
+
     if (data.deliverables && data.deliverables.length > 0) {
-      doc.fontSize(14).text('成果物一覧', 50, y)
-      y += 25
       data.deliverables.forEach((item, index) => {
-        doc.fontSize(10).text(`${index + 1}. ${item}`, 70, y)
-        y += 15
+        doc.fontSize(10).fillColor('#000000').text(`${index + 1}. ${item}`, margin + 20, y)
+        y += 18
       })
-      y += 20
+    } else {
+      doc.fontSize(10).fillColor('#718096').text('※ 本届出書は電子的効力を有します', margin + 20, y)
+      y += 18
     }
 
     // 備考
     if (data.notes) {
-      doc.fontSize(12).text('備考', 50, y)
       y += 20
-      doc.fontSize(10).text(data.notes, 70, y, { width: 450 })
-      y += 60
+      doc.fontSize(12).fillColor('#4A5568').text('備考', margin, y)
+      y += 20
+      doc.fontSize(10).fillColor('#000000').text(data.notes, margin + 20, y, { width: contentWidth - 40 })
     }
-
-    // 署名欄
-    doc.fontSize(12).text('発注者確認署名:', 50, y)
-    doc.rect(150, y - 5, 200, 30).stroke()
-
-    y += 50
-    doc.text('受注者署名:', 50, y)
-    doc.rect(150, y - 5, 200, 30).stroke()
   }
 
   private generateMonthlyInvoiceDocument(doc: PDFKit.PDFDocument, data: DocumentData): void {

@@ -1187,35 +1187,43 @@ function ProjectsPageContent() {
           {/* 案件カード一覧 */}
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
             <AnimatePresence>
-              {filteredProjects.map((project, index) => (
-                <motion.div
-                  key={project.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -20 }}
-                  transition={{ delay: index * 0.1 }}
-                >
-                  <Card className={`hover-lift cursor-pointer group ${
-                    project.is_expired 
-                      ? 'border-red-200 bg-red-50/50' 
-                      : project.days_until_deadline !== null && project.days_until_deadline !== undefined && project.days_until_deadline <= 3 
-                        ? 'border-orange-200 bg-orange-50/50' 
-                        : ''
-                  }`} onClick={() => openProjectActionsModal(project.id)}>
-                    <CardHeader className="pb-3">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <CardTitle className="text-lg text-gray-900 group-hover:text-engineering-blue transition-colors">
-                            {project.title}
-                          </CardTitle>
-                          <CardDescription className="mt-1">
-                            {project.contracts && project.contracts.length > 0 
-                              ? `${project.contracts.length}名の受注者` 
-                              : project.contractor_name || '未割当'
-                            } • {project.category}
-                          </CardDescription>
-                        </div>
-                        <div className="flex flex-col gap-1">
+              {filteredProjects.map((project, index) => {
+                const requiredContractors = project.required_contractors && project.required_contractors > 0
+                  ? project.required_contractors
+                  : 1
+                const confirmedContractCount = project.contracts?.length ?? 0
+                const showBiddingInfo = confirmedContractCount < requiredContractors
+                const cardStatusClass = showBiddingInfo
+                  ? project.is_expired
+                    ? 'border-red-200 bg-red-50/50'
+                    : project.days_until_deadline !== null && project.days_until_deadline !== undefined && project.days_until_deadline <= 3
+                      ? 'border-orange-200 bg-orange-50/50'
+                      : ''
+                  : ''
+
+                return (
+                  <motion.div
+                    key={project.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    transition={{ delay: index * 0.1 }}
+                  >
+                    <Card className={`hover-lift cursor-pointer group ${cardStatusClass}`} onClick={() => openProjectActionsModal(project.id)}>
+                      <CardHeader className="pb-3">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <CardTitle className="text-lg text-gray-900 group-hover:text-engineering-blue transition-colors">
+                              {project.title}
+                            </CardTitle>
+                            <CardDescription className="mt-1">
+                              {project.contracts && project.contracts.length > 0 
+                                ? `${project.contracts.length}名の受注者` 
+                                : project.contractor_name || '未割当'
+                              } • {project.category}
+                            </CardDescription>
+                          </div>
+                          <div className="flex flex-col gap-1">
                           {project.status === 'pending_approval' ? (
                             <Badge variant="approval">
                               {getStatusText(project.status)}
@@ -1225,12 +1233,12 @@ function ProjectsPageContent() {
                               {getStatusText(project.status)}
                             </Badge>
                           )}
-                          {project.is_expired && (
+                          {showBiddingInfo && project.is_expired && (
                             <Badge className="bg-red-100 text-red-800 border-red-200">
                               期限切れ
                             </Badge>
                           )}
-                          {!project.is_expired && project.days_until_deadline !== null && project.days_until_deadline !== undefined && project.days_until_deadline <= 3 && (
+                          {showBiddingInfo && !project.is_expired && project.days_until_deadline !== null && project.days_until_deadline !== undefined && project.days_until_deadline <= 3 && (
                             <Badge className="bg-orange-100 text-orange-800 border-orange-200">
                               期限間近
                             </Badge>
@@ -1245,14 +1253,14 @@ function ProjectsPageContent() {
                               受注者サポート利用
                             </Badge>
                           )}
+                          </div>
                         </div>
-                      </div>
-                    </CardHeader>
+                      </CardHeader>
 
-                    <CardContent className="space-y-4">
-                      {/* 案件詳細 */}
-                      <div className="space-y-2 text-sm">
-                        {project.bidding_deadline && (
+                      <CardContent className="space-y-4">
+                        {/* 案件詳細 */}
+                        <div className="space-y-2 text-sm">
+                        {showBiddingInfo && project.bidding_deadline && (
                           <div className={`flex items-center gap-2 font-medium ${
                             project.is_expired 
                               ? 'text-red-600' 
@@ -1396,7 +1404,7 @@ function ProjectsPageContent() {
                       )}
 
                       {/* アクションボタン */}
-                          <div className="flex justify-between items-center pt-3 border-t border-gray-100">
+                      <div className="flex justify-between items-center pt-3 border-t border-gray-100">
                         <div className="text-xs text-gray-500 font-mono">
                           案件ID: {project.id}
                         </div>
@@ -1448,10 +1456,10 @@ function ProjectsPageContent() {
                           )}
                         </div>
                       </div>
-                    </CardContent>
-                  </Card>
+                      </CardContent>
+                    </Card>
                 </motion.div>
-              ))}
+              )})}
             </AnimatePresence>
           </div>
 
@@ -2269,41 +2277,67 @@ function ProjectsPageContent() {
                         <h3 className="text-lg font-medium text-gray-900 mb-3">案件詳細</h3>
                         <div className="space-y-3">
                           {project.contracts && project.contracts.length > 0 ? (
+                            (() => {
+                              const requiredContractors = project.required_contractors && project.required_contractors > 0
+                                ? project.required_contractors
+                                : 1
+                              const showBiddingInfo = project.contracts.length < requiredContractors
+
+                              return (
+                                <>
+                                  <div className="space-y-2">
+                                    {project.contracts.map((contract) => (
+                                      <div key={contract.contractor_id} className="flex justify-between">
+                                        <span className="text-gray-600">契約金額 ({contract.contractor_name}):</span>
+                                        <span className="font-medium text-green-600">
+                                          ¥{contract.contract_amount.toLocaleString()}
+                                        </span>
+                                      </div>
+                                    ))}
+                                    <div className="flex justify-between border-t border-gray-200 pt-2">
+                                      <span className="text-gray-600 font-semibold">契約金額合計:</span>
+                                      <span className="font-semibold text-green-600">
+                                        ¥{project.contracts.reduce((sum, contract) => sum + contract.contract_amount, 0).toLocaleString()}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  {showBiddingInfo && (
+                                    <div className="flex justify-between">
+                                      <span className="text-gray-600">入札締切:</span>
+                                      <span className="font-medium">
+                                        {project.bidding_deadline ? new Date(project.bidding_deadline).toLocaleDateString('ja-JP') : '未設定'}
+                                        {project.days_until_deadline !== null && project.days_until_deadline !== undefined && (
+                                          <span className="text-sm text-gray-500 ml-2">
+                                            ({project.days_until_deadline > 0 ? `あと${project.days_until_deadline}日` : '期限切れ'})
+                                          </span>
+                                        )}
+                                      </span>
+                                    </div>
+                                  )}
+                                </>
+                              )
+                            })()
+                          ) : (
                             <div className="space-y-2">
-                              {project.contracts.map((contract, index) => (
-                                <div key={contract.contractor_id} className="flex justify-between">
-                                  <span className="text-gray-600">契約金額 ({contract.contractor_name}):</span>
-                                  <span className="font-medium text-green-600">
-                                    ¥{contract.contract_amount.toLocaleString()}
-                                  </span>
-                                </div>
-                              ))}
-                              <div className="flex justify-between border-t border-gray-200 pt-2">
-                                <span className="text-gray-600 font-semibold">契約金額合計:</span>
-                                <span className="font-semibold text-green-600">
-                                  ¥{project.contracts.reduce((sum, contract) => sum + contract.contract_amount, 0).toLocaleString()}
+                              <div className="flex justify-between">
+                                <span className="text-gray-600">予算:</span>
+                                <span className="font-medium text-engineering-blue">
+                                  ¥{project.budget?.toLocaleString() || '未設定'}
+                                </span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-600">入札締切:</span>
+                                <span className="font-medium">
+                                  {project.bidding_deadline ? new Date(project.bidding_deadline).toLocaleDateString('ja-JP') : '未設定'}
+                                  {project.days_until_deadline !== null && project.days_until_deadline !== undefined && (
+                                    <span className="text-sm text-gray-500 ml-2">
+                                      ({project.days_until_deadline > 0 ? `あと${project.days_until_deadline}日` : '期限切れ'})
+                                    </span>
+                                  )}
                                 </span>
                               </div>
                             </div>
-                          ) : (
-                            <div className="flex justify-between">
-                              <span className="text-gray-600">予算:</span>
-                              <span className="font-medium text-engineering-blue">
-                                ¥{project.budget?.toLocaleString() || '未設定'}
-                              </span>
-                            </div>
                           )}
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">入札締切:</span>
-                            <span className="font-medium">
-                              {project.bidding_deadline ? new Date(project.bidding_deadline).toLocaleDateString('ja-JP') : '未設定'}
-                              {project.days_until_deadline !== null && project.days_until_deadline !== undefined && (
-                                <span className="text-sm text-gray-500 ml-2">
-                                  ({project.days_until_deadline > 0 ? `あと${project.days_until_deadline}日` : '期限切れ'})
-                                </span>
-                              )}
-                            </span>
-                          </div>
                           <div className="flex justify-between">
                             <span className="text-gray-600">納期:</span>
                             <span className="font-medium">

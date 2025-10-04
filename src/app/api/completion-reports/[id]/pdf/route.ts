@@ -84,11 +84,6 @@ export async function GET(
       return NextResponse.json({ message: 'アクセス権限がありません' }, { status: 403 })
     }
 
-    // 署名済みの場合のみPDF生成
-    if (!report.contractor_signed_at) {
-      return NextResponse.json({ message: '署名が完了していません' }, { status: 400 })
-    }
-
     // 受注者情報を取得
     const { data: contractor } = await supabaseAdmin
       .from('users')

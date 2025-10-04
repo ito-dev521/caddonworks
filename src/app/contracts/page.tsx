@@ -106,6 +106,7 @@ function ContractsPageContent() {
   const completedProjectIdSet = React.useMemo(() => new Set(completedProjects.map(project => project.id)), [completedProjects])
   // 完了届作成済みプロジェクトID集合
   const [completionReportProjects, setCompletionReportProjects] = useState<Set<string>>(new Set())
+  const [creatingCompletionReport, setCreatingCompletionReport] = useState<string | null>(null)
   const [supportPercent, setSupportPercent] = useState<number>(8)
   const [loadingSupport, setLoadingSupport] = useState<boolean>(false)
 
@@ -122,8 +123,15 @@ function ContractsPageContent() {
       })
       if (!res.ok) {
         const text = await res.text().catch(() => '')
+        let errorMessage = 'PDFを表示できませんでした'
+        try {
+          const errorJson = JSON.parse(text)
+          errorMessage = errorJson.message || errorMessage
+        } catch {
+          // JSONパースエラーは無視
+        }
         console.error('PDF取得エラー:', res.status, text)
-        alert('PDFを表示できませんでした')
+        alert(`${errorMessage} (ステータス: ${res.status})`)
         return
       }
       const blob = await res.blob()
@@ -131,7 +139,7 @@ function ContractsPageContent() {
       window.open(pdfUrl, '_blank')
     } catch (e) {
       console.error('openPdfWithAuth error:', e)
-      alert('PDFの取得に失敗しました')
+      alert(`PDFの取得に失敗しました: ${e instanceof Error ? e.message : '不明なエラー'}`)
     }
   }
 
@@ -501,6 +509,8 @@ function ContractsPageContent() {
   // 業務完了届の作成
   const handleCreateCompletionReport = async (projectId: string) => {
     try {
+      setCreatingCompletionReport(projectId)
+
       const { data: { session }, error: sessionError } = await supabase.auth.getSession()
 
       if (sessionError || !session) {
@@ -553,6 +563,8 @@ function ContractsPageContent() {
     } catch (err: any) {
       console.error('業務完了届作成エラー:', err)
       alert('業務完了届の作成に失敗しました')
+    } finally {
+      setCreatingCompletionReport(null)
     }
   }
 
@@ -1122,11 +1134,11 @@ function ContractsPageContent() {
                                 variant="outline"
                                 size="sm"
                                 onClick={() => handleCreateCompletionReport(project.id)}
-                                disabled={!evaluatedProjects.has(project.id) || isCompletionReportCreated(project.id)}
+                                disabled={!evaluatedProjects.has(project.id) || isCompletionReportCreated(project.id) || creatingCompletionReport === project.id}
                                 title={!evaluatedProjects.has(project.id) ? '受注者評価が未完了のため完了届は作成できません' : (isCompletionReportCreated(project.id) ? '既に作成済みです' : '')}
                               >
                                 <FileText className="w-4 h-4 mr-2" />
-                                {isCompletionReportCreated(project.id) ? '作成済み' : (!evaluatedProjects.has(project.id) ? '評価待ち' : '完了届作成')}
+                                {creatingCompletionReport === project.id ? '作成中...' : (isCompletionReportCreated(project.id) ? '作成済み' : (!evaluatedProjects.has(project.id) ? '評価待ち' : '完了届作成'))}
                               </Button>
                               <Button
                                 variant="outline"
@@ -1154,10 +1166,13 @@ function ContractsPageContent() {
                                         alert('完了届が見つかりません')
                                       }
                                     } else {
-                                      alert('完了届の取得に失敗しました')
+                                      const errorData = await response.json().catch(() => ({}))
+                                      console.error('完了届取得エラー:', response.status, errorData)
+                                      alert(`完了届の取得に失敗しました: ${errorData.message || response.statusText}`)
                                     }
                                   } catch (error) {
-                                    alert('エラーが発生しました')
+                                    console.error('PDF表示エラー:', error)
+                                    alert(`エラーが発生しました: ${error instanceof Error ? error.message : '不明なエラー'}`)
                                   }
                                 }}
                                 disabled={!isCompletionReportCreated(project.id)}
