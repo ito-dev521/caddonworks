@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseAdmin = createClient(
@@ -7,8 +7,52 @@ const supabaseAdmin = createClient(
   { auth: { autoRefreshToken: false, persistSession: false } }
 )
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    // 管理者権限チェック
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader) {
+      return NextResponse.json({ message: '認証が必要です' }, { status: 401 })
+    }
+
+    const token = authHeader.replace('Bearer ', '')
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
+
+    if (authError || !user) {
+      return NextResponse.json({ message: '認証に失敗しました' }, { status: 401 })
+    }
+
+    // 管理者メールチェック
+    const adminEmails = (process.env.NEXT_PUBLIC_ADMIN_EMAILS || 'admin@demo.com')
+      .split(',')
+      .map(e => e.trim().toLowerCase())
+    const isEmailAdmin = !!user.email && adminEmails.includes(user.email.toLowerCase())
+
+    // メンバーシップから管理者チェック
+    const { data: userProfile } = await supabaseAdmin
+      .from('users')
+      .select('id')
+      .eq('auth_user_id', user.id)
+      .maybeSingle()
+
+    let isOrgAdmin = false
+    if (userProfile?.id) {
+      const { data: memberships } = await supabaseAdmin
+        .from('memberships')
+        .select('role, organizations!inner(name)')
+        .eq('user_id', userProfile.id)
+        .in('role', ['Admin', 'OrgAdmin'])
+
+      // 運営会社のOrgAdminまたはAdminロールを持っているかチェック
+      isOrgAdmin = memberships?.some((m: any) =>
+        m.role === 'Admin' ||
+        (m.role === 'OrgAdmin' && m.organizations?.name === '運営会社')
+      ) || false
+    }
+
+    if (!isEmailAdmin && !isOrgAdmin) {
+      return NextResponse.json({ message: '管理者権限が必要です' }, { status: 403 })
+    }
     // メンバーシップから受注者を特定
     const { data: contractorMemberships, error: membershipError } = await supabaseAdmin
       .from('memberships')

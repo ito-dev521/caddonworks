@@ -19,6 +19,9 @@ interface Contractor {
   formal_name?: string
   phone_number?: string
   member_level?: string
+  requested_member_level?: string
+  level_change_status?: string
+  level_change_notes?: string
 }
 
 function AdminContractorsPageContent() {
@@ -27,6 +30,10 @@ function AdminContractorsPageContent() {
   const [filterStatus, setFilterStatus] = useState<string>("all")
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [showLevelChangeModal, setShowLevelChangeModal] = useState(false)
+  const [selectedContractor, setSelectedContractor] = useState<Contractor | null>(null)
+  const [newLevel, setNewLevel] = useState<string>('intermediate')
+  const [rejectionReason, setRejectionReason] = useState('')
 
   useEffect(() => {
     const fetchContractors = async () => {
@@ -109,6 +116,57 @@ function AdminContractorsPageContent() {
       if (res.ok) {
         setContractors(prev => prev.filter(c => c.id !== contractorId))
         alert('受注者を削除しました')
+      } else {
+        const error = await res.json()
+        alert(`エラー: ${error.message}`)
+      }
+    } catch (e) {
+      console.error(e)
+      alert('処理中にエラーが発生しました')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const handleLevelAction = async (action: 'approve' | 'reject' | 'change') => {
+    if (!selectedContractor) return
+
+    const confirmMessage = action === 'approve'
+      ? `${selectedContractor.display_name || selectedContractor.email} のレベル変更リクエストを承認しますか？`
+      : action === 'reject'
+      ? `${selectedContractor.display_name || selectedContractor.email} のレベル変更リクエストを却下しますか？`
+      : `${selectedContractor.display_name || selectedContractor.email} のレベルを直接変更しますか？`
+
+    if (!confirm(confirmMessage)) return
+
+    setActionLoading(selectedContractor.id)
+    try {
+      const { data: { session } } = await (await import("@/lib/supabase")).supabase.auth.getSession()
+      const token = session?.access_token || ''
+
+      const body: any = { action }
+      if (action === 'change') {
+        body.new_level = newLevel
+      } else if (action === 'reject') {
+        body.rejection_reason = rejectionReason
+      }
+
+      const res = await fetch(`/api/admin/users/${selectedContractor.id}/member-level`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(body)
+      })
+
+      if (res.ok) {
+        alert(`レベルを${action === 'approve' ? '承認' : action === 'reject' ? '却下' : '変更'}しました`)
+        setShowLevelChangeModal(false)
+        setSelectedContractor(null)
+        setRejectionReason('')
+        // ページを再読み込み
+        window.location.reload()
       } else {
         const error = await res.json()
         alert(`エラー: ${error.message}`)
@@ -213,6 +271,12 @@ function AdminContractorsPageContent() {
                                 </Badge>
                               )
                             })()}
+                            {contractor.level_change_status === 'pending' && (
+                              <Badge className="bg-yellow-100 text-yellow-800">
+                                {contractor.requested_member_level === 'beginner' ? '初級' :
+                                 contractor.requested_member_level === 'intermediate' ? '中級' : '上級'}へ変更申請中
+                              </Badge>
+                            )}
                           </div>
                         )}
                       </div>
@@ -223,6 +287,49 @@ function AdminContractorsPageContent() {
                         <User className="w-4 h-4" />
                         個人事業主
                       </div>
+
+                      {/* レベル変更申請の承認・却下ボタン */}
+                      {contractor.level_change_status === 'pending' && (
+                        <>
+                          <button
+                            onClick={() => {
+                              setSelectedContractor(contractor)
+                              handleLevelAction('approve')
+                            }}
+                            disabled={actionLoading === contractor.id}
+                            className="px-3 py-1 bg-green-100 text-green-700 hover:bg-green-200 rounded-lg text-sm font-medium flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            承認
+                          </button>
+                          <button
+                            onClick={() => {
+                              setSelectedContractor(contractor)
+                              const reason = prompt('却下理由を入力してください')
+                              if (reason) {
+                                setRejectionReason(reason)
+                                handleLevelAction('reject')
+                              }
+                            }}
+                            disabled={actionLoading === contractor.id}
+                            className="px-3 py-1 bg-red-100 text-red-700 hover:bg-red-200 rounded-lg text-sm font-medium flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            却下
+                          </button>
+                        </>
+                      )}
+
+                      {/* レベル直接変更ボタン */}
+                      <button
+                        onClick={() => {
+                          setSelectedContractor(contractor)
+                          setNewLevel(contractor.member_level || 'intermediate')
+                          setShowLevelChangeModal(true)
+                        }}
+                        disabled={actionLoading === contractor.id}
+                        className="px-3 py-1 bg-purple-100 text-purple-700 hover:bg-purple-200 rounded-lg text-sm font-medium flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        レベル変更
+                      </button>
 
                       {/* 稼働停止・有効化ボタン */}
                       <button
@@ -272,13 +379,90 @@ function AdminContractorsPageContent() {
           </div>
         </motion.div>
       </div>
+
+      {/* レベル変更モーダル */}
+      {showLevelChangeModal && selectedContractor && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold mb-4">
+              {selectedContractor.display_name || selectedContractor.email} のレベルを変更
+            </h3>
+            <p className="text-sm text-gray-600 mb-4">
+              新しい会員レベルを選択してください
+            </p>
+            <div className="space-y-3 mb-6">
+              <label className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+                <input
+                  type="radio"
+                  name="level"
+                  value="beginner"
+                  checked={newLevel === 'beginner'}
+                  onChange={(e) => setNewLevel(e.target.value)}
+                  className="w-4 h-4"
+                />
+                <div>
+                  <div className="font-medium">初級</div>
+                  <div className="text-xs text-gray-500">経験年数3年未満、未経験</div>
+                </div>
+              </label>
+              <label className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+                <input
+                  type="radio"
+                  name="level"
+                  value="intermediate"
+                  checked={newLevel === 'intermediate'}
+                  onChange={(e) => setNewLevel(e.target.value)}
+                  className="w-4 h-4"
+                />
+                <div>
+                  <div className="font-medium">中級</div>
+                  <div className="text-xs text-gray-500">経験年数3年以上7年未満</div>
+                </div>
+              </label>
+              <label className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+                <input
+                  type="radio"
+                  name="level"
+                  value="advanced"
+                  checked={newLevel === 'advanced'}
+                  onChange={(e) => setNewLevel(e.target.value)}
+                  className="w-4 h-4"
+                />
+                <div>
+                  <div className="font-medium">上級</div>
+                  <div className="text-xs text-gray-500">経験年数7年以上</div>
+                </div>
+              </label>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => handleLevelAction('change')}
+                disabled={actionLoading === selectedContractor.id}
+                className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {actionLoading === selectedContractor.id ? '変更中...' : '変更する'}
+              </button>
+              <button
+                onClick={() => {
+                  setShowLevelChangeModal(false)
+                  setSelectedContractor(null)
+                }}
+                disabled={actionLoading === selectedContractor.id}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                キャンセル
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
 export default function AdminContractorsPage() {
   return (
-    <AuthGuard>
+    <AuthGuard requiredRole="Admin">
       <AdminContractorsPageContent />
     </AuthGuard>
   )

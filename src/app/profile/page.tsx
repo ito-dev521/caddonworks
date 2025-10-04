@@ -51,6 +51,9 @@ function ProfilePageContent() {
   const [evaluationLoading, setEvaluationLoading] = useState(false)
   const [badgeData, setBadgeData] = useState<any[]>([])
   const [badgeLoading, setBadgeLoading] = useState(false)
+  const [showLevelChangeModal, setShowLevelChangeModal] = useState(false)
+  const [requestedLevel, setRequestedLevel] = useState<MemberLevel>('intermediate')
+  const [levelChangeLoading, setLevelChangeLoading] = useState(false)
   const [formData, setFormData] = useState({
     display_name: userProfile?.display_name || '',
     specialties: userProfile?.specialties || [],
@@ -317,6 +320,45 @@ function ProfilePageContent() {
     }
   }
 
+  const handleLevelChangeRequest = async () => {
+    if (!confirm(`会員レベルを「${requestedLevel === 'beginner' ? '初級' : requestedLevel === 'intermediate' ? '中級' : '上級'}」に変更リクエストしますか？\n\n運営側の承認が必要です。`)) {
+      return
+    }
+
+    setLevelChangeLoading(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        alert('セッションが見つかりません')
+        return
+      }
+
+      const response = await fetch('/api/profile/member-level-request', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({ requested_level: requestedLevel })
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        alert('レベル変更リクエストを送信しました。運営側の承認をお待ちください。')
+        setShowLevelChangeModal(false)
+        window.location.reload()
+      } else {
+        alert(`エラー: ${result.message}`)
+      }
+    } catch (error) {
+      console.error('レベル変更リクエストエラー:', error)
+      alert('レベル変更リクエストに失敗しました')
+    } finally {
+      setLevelChangeLoading(false)
+    }
+  }
+
   const specialtyOptions = [
     "未経験", "道路設計", "橋梁設計", "河川工事", "上下水道設計", "トンネル設計", "地下構造",
     "構造物点検", "測量業務", "地質調査", "環境評価", "施工管理"
@@ -493,15 +535,39 @@ function ProfilePageContent() {
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                               会員レベル
                             </label>
-                            {(() => {
-                              const level = calculateMemberLevel(formData.experience_years, formData.specialties)
-                              const levelInfo = getMemberLevelInfo(level)
-                              return (
-                                <Badge className={levelInfo.color}>
-                                  {levelInfo.label}
-                                </Badge>
-                              )
-                            })()}
+                            <div className="flex items-center gap-2">
+                              {(() => {
+                                const currentLevel = userProfile?.member_level || calculateMemberLevel(formData.experience_years, formData.specialties)
+                                const levelInfo = getMemberLevelInfo(currentLevel as MemberLevel)
+                                return (
+                                  <Badge className={levelInfo.color}>
+                                    {levelInfo.label}
+                                  </Badge>
+                                )
+                              })()}
+                              {!isEditing && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setShowLevelChangeModal(true)}
+                                  className="text-xs"
+                                  disabled={userProfile?.level_change_status === 'pending'}
+                                >
+                                  {userProfile?.level_change_status === 'pending' ? '変更申請中' : 'レベル変更申請'}
+                                </Button>
+                              )}
+                            </div>
+                            {userProfile?.level_change_status === 'pending' && (
+                              <p className="text-xs text-yellow-600 mt-1">
+                                {userProfile.requested_member_level === 'beginner' ? '初級' :
+                                 userProfile.requested_member_level === 'intermediate' ? '中級' : '上級'}への変更リクエストが承認待ちです
+                              </p>
+                            )}
+                            {userProfile?.level_change_status === 'rejected' && (
+                              <p className="text-xs text-red-600 mt-1">
+                                レベル変更リクエストが却下されました: {userProfile.level_change_notes}
+                              </p>
+                            )}
                           </div>
                         )}
                         {/* 組織内ユーザーの場合は氏名を表示 */}
@@ -896,15 +962,88 @@ function ProfilePageContent() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.4 }}
               >
-                <BadgeCollection 
-                  badges={badgeData || []} 
-                  loading={badgeLoading} 
+                <BadgeCollection
+                  badges={badgeData || []}
+                  loading={badgeLoading}
                 />
               </motion.div>
             )}
           </div>
         </main>
       </div>
+
+      {/* レベル変更リクエストモーダル */}
+      {showLevelChangeModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold mb-4">会員レベル変更申請</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              変更を希望する会員レベルを選択してください。運営側の承認が必要です。
+            </p>
+            <div className="space-y-3 mb-6">
+              <label className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+                <input
+                  type="radio"
+                  name="level"
+                  value="beginner"
+                  checked={requestedLevel === 'beginner'}
+                  onChange={(e) => setRequestedLevel(e.target.value as MemberLevel)}
+                  className="w-4 h-4"
+                />
+                <div>
+                  <div className="font-medium">初級</div>
+                  <div className="text-xs text-gray-500">経験年数3年未満、未経験</div>
+                </div>
+              </label>
+              <label className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+                <input
+                  type="radio"
+                  name="level"
+                  value="intermediate"
+                  checked={requestedLevel === 'intermediate'}
+                  onChange={(e) => setRequestedLevel(e.target.value as MemberLevel)}
+                  className="w-4 h-4"
+                />
+                <div>
+                  <div className="font-medium">中級</div>
+                  <div className="text-xs text-gray-500">経験年数3年以上7年未満</div>
+                </div>
+              </label>
+              <label className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+                <input
+                  type="radio"
+                  name="level"
+                  value="advanced"
+                  checked={requestedLevel === 'advanced'}
+                  onChange={(e) => setRequestedLevel(e.target.value as MemberLevel)}
+                  className="w-4 h-4"
+                />
+                <div>
+                  <div className="font-medium">上級</div>
+                  <div className="text-xs text-gray-500">経験年数7年以上</div>
+                </div>
+              </label>
+            </div>
+            <div className="flex gap-3">
+              <Button
+                onClick={handleLevelChangeRequest}
+                disabled={levelChangeLoading}
+                className="flex-1 bg-engineering-blue hover:bg-engineering-blue/90"
+              >
+                {levelChangeLoading ? '送信中...' : '申請する'}
+              </Button>
+              <Button
+                onClick={() => setShowLevelChangeModal(false)}
+                variant="outline"
+                disabled={levelChangeLoading}
+                className="flex-1"
+              >
+                キャンセル
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

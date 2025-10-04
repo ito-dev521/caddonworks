@@ -207,7 +207,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (roleError && roleError.code !== 'PGRST116') {
         console.error('Error fetching user role:', roleError)
-        return
+        // エラー時もローディングを解除するため、returnせずに処理を続ける
       }
 
       // ロールの解決（複数メンバーシップを考慮して優先度で選択）
@@ -242,21 +242,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // メンバーシップが無い/ロールが未解決の場合のフォールバックは行わない
       // （usersテーブルにrole列が存在しない環境があるため）
 
-      setUserRole(resolvedRole || null)
-      
       // 組織情報を取得
       const orgIdToLoad = pickedMembership?.org_id
+      let finalOrgData = null
       if (orgIdToLoad) {
         const { data: orgData, error: orgError } = await supabase
           .from('organizations')
           .select('id, name')
           .eq('id', orgIdToLoad)
           .single()
-        
+
         if (orgError) {
           console.error('Error fetching organization:', orgError)
           setUserOrganization(null)
         } else {
+          finalOrgData = orgData
           setUserOrganization({
             id: orgData.id,
             name: orgData.name
@@ -265,6 +265,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         setUserOrganization(null)
       }
+
+      // 運営会社のOrgAdminはAdminとして扱う
+      if (resolvedRole === 'OrgAdmin' && finalOrgData?.name === '運営会社') {
+        resolvedRole = 'Admin'
+      }
+
+      setUserRole(resolvedRole || null)
 
       // プロフィールがない場合（発注者の場合）は基本的な情報を作成
       if (!profile && pickedMembership) {

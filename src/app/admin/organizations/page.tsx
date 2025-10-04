@@ -157,6 +157,7 @@ function AdminOrganizationsPageContent() {
   }
 
   const filtered = orgs
+    .filter(o => o.name !== '運営会社' && o.name !== '個人事業主（受注者）')
     .filter(o => o.name.toLowerCase().includes(q.toLowerCase()))
     .filter(o => filterStatus === "all" || o.approval_status === filterStatus)
 

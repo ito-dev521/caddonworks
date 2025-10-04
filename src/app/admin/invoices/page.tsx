@@ -46,6 +46,24 @@ export default function AdminInvoicesPage() {
     fetchInvoices()
   }, [q, status, from, to])
 
+  // 会社ごとにグループ化
+  const groupedByOrg = useMemo(() => {
+    const groups: Record<string, { orgName: string; invoices: AdminInvoiceRow[] }> = {}
+    rows.forEach(row => {
+      const orgId = row.client_org?.id || 'unknown'
+      const orgName = row.client_org?.name || '不明な組織'
+      if (!groups[orgId]) {
+        groups[orgId] = { orgName, invoices: [] }
+      }
+      groups[orgId].invoices.push(row)
+    })
+    return Object.entries(groups).map(([orgId, data]) => ({
+      orgId,
+      orgName: data.orgName,
+      invoices: data.invoices
+    }))
+  }, [rows])
+
   const exportCsv = () => {
     const header = [
       'id','invoice_number','status','issue_date','due_date','total_amount','project_title','client_org_name'
@@ -104,34 +122,41 @@ export default function AdminInvoicesPage() {
           <CardContent>
             {loading ? (
               <div className="py-10 text-center text-gray-600">読み込み中...</div>
+            ) : groupedByOrg.length === 0 ? (
+              <div className="py-10 text-center text-gray-600">請求書がありません</div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead>
-                    <tr className="text-left text-gray-600">
-                      <th className="px-2 py-2">番号</th>
-                      <th className="px-2 py-2">案件</th>
-                      <th className="px-2 py-2">組織</th>
-                      <th className="px-2 py-2">発行日</th>
-                      <th className="px-2 py-2">期限</th>
-                      <th className="px-2 py-2">合計</th>
-                      <th className="px-2 py-2">状態</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map(r=> (
-                      <tr key={r.id} className="border-t">
-                        <td className="px-2 py-2">{r.invoice_number}</td>
-                        <td className="px-2 py-2">{r.project?.title}</td>
-                        <td className="px-2 py-2">{r.client_org?.name}</td>
-                        <td className="px-2 py-2">{r.issue_date}</td>
-                        <td className="px-2 py-2">{r.due_date}</td>
-                        <td className="px-2 py-2">¥{r.total_amount?.toLocaleString?.() || r.total_amount}</td>
-                        <td className="px-2 py-2">{r.status}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="space-y-6">
+                {groupedByOrg.map(group => (
+                  <div key={group.orgId} className="border-b pb-6 last:border-b-0">
+                    <h3 className="text-lg font-semibold text-gray-800 mb-3">{group.orgName}</h3>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-sm">
+                        <thead>
+                          <tr className="text-left text-gray-600 bg-gray-50">
+                            <th className="px-2 py-2">番号</th>
+                            <th className="px-2 py-2">案件</th>
+                            <th className="px-2 py-2">発行日</th>
+                            <th className="px-2 py-2">期限</th>
+                            <th className="px-2 py-2">合計</th>
+                            <th className="px-2 py-2">状態</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {group.invoices.map(r => (
+                            <tr key={r.id} className="border-t">
+                              <td className="px-2 py-2">{r.invoice_number}</td>
+                              <td className="px-2 py-2">{r.project?.title}</td>
+                              <td className="px-2 py-2">{r.issue_date}</td>
+                              <td className="px-2 py-2">{r.due_date}</td>
+                              <td className="px-2 py-2">¥{r.total_amount?.toLocaleString?.() || r.total_amount}</td>
+                              <td className="px-2 py-2">{r.status}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </CardContent>

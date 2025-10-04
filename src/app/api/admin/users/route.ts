@@ -38,19 +38,23 @@ async function assertAdminAndGetOperatorOrgId(request: NextRequest) {
     userEmail: user.email
   })
 
-  // 自分が所属する運営組織ID（Adminのmembership）を取得
+  // 自分が所属する運営組織ID（AdminまたはOrgAdminのmembership）を取得
   const userIdCandidates = [userProfile?.id, user.id].filter(Boolean) as string[]
   let operatorOrgId: string | null = null
   for (const candidate of userIdCandidates) {
-    const { data: membership } = await supabaseAdmin
+    // AdminまたはOrgAdminロールを探す
+    const { data: memberships } = await supabaseAdmin
       .from('memberships')
       .select('org_id, role')
       .eq('user_id', candidate)
-      .eq('role', 'Admin')
-      .maybeSingle()
-    console.log('メンバーシップチェック:', { candidate, membership })
-    if (membership?.org_id) {
-      operatorOrgId = membership.org_id
+      .in('role', ['Admin', 'OrgAdmin'])
+
+    console.log('メンバーシップチェック:', { candidate, memberships })
+
+    // 運営会社の組織を優先的に選択
+    const operatorMembership = memberships?.find(m => m.role === 'Admin' || m.role === 'OrgAdmin')
+    if (operatorMembership?.org_id) {
+      operatorOrgId = operatorMembership.org_id
       break
     }
   }
@@ -299,39 +303,24 @@ export async function POST(request: NextRequest) {
     }
 
     // 運営組織のmembershipを付与
-    console.log('メンバーシップ作成:', { user_id: profile.id, org_id: finalOperatorOrgId, role })
+    // フロントエンドから来るroleをDBのroleにマッピング
+    // Admin/Reviewer/Auditor は全て OrgAdmin として保存（運営会社なので）
+    const dbRole = 'OrgAdmin' // 運営会社のメンバーは全てOrgAdmin
 
-    // 一部環境では role 制約が異なるため、候補を順に試行する
-    const roleCandidates: string[] = [
-      // まずは運営想定ロール
-      role,
-      'Admin', 'Reviewer', 'Auditor',
-      // 次に古い/別環境の一般ロール
-      'Owner', 'Member', 'Viewer',
-      // 最後に組織系ロール（多くのDBで許容されがち）
-      'OrgAdmin', 'Staff'
-    ].filter((v, i, a) => !!v && a.indexOf(v) === i) as string[]
+    console.log('メンバーシップ作成:', { user_id: profile.id, org_id: finalOperatorOrgId, frontendRole: role, dbRole })
 
-    let lastError: any = null
-    for (const candidate of roleCandidates) {
-      const { error } = await supabaseAdmin
-        .from('memberships')
-        .insert({ user_id: profile.id, org_id: finalOperatorOrgId, role: candidate })
-      if (!error) {
-        console.log('メンバーシップ作成成功: role=', candidate)
-        lastError = null
-        break
-      }
-      lastError = error
-      console.warn('メンバーシップ作成失敗: role=', candidate, ' error=', error?.message)
-    }
+    const { error: membershipError } = await supabaseAdmin
+      .from('memberships')
+      .insert({ user_id: profile.id, org_id: finalOperatorOrgId, role: dbRole })
 
-    if (lastError) {
-      console.error('メンバーシップ作成エラー(全候補失敗):', lastError)
+    if (membershipError) {
+      console.error('メンバーシップ作成エラー:', membershipError)
       await supabaseAdmin.from('users').delete().eq('id', profile.id)
       await supabaseAdmin.auth.admin.deleteUser(authUserId)
-      return NextResponse.json({ message: '権限付与に失敗しました: ' + (lastError?.message || 'unknown') }, { status: 400 })
+      return NextResponse.json({ message: '権限付与に失敗しました: ' + membershipError.message }, { status: 400 })
     }
+
+    console.log('メンバーシップ作成成功')
 
     // 初回セットアップ用にパスワードリセットメールを送付
     const redirectTo = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/auth/reset-password`
@@ -405,10 +394,13 @@ export async function PUT(request: NextRequest) {
     }
 
     // メンバーシップの更新
+    // 運営会社のメンバーは全てOrgAdminとして保存（フロントエンドのroleは表示用）
     if (role) {
+      const dbRole = 'OrgAdmin' // 運営会社のメンバーは全てOrgAdmin
+
       const { error: membershipUpdateError } = await supabaseAdmin
         .from('memberships')
-        .update({ role })
+        .update({ role: dbRole })
         .eq('id', targetMembership.id)
 
       if (membershipUpdateError) {

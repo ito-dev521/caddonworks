@@ -231,3 +231,226 @@ export const sendPasswordResetEmail = async (email: string, resetLink: string, d
     throw error
   }
 }
+
+// 会員レベル変更承認メール
+export const sendLevelChangeApprovedEmail = async (
+  email: string,
+  displayName: string,
+  newLevel: 'beginner' | 'intermediate' | 'advanced'
+) => {
+  const levelLabel = newLevel === 'beginner' ? '初級' : newLevel === 'intermediate' ? '中級' : '上級'
+
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>会員レベル変更が承認されました</title>
+        <style>
+            body { font-family: 'Hiragino Sans', 'Yu Gothic', sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: linear-gradient(135deg, #0066CC 0%, #10B981 100%); color: white; padding: 30px 20px; text-align: center; border-radius: 8px 8px 0 0; }
+            .content { background: white; padding: 30px; border: 1px solid #e5e7eb; border-radius: 0 0 8px 8px; }
+            .info-box { background: #f3f4f6; border-radius: 8px; padding: 20px; margin: 20px 0; }
+            .footer { text-align: center; color: #6b7280; font-size: 14px; margin-top: 30px; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>✅ 会員レベル変更が承認されました</h1>
+                <p>土木設計業務プラットフォーム</p>
+            </div>
+
+            <div class="content">
+                <p>こんにちは、${displayName} 様</p>
+
+                <p>会員レベル変更リクエストが承認されました。</p>
+
+                <div class="info-box">
+                    <p style="margin: 0;"><strong>新しい会員レベル:</strong> ${levelLabel}</p>
+                </div>
+
+                <p>新しいレベルに応じた案件が表示されるようになります。引き続き土木設計業務プラットフォームをご利用ください。</p>
+
+                <div class="footer">
+                    <p>土木設計業務プラットフォーム運営チーム<br>
+                    Civil Engineering Platform</p>
+                    <p>このメールに心当たりがない場合は、お手数ですがサポートまでご連絡ください。</p>
+                </div>
+            </div>
+        </div>
+    </body>
+    </html>
+  `
+
+  const mailgunClient = await initMailgun()
+
+  if (!mailgunClient || !DOMAIN) {
+    console.warn('Mailgun not configured, skipping level change approved email send')
+    return { message: 'Email sending skipped (Mailgun not configured)' }
+  }
+
+  try {
+    const result = await mailgunClient.messages.create(DOMAIN, {
+      from: `土木設計業務プラットフォーム <noreply@${DOMAIN}>`,
+      to: [email],
+      subject: '【Caddon Works】会員レベル変更が承認されました',
+      html: htmlContent
+    })
+
+    console.log('Level change approved email sent successfully:', result)
+    return result
+  } catch (error) {
+    console.error('Failed to send level change approved email:', error)
+    throw error
+  }
+}
+
+// 会員レベル変更却下メール
+export const sendLevelChangeRejectedEmail = async (
+  email: string,
+  displayName: string,
+  reason: string
+) => {
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>会員レベル変更が却下されました</title>
+        <style>
+            body { font-family: 'Hiragino Sans', 'Yu Gothic', sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: linear-gradient(135deg, #dc2626 0%, #f59e0b 100%); color: white; padding: 30px 20px; text-align: center; border-radius: 8px 8px 0 0; }
+            .content { background: white; padding: 30px; border: 1px solid #e5e7eb; border-radius: 0 0 8px 8px; }
+            .reject-box { background: #fef2f2; border-left: 4px solid #dc2626; padding: 15px; margin: 20px 0; border-radius: 4px; }
+            .footer { text-align: center; color: #6b7280; font-size: 14px; margin-top: 30px; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>❌ 会員レベル変更が却下されました</h1>
+                <p>土木設計業務プラットフォーム</p>
+            </div>
+
+            <div class="content">
+                <p>こんにちは、${displayName} 様</p>
+
+                <p>会員レベル変更リクエストが却下されました。</p>
+
+                <div class="reject-box">
+                    <p style="margin: 0 0 10px 0;"><strong>却下理由:</strong></p>
+                    <p style="margin: 0;">${reason}</p>
+                </div>
+
+                <p>ご不明な点がございましたら、お気軽にお問い合わせください。</p>
+
+                <div class="footer">
+                    <p>土木設計業務プラットフォーム運営チーム<br>
+                    Civil Engineering Platform</p>
+                </div>
+            </div>
+        </div>
+    </body>
+    </html>
+  `
+
+  const mailgunClient = await initMailgun()
+
+  if (!mailgunClient || !DOMAIN) {
+    console.warn('Mailgun not configured, skipping level change rejected email send')
+    return { message: 'Email sending skipped (Mailgun not configured)' }
+  }
+
+  try {
+    const result = await mailgunClient.messages.create(DOMAIN, {
+      from: `土木設計業務プラットフォーム <noreply@${DOMAIN}>`,
+      to: [email],
+      subject: '【Caddon Works】会員レベル変更が却下されました',
+      html: htmlContent
+    })
+
+    console.log('Level change rejected email sent successfully:', result)
+    return result
+  } catch (error) {
+    console.error('Failed to send level change rejected email:', error)
+    throw error
+  }
+}
+
+// 会員レベル直接変更メール
+export const sendLevelChangedByAdminEmail = async (
+  email: string,
+  displayName: string,
+  newLevel: 'beginner' | 'intermediate' | 'advanced'
+) => {
+  const levelLabel = newLevel === 'beginner' ? '初級' : newLevel === 'intermediate' ? '中級' : '上級'
+
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>会員レベルが変更されました</title>
+        <style>
+            body { font-family: 'Hiragino Sans', 'Yu Gothic', sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: linear-gradient(135deg, #0066CC 0%, #10B981 100%); color: white; padding: 30px 20px; text-align: center; border-radius: 8px 8px 0 0; }
+            .content { background: white; padding: 30px; border: 1px solid #e5e7eb; border-radius: 0 0 8px 8px; }
+            .info-box { background: #f3f4f6; border-radius: 8px; padding: 20px; margin: 20px 0; }
+            .footer { text-align: center; color: #6b7280; font-size: 14px; margin-top: 30px; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>🔄 会員レベルが変更されました</h1>
+                <p>土木設計業務プラットフォーム</p>
+            </div>
+
+            <div class="content">
+                <p>こんにちは、${displayName} 様</p>
+
+                <p>会員レベルが運営側により変更されました。</p>
+
+                <div class="info-box">
+                    <p style="margin: 0;"><strong>新しい会員レベル:</strong> ${levelLabel}</p>
+                </div>
+
+                <p>新しいレベルに応じた案件が表示されるようになります。引き続き土木設計業務プラットフォームをご利用ください。</p>
+
+                <div class="footer">
+                    <p>土木設計業務プラットフォーム運営チーム<br>
+                    Civil Engineering Platform</p>
+                    <p>ご不明な点がございましたら、お問い合わせください。</p>
+                </div>
+            </div>
+        </div>
+    </body>
+    </html>
+  `
+
+  const mailgunClient = await initMailgun()
+
+  if (!mailgunClient || !DOMAIN) {
+    console.warn('Mailgun not configured, skipping level changed email send')
+    return { message: 'Email sending skipped (Mailgun not configured)' }
+  }
+
+  try {
+    const result = await mailgunClient.messages.create(DOMAIN, {
+      from: `土木設計業務プラットフォーム <noreply@${DOMAIN}>`,
+      to: [email],
+      subject: '【Caddon Works】会員レベルが変更されました',
+      html: htmlContent
+    })
+
+    console.log('Level changed email sent successfully:', result)
+    return result
+  } catch (error) {
+    console.error('Failed to send level changed email:', error)
+    throw error
+  }
+}
