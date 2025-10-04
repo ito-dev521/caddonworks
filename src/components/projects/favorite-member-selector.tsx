@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Star, User, Clock } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import { supabase } from "@/lib/supabase"
+import { type MemberLevel, calculateMemberLevel, canAccessProject } from "@/lib/member-level"
 
 interface FavoriteMember {
   id: string
@@ -16,18 +17,22 @@ interface FavoriteMember {
   profile_image_url?: string
   notes?: string
   added_at: string
+  specialties?: string[]
+  experience_years?: string
 }
 
 interface FavoriteMemberSelectorProps {
   selectedContractorId: string | null
   onSelectionChange: (contractorId: string | null) => void
   onSkip: () => void
+  requiredLevel: MemberLevel
 }
 
 export function FavoriteMemberSelector({
   selectedContractorId,
   onSelectionChange,
-  onSkip
+  onSkip,
+  requiredLevel
 }: FavoriteMemberSelectorProps) {
   const { userProfile } = useAuth()
   const [favoriteMembers, setFavoriteMembers] = useState<FavoriteMember[]>([])
@@ -36,7 +41,8 @@ export function FavoriteMemberSelector({
 
   useEffect(() => {
     loadFavoriteMembers()
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requiredLevel])
 
   const loadFavoriteMembers = async () => {
     if (!userProfile) return
@@ -69,11 +75,19 @@ export function FavoriteMemberSelector({
           contractor_email: user.email || '',
           profile_image_url: user.profile_image_url || undefined,
           notes: item.notes || undefined,
-          added_at: item.added_at
+          added_at: item.added_at,
+          specialties: user.specialties || [],
+          experience_years: user.experience_years || undefined
         } as FavoriteMember
       })
 
-      setFavoriteMembers(mapped)
+      // 必要な会員レベルでフィルタリング
+      const filtered = mapped.filter((member: FavoriteMember) => {
+        const memberLevel = calculateMemberLevel(member.experience_years, member.specialties || [])
+        return canAccessProject(memberLevel, requiredLevel)
+      })
+
+      setFavoriteMembers(filtered)
     } catch (err) {
       console.error('お気に入り会員取得エラー:', err)
       // お気に入り会員がない場合はエラーとして扱わない

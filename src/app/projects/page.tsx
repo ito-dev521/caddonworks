@@ -1716,6 +1716,7 @@ function ProjectsPageContent() {
                         selectedContractorId={selectedFavoriteContractorId}
                         onSelectionChange={(id) => setSelectedFavoriteContractorId(id)}
                         onSkip={() => setSelectedFavoriteContractorId(null)}
+                        requiredLevel={newProject.required_level}
                       />
                     </div>
 

@@ -53,6 +53,11 @@ export function AuthGuard({
       return
     }
 
+    // ロール情報の取得完了を待つ
+    if ((requiredRole || (allowedRoles && allowedRoles.length > 0)) && userRole === null) {
+      return
+    }
+
     // Check role permissions
     if (requiredRole && userRole !== requiredRole) {
       // ロール不一致: 強制サインアウトしてログインへ
@@ -72,7 +77,7 @@ export function AuthGuard({
       return
     }
 
-    if (allowedRoles && allowedRoles.length > 0 && (!userRole || !allowedRoles.includes(userRole))) {
+    if (allowedRoles && allowedRoles.length > 0 && (userRole === null || !allowedRoles.includes(userRole))) {
       // 許可されていないロール: 強制サインアウトしてログインへ
       if (!isRedirectingRef.current) {
         (async () => {
@@ -191,8 +196,44 @@ export function AuthGuard({
     return null // Will redirect to login
   }
 
+  if (requiredRole && userRole === null) {
+    return (
+      <div className="min-h-screen bg-gradient-mesh flex items-center justify-center">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="text-center"
+        >
+          <div className="w-16 h-16 bg-engineering-blue rounded-xl flex items-center justify-center mx-auto mb-4">
+            <Loader2 className="w-8 h-8 text-white animate-spin" />
+          </div>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">権限を確認しています...</h2>
+          <p className="text-gray-600">しばらくお待ちください</p>
+        </motion.div>
+      </div>
+    )
+  }
+
   if (requiredRole && userRole !== requiredRole) {
     return null // Will redirect to unauthorized page
+  }
+
+  if (allowedRoles && allowedRoles.length > 0 && userRole === null) {
+    return (
+      <div className="min-h-screen bg-gradient-mesh flex items-center justify-center">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="text-center"
+        >
+          <div className="w-16 h-16 bg-engineering-blue rounded-xl flex items-center justify-center mx-auto mb-4">
+            <Loader2 className="w-8 h-8 text-white animate-spin" />
+          </div>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">権限を確認しています...</h2>
+          <p className="text-gray-600">しばらくお待ちください</p>
+        </motion.div>
+      </div>
+    )
   }
 
   if (allowedRoles && allowedRoles.length > 0 && (!userRole || !allowedRoles.includes(userRole))) {
