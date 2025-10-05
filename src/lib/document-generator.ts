@@ -609,6 +609,12 @@ export class DocumentGenerator {
     const maxCol = worksheet.columnCount
 
     for (let rowNum = 1; rowNum <= maxRow; rowNum++) {
+      // 完了届の場合は3行目（罫線）と9行目以降（日付より下）をスキップ
+      const isCompletionTemplate = worksheet.getCell('A1').value?.toString().includes('業務完了届')
+      if (isCompletionTemplate && (rowNum === 3 || rowNum >= 9)) {
+        continue
+      }
+
       const row = worksheet.getRow(rowNum)
       const rowHeight = row.height ? `style="height: ${row.height * 1.33}px;"` : ''
 
@@ -667,6 +673,18 @@ export class DocumentGenerator {
           classes.push('text-left')
         }
 
+        // 完了届の場合、5〜8行目の1列目（ラベル列）を中央揃えにする
+        if (isCompletionTemplate && rowNum >= 5 && rowNum <= 8 && colNum === 1) {
+          // 既存のtext-leftクラスを削除して、text-centerに置き換え
+          const leftIndex = classes.indexOf('text-left')
+          if (leftIndex !== -1) {
+            classes.splice(leftIndex, 1)
+          }
+          if (!classes.includes('text-center')) {
+            classes.push('text-center')
+          }
+        }
+
         // 垂直方向の配置
         if (cell.alignment?.vertical === 'top') {
           classes.push('valign-top')
@@ -715,6 +733,29 @@ export class DocumentGenerator {
         // 罫線なし
         if (cell.border && Object.keys(cell.border).length === 0) {
           classes.push('no-border')
+        }
+
+        // 完了届の場合、2行目と4行目の間の境界線を非表示
+        if (isCompletionTemplate && rowNum === 2) {
+          // 2行目全体に上線と下線を表示
+          styles.push('border-top: 1px solid #333')
+          styles.push('border-bottom: 1px solid #333')
+          // 2行目の1〜3列目（作成日の左側）は左右の罫線を非表示
+          if (colNum >= 1 && colNum <= 3) {
+            styles.push('border-left: none')
+            styles.push('border-right: none')
+          }
+        }
+        if (isCompletionTemplate && rowNum === 4) {
+          // 4行目（プロジェクト情報）の上線を表示
+          styles.push('border-top: 1px solid #333')
+        }
+
+        // 完了届の場合、5〜8行目の1列目（ラベル列）に背景色を追加
+        // プロジェクト情報ヘッダーと同じ背景色を使用
+        if (isCompletionTemplate && rowNum >= 5 && rowNum <= 8 && colNum === 1) {
+          // Excelの背景色を確認して同じ色を適用
+          styles.push('background-color: #D6EAF8')
         }
 
         const classAttr = classes.length > 0 ? `class="${classes.join(' ')}"` : ''
