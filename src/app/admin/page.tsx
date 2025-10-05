@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Shield, Users, Building2, FileText, ScrollText, Settings, FolderLock } from "lucide-react"
+import { Shield, Users, Building2, FileText, ScrollText, Settings, FolderLock, Calendar } from "lucide-react"
 import { Navigation } from "@/components/layouts/navigation"
 import { motion } from "framer-motion"
 import { AuthGuard } from "@/components/auth/auth-guard"
@@ -37,6 +37,12 @@ export default function AdminDashboardPage() {
                 icon={<Building2 className="w-6 h-6" />}
                 title="発注者の利用管理"
                 desc="組織ごとの利用状況・承認・停止"
+              />
+              <DashboardCard
+                href="/admin/monthly-billing"
+                icon={<Calendar className="w-6 h-6" />}
+                title="月次請求書管理"
+                desc="毎月20日締めの完了案件を集計・一括請求書生成"
               />
               <DashboardCard
                 href="/admin/invoices"

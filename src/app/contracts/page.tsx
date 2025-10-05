@@ -106,6 +106,7 @@ function ContractsPageContent() {
   const completedProjectIdSet = React.useMemo(() => new Set(completedProjects.map(project => project.id)), [completedProjects])
   // 完了届作成済みプロジェクトID集合
   const [completionReportProjects, setCompletionReportProjects] = useState<Set<string>>(new Set())
+  const [completionReports, setCompletionReports] = useState<any[]>([])
   const [creatingCompletionReport, setCreatingCompletionReport] = useState<string | null>(null)
   const [supportPercent, setSupportPercent] = useState<number>(8)
   const [loadingSupport, setLoadingSupport] = useState<boolean>(false)
@@ -344,15 +345,18 @@ function ContractsPageContent() {
 
       if (response.ok) {
         const result = await response.json()
-        const reports = (result || []) as Array<{ project_id: string }>
+        const reports = (result || []) as Array<any>
+        setCompletionReports(reports)
         setCompletionReportProjects(new Set(reports.map(report => report.project_id)))
       } else {
         // サーバーエラーの場合は空配列を設定（機能準備中として表示）
         console.warn('業務完了届API未対応:', response.status)
+        setCompletionReports([])
         setCompletionReportProjects(new Set())
       }
     } catch (err: any) {
       console.error('業務完了届取得エラー:', err)
+      setCompletionReports([])
       setCompletionReportProjects(new Set())
     }
   }
@@ -1293,20 +1297,17 @@ function ContractsPageContent() {
                   </div>
 
                   <div className="grid gap-4">
-                    {Array.from(completionReportProjects).map((projectId) => {
-                      const projectContract = projectContracts[projectId]?.[0]
-                      const project = completedProjects.find(p => p.id === projectId)
-                      const report = Array.from(completionReportProjects).find(r => r.project_id === projectId)
-
-                      if (!project || !projectContract || !report) return null
+                    {completionReports.map((report) => {
+                      const projectContract = projectContracts[report.project_id]?.[0]
+                      const project = completedProjects.find(p => p.id === report.project_id)
 
                       return (
-                        <Card key={projectId} className="p-6">
+                        <Card key={report.id} className="p-6">
                           <div className="flex justify-between items-start">
                             <div className="flex-1">
                               <div className="flex items-center justify-between mb-2">
                                 <h3 className="text-lg font-semibold text-gray-900">
-                                  {project.title}
+                                  {report.projects?.title || project?.title || '案件名不明'}
                                 </h3>
                                 <Badge
                                   className={
@@ -1329,12 +1330,11 @@ function ContractsPageContent() {
                                 <div>
                                   <span className="font-medium">提出日:</span> {report.submission_date ? new Date(report.submission_date).toLocaleDateString('ja-JP') : '未提出'}
                                 </div>
-                                <div>
-                                  <span className="font-medium">発注者:</span> {project.org_name || '不明'}
-                                </div>
-                                <div>
-                                  <span className="font-medium">契約金額:</span> ¥{projectContract.bid_amount.toLocaleString()}
-                                </div>
+                                {projectContract && (
+                                  <div>
+                                    <span className="font-medium">契約金額:</span> ¥{projectContract.bid_amount.toLocaleString()}
+                                  </div>
+                                )}
                               </div>
 
                               {/* 署名状況 */}
@@ -1378,7 +1378,7 @@ function ContractsPageContent() {
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => window.open(`/api/completion-reports/${report.id}/pdf`, '_blank')}
+                                  onClick={() => openPdfWithAuth(`/api/completion-reports/${report.id}/pdf`)}
                                 >
                                   <FileText className="w-4 h-4 mr-2" />
                                   PDF表示

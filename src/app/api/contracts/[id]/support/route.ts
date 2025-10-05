@@ -31,6 +31,20 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return NextResponse.json({ message: 'この契約を操作する権限がありません' }, { status: 403 })
     }
 
+    const { data: project, error: pErr } = await supabase
+      .from('projects')
+      .select('status, completed_at')
+      .eq('id', contract.project_id)
+      .single()
+
+    if (pErr || !project) {
+      return NextResponse.json({ message: 'プロジェクトが見つかりません' }, { status: 404 })
+    }
+
+    if (project.status === 'completed' || project.completed_at) {
+      return NextResponse.json({ message: '案件完了後はサポートを変更できません' }, { status: 400 })
+    }
+
     const body = await request.json()
     const enable = !!body?.enable
 

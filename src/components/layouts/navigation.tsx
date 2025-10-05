@@ -22,7 +22,8 @@ import {
   Star,
   Box,
   Building2,
-  FolderLock
+  FolderLock,
+  Calendar
 } from "lucide-react"
 import { Button } from "../ui/button"
 import { Badge } from "../ui/badge"
@@ -45,6 +46,7 @@ const getNavigationItems = (userRole: string, badges: any) => {
       { icon: Users, label: "ユーザー管理", href: "/admin/users", badge: null },
       { icon: Building2, label: "会社管理・承認", href: "/admin/organizations", badge: badges.organizations || null },
       { icon: User, label: "個人事業主管理", href: "/admin/contractors", badge: null },
+      { icon: Calendar, label: "月次請求書管理", href: "/admin/monthly-billing", badge: null },
       { icon: FileText, label: "請求書管理", href: "/admin/invoices", badge: null },
       { icon: FolderLock, label: "Box権限管理", href: "/admin/box-permissions", badge: null },
       { icon: BarChart3, label: "統計・レポート", href: "/admin/reports", badge: null },
