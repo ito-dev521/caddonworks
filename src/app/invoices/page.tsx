@@ -70,6 +70,7 @@ interface CompletionReport {
     id: string
     bid_amount: number
     contractor_id: string
+    support_enabled?: boolean
   }
 }
 
@@ -184,8 +185,9 @@ function InvoicesPageContent() {
       groups[orgId].reports.push(report)
 
       const contractAmount = report.contracts?.bid_amount || 0
-      // サポート利用料を8%として計算（システム設定から取得すべき）
-      const supportFee = Math.round(contractAmount * 0.08)
+      // 受注者サポート利用（contract.support_enabled = true）の場合のみ、受注者がサポート料を支払う
+      const isContractorSupport = report.contracts?.support_enabled || false
+      const supportFee = isContractorSupport ? Math.round(contractAmount * 0.08) : 0
       const subtotal = contractAmount - supportFee
       const withholding = calculateWithholding(subtotal)
       const finalAmount = subtotal - withholding
@@ -490,7 +492,9 @@ function InvoicesPageContent() {
                           <tbody>
                             {group.reports.map((report) => {
                               const contractAmount = report.contracts?.bid_amount || 0
-                              const supportFee = Math.round(contractAmount * 0.08)
+                              // 受注者サポート利用の場合のみサポート料を差し引く
+                              const isContractorSupport = report.contracts?.support_enabled || false
+                              const supportFee = isContractorSupport ? Math.round(contractAmount * 0.08) : 0
                               const subtotal = contractAmount - supportFee
                               const withholding = calculateWithholding(subtotal)
                               const finalAmount = subtotal - withholding

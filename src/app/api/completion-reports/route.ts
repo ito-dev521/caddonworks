@@ -63,7 +63,8 @@ export async function GET(request: NextRequest) {
           start_date,
           end_date,
           signed_at,
-          contractor_id
+          contractor_id,
+          support_enabled
         )
       `)
 

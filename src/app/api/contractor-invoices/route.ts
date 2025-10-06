@@ -54,8 +54,8 @@ export async function POST(request: NextRequest) {
         project_id,
         contract_id,
         actual_completion_date,
-        projects(id, title, org_id, organizations(id, name)),
-        contracts(id, bid_amount, contractor_id)
+        projects(id, title, org_id, support_enabled, organizations(id, name)),
+        contracts(id, bid_amount, contractor_id, support_enabled)
       `)
       .in('id', completion_report_ids)
 
@@ -114,7 +114,9 @@ export async function POST(request: NextRequest) {
 
     reports.forEach((report: any) => {
       const contractAmount = report.contracts?.bid_amount || 0
-      const supportFee = Math.round((contractAmount * supportPercent) / 100)
+      // 受注者サポート利用（contract.support_enabled = true）の場合のみ、受注者がサポート料を支払う
+      const isContractorSupport = report.contracts?.support_enabled || false
+      const supportFee = isContractorSupport ? Math.round((contractAmount * supportPercent) / 100) : 0
       const subtotal = contractAmount - supportFee
       const withholding = calculateWithholding(subtotal)
 
