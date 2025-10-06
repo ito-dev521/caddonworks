@@ -54,18 +54,16 @@ export async function GET(request: NextRequest) {
           start_date,
           end_date,
           budget,
-          org_id
+          org_id,
+          organizations(id, name)
         ),
         contracts!inner(
           id,
           bid_amount,
           start_date,
           end_date,
-          signed_at
-        ),
-        organizations!inner(
-          id,
-          name
+          signed_at,
+          contractor_id
         )
       `)
 

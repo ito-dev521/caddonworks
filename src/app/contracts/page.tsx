@@ -572,46 +572,6 @@ function ContractsPageContent() {
     }
   }
 
-  // 業務完了届のデジタル署名
-  const handleSignCompletionReport = async (reportId: string) => {
-    try {
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-
-      if (sessionError || !session) {
-        console.error('セッション取得エラー:', sessionError)
-        alert('認証エラーが発生しました')
-        return
-      }
-
-      // 署名確認
-      const confirmSign = confirm('業務完了届にデジタル署名を開始しますか？Box Signのページが開きます。')
-      if (!confirmSign) return
-
-      const response = await fetch(`/api/completion-reports/${reportId}/sign`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json'
-        }
-      })
-
-      const result = await response.json()
-
-      if (response.ok) {
-        alert('デジタル署名リクエストを作成しました。署名ページに移動します。')
-        // 署名ページに移動
-        if (result.signing_urls && result.signing_urls.length > 0) {
-          window.open(result.signing_urls[0], '_blank')
-        }
-        fetchCompletionReports() // 再取得
-      } else {
-        alert(`署名リクエストの作成に失敗しました: ${result.message || '不明なエラー'}`)
-      }
-    } catch (err: any) {
-      console.error('署名エラー:', err)
-      alert('署名リクエストの作成に失敗しました')
-    }
-  }
 
   // URLパラメータからタブを設定
   useEffect(() => {
@@ -1363,27 +1323,14 @@ function ContractsPageContent() {
                             </div>
 
                             <div className="flex gap-2 ml-4">
-                              {!report.contractor_signed_at && (
-                                <Button
-                                  variant="engineering"
-                                  size="sm"
-                                  onClick={() => handleSignCompletionReport(report.id)}
-                                >
-                                  <FileText className="w-4 h-4 mr-2" />
-                                  署名する
-                                </Button>
-                              )}
-
-                              {report.contractor_signed_at && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => openPdfWithAuth(`/api/completion-reports/${report.id}/pdf`)}
-                                >
-                                  <FileText className="w-4 h-4 mr-2" />
-                                  PDF表示
-                                </Button>
-                              )}
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => openPdfWithAuth(`/api/completion-reports/${report.id}/pdf`)}
+                              >
+                                <FileText className="w-4 h-4 mr-2" />
+                                PDF表示
+                              </Button>
                             </div>
                           </div>
                         </Card>

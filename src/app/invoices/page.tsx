@@ -13,7 +13,10 @@ import {
   MessageCircle,
   User,
   Calendar,
-  DollarSign
+  DollarSign,
+  BarChart3,
+  TrendingUp,
+  TrendingDown
 } from "lucide-react"
 import { AuthGuard } from "@/components/auth/auth-guard"
 import { Navigation } from "@/components/layouts/navigation"
@@ -47,6 +50,39 @@ interface Invoice {
   }
 }
 
+interface CompletionReport {
+  id: string
+  project_id: string
+  contract_id: string
+  actual_completion_date: string
+  status: string
+  submission_date: string
+  projects: {
+    id: string
+    title: string
+    org_id: string
+    organizations: {
+      id: string
+      name: string
+    }
+  }
+  contracts: {
+    id: string
+    bid_amount: number
+    contractor_id: string
+  }
+}
+
+interface OrgGroup {
+  org_id: string
+  org_name: string
+  reports: CompletionReport[]
+  total_contract_amount: number
+  total_support_fee: number
+  total_withholding: number
+  total_final_amount: number
+}
+
 interface ContactForm {
   subject: string
   message: string
@@ -63,6 +99,7 @@ export default function InvoicesPage() {
 function InvoicesPageContent() {
   const { userProfile, userRole } = useAuth()
   const [invoices, setInvoices] = useState<Invoice[]>([])
+  const [completionReports, setCompletionReports] = useState<CompletionReport[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null)
   const [showContactForm, setShowContactForm] = useState(false)
@@ -71,6 +108,96 @@ function InvoicesPageContent() {
     message: ''
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [showSummary, setShowSummary] = useState(false)
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
+    const now = new Date()
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  })
+
+  // 源泉徴収税を計算
+  // 支払金額が100万円以下: 支払金額 × 10.21%
+  // 支払金額が100万円超: (支払金額 - 100万円) × 20.42% + 102,100円
+  const calculateWithholding = (amount: number) => {
+    if (amount <= 1000000) {
+      return Math.floor(amount * 0.1021)
+    } else {
+      return Math.floor((amount - 1000000) * 0.2042 + 102100)
+    }
+  }
+
+  // 最終請求額を計算
+  const calculateFinalAmount = (invoice: Invoice) => {
+    const withholding = calculateWithholding(invoice.total_amount)
+    return invoice.total_amount - withholding
+  }
+
+  // 業務完了届を取得
+  const fetchCompletionReports = async () => {
+    if (!userProfile) return
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
+      const response = await fetch(`/api/completion-reports`, {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`
+        }
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        setCompletionReports(result || [])
+      }
+    } catch (error) {
+      console.error('業務完了届取得エラー:', error)
+    }
+  }
+
+  // 選択月の業務完了届を組織別にグループ化
+  const getOrgGroups = (): OrgGroup[] => {
+    const [year, month] = selectedMonth.split('-').map(Number)
+    const filtered = completionReports.filter(report => {
+      if (!report.actual_completion_date) return false
+      const completionDate = new Date(report.actual_completion_date)
+      return completionDate.getFullYear() === year && completionDate.getMonth() + 1 === month
+    })
+
+    const groups: Record<string, OrgGroup> = {}
+
+    filtered.forEach(report => {
+      const orgId = report.projects?.org_id || 'unknown'
+      const orgName = report.projects?.organizations?.name || '不明な組織'
+
+      if (!groups[orgId]) {
+        groups[orgId] = {
+          org_id: orgId,
+          org_name: orgName,
+          reports: [],
+          total_contract_amount: 0,
+          total_support_fee: 0,
+          total_withholding: 0,
+          total_final_amount: 0
+        }
+      }
+
+      groups[orgId].reports.push(report)
+
+      const contractAmount = report.contracts?.bid_amount || 0
+      // サポート利用料を8%として計算（システム設定から取得すべき）
+      const supportFee = Math.round(contractAmount * 0.08)
+      const subtotal = contractAmount - supportFee
+      const withholding = calculateWithholding(subtotal)
+      const finalAmount = subtotal - withholding
+
+      groups[orgId].total_contract_amount += contractAmount
+      groups[orgId].total_support_fee += supportFee
+      groups[orgId].total_withholding += withholding
+      groups[orgId].total_final_amount += finalAmount
+    })
+
+    return Object.values(groups)
+  }
 
   // 請求書一覧を取得
   const fetchInvoices = async () => {
@@ -169,9 +296,62 @@ function InvoicesPageContent() {
     }
   }
 
+  // 請求書作成（運営者へ）
+  const handleCreateContractorInvoice = async (orgGroup: OrgGroup) => {
+    if (!confirm(`${orgGroup.org_name}への請求書を作成しますか？\n請求額: ¥${orgGroup.total_final_amount.toLocaleString()}`)) {
+      return
+    }
+
+    try {
+      setIsSubmitting(true)
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        alert('セッションが切れています。再ログインしてください。')
+        return
+      }
+
+      console.log('請求書作成リクエスト:', {
+        org_id: orgGroup.org_id,
+        month: selectedMonth,
+        completion_report_ids: orgGroup.reports.map(r => r.id),
+        reports_count: orgGroup.reports.length
+      })
+
+      const response = await fetch('/api/contractor-invoices', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          org_id: orgGroup.org_id,
+          month: selectedMonth,
+          completion_report_ids: orgGroup.reports.map(r => r.id)
+        })
+      })
+
+      const result = await response.json()
+      console.log('請求書作成レスポンス:', result)
+
+      if (response.ok) {
+        alert('請求書を作成しました。管理者の請求書管理ページで確認できます。')
+        await fetchInvoices()
+      } else {
+        console.error('請求書作成エラー:', result)
+        alert(`請求書作成に失敗しました: ${result.message}\n${result.error || result.detail || ''}`)
+      }
+    } catch (error) {
+      console.error('請求書作成エラー:', error)
+      alert('ネットワークエラーが発生しました: ' + (error as Error).message)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   useEffect(() => {
     if (userProfile && userRole === 'Contractor') {
       fetchInvoices()
+      fetchCompletionReports()
     }
   }, [userProfile, userRole])
 
@@ -242,19 +422,157 @@ function InvoicesPageContent() {
             >
               <div className="flex items-center justify-between">
                 <div>
-                  <h1 className="text-3xl font-bold text-gray-900">請求書管理</h1>
+                  <h1 className="text-3xl font-bold text-gray-900">請求書・報酬管理</h1>
                   <p className="text-gray-600 mt-2">
-                    発注者から作成された請求書を確認し、発行してください
+                    業務完了届に基づく請求書を確認できます。契約金額からサポート利用料と源泉徴収税が控除された金額が請求額となります。
                   </p>
                 </div>
+                <Button
+                  onClick={() => setShowSummary(!showSummary)}
+                  variant={showSummary ? "default" : "outline"}
+                  className={showSummary ? "bg-engineering-blue" : ""}
+                >
+                  <BarChart3 className="w-4 h-4 mr-2" />
+                  {showSummary ? '集計を非表示' : '集計を表示'}
+                </Button>
               </div>
+            </motion.div>
+
+            {/* 組織別集計表示 */}
+            {showSummary && (
+              <motion.div
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ delay: 0.1 }}
+                className="space-y-4"
+              >
+                {/* 月選択 */}
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="flex items-center gap-4">
+                      <label className="text-sm font-medium text-gray-700">対象月:</label>
+                      <input
+                        type="month"
+                        value={selectedMonth}
+                        onChange={(e) => setSelectedMonth(e.target.value)}
+                        className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-engineering-blue focus:border-transparent"
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* 組織別集計 */}
+                {getOrgGroups().map((group) => (
+                  <Card key={group.org_id} className="bg-gradient-to-br from-gray-50 to-white">
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-lg">{group.org_name}</CardTitle>
+                        <Badge className="bg-engineering-blue text-white">
+                          請求額 ¥{group.total_final_amount.toLocaleString()}
+                        </Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      {/* 業務一覧テーブル */}
+                      <div className="overflow-x-auto mb-4">
+                        <table className="w-full text-sm">
+                          <thead className="bg-gray-100">
+                            <tr>
+                              <th className="px-4 py-2 text-left">プロジェクト</th>
+                              <th className="px-4 py-2 text-left">完了日</th>
+                              <th className="px-4 py-2 text-right">契約金額</th>
+                              <th className="px-4 py-2 text-right">サポート利用金額</th>
+                              <th className="px-4 py-2 text-right">源泉税</th>
+                              <th className="px-4 py-2 text-right">請求額</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {group.reports.map((report) => {
+                              const contractAmount = report.contracts?.bid_amount || 0
+                              const supportFee = Math.round(contractAmount * 0.08)
+                              const subtotal = contractAmount - supportFee
+                              const withholding = calculateWithholding(subtotal)
+                              const finalAmount = subtotal - withholding
+                              return (
+                                <tr key={report.id} className="border-t">
+                                  <td className="px-4 py-2">{report.projects?.title || '—'}</td>
+                                  <td className="px-4 py-2">{new Date(report.actual_completion_date).toLocaleDateString('ja-JP')}</td>
+                                  <td className="px-4 py-2 text-right">¥{contractAmount.toLocaleString()}</td>
+                                  <td className="px-4 py-2 text-right text-red-600">¥{supportFee.toLocaleString()}</td>
+                                  <td className="px-4 py-2 text-right text-orange-600">¥{withholding.toLocaleString()}</td>
+                                  <td className="px-4 py-2 text-right font-semibold">¥{finalAmount.toLocaleString()}</td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                          <tfoot className="bg-gray-50 font-bold">
+                            <tr>
+                              <td className="px-4 py-2" colSpan={2}>合計 ({group.reports.length}件)</td>
+                              <td className="px-4 py-2 text-right">¥{group.total_contract_amount.toLocaleString()}</td>
+                              <td className="px-4 py-2 text-right text-red-600">¥{group.total_support_fee.toLocaleString()}</td>
+                              <td className="px-4 py-2 text-right text-orange-600">¥{group.total_withholding.toLocaleString()}</td>
+                              <td className="px-4 py-2 text-right text-engineering-blue">¥{group.total_final_amount.toLocaleString()}</td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+
+                      {/* 請求書作成ボタン */}
+                      <div className="flex justify-end">
+                        <Button
+                          className="bg-engineering-blue hover:bg-engineering-blue-dark"
+                          onClick={() => handleCreateContractorInvoice(group)}
+                          disabled={isSubmitting}
+                        >
+                          <FileText className="w-4 h-4 mr-2" />
+                          {isSubmitting ? '作成中...' : '請求書作成'}
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+
+                {getOrgGroups().length === 0 && (
+                  <Card>
+                    <CardContent className="py-8 text-center text-gray-500">
+                      {selectedMonth}の業務完了届はありません
+                    </CardContent>
+                  </Card>
+                )}
+              </motion.div>
+            )}
+
+            {/* 計算方法の説明 */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: showSummary ? 0.2 : 0.1 }}
+            >
+              <Card className="bg-blue-50 border-blue-200">
+                <CardContent className="pt-6">
+                  <div className="flex items-start gap-3">
+                    <DollarSign className="w-5 h-5 text-blue-600 mt-1" />
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-blue-900 mb-2">💡 請求額の計算方法</h3>
+                      <div className="text-sm text-blue-800 space-y-1">
+                        <p>① 契約金額（税込）- サポート利用料 = 小計</p>
+                        <p>② 小計 - 源泉徴収税 = <strong>請求額（お振込金額）</strong></p>
+                        <p className="text-xs text-blue-600 mt-2">
+                          ※源泉徴収税：小計が100万円以下の場合「小計 × 10.21%」、100万円超の場合「(小計 - 100万円) × 20.42% + 102,100円」
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </motion.div>
 
             {/* 請求書一覧 */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
+              transition={{ delay: 0.2 }}
             >
               <Card>
                 <CardHeader>
@@ -298,10 +616,13 @@ function InvoicesPageContent() {
                             </div>
                             <div className="flex items-center gap-4">
                               <div className="text-right">
-                                <p className="font-semibold text-gray-900">
-                                  ¥{invoice.total_amount.toLocaleString()}
+                                <p className="font-semibold text-engineering-blue text-lg">
+                                  ¥{calculateFinalAmount(invoice).toLocaleString()}
                                 </p>
                                 <p className="text-sm text-gray-500">
+                                  請求額（源泉税控除後）
+                                </p>
+                                <p className="text-xs text-gray-400 mt-1">
                                   {new Date(invoice.issue_date).toLocaleDateString('ja-JP')}
                                 </p>
                               </div>
@@ -404,17 +725,42 @@ function InvoicesPageContent() {
                         <h3 className="font-semibold text-gray-900 mb-3">金額詳細</h3>
                         <div className="space-y-2">
                           <div className="flex justify-between">
-                            <span className="text-gray-600">契約金額</span>
-                            <span className="text-gray-900">¥{selectedInvoice.base_amount.toLocaleString()}</span>
+                            <span className="text-gray-600">契約金額（税込）</span>
+                            <span className="text-gray-900">¥{selectedInvoice.contract.bid_amount.toLocaleString()}</span>
                           </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">システム手数料</span>
-                            <span className="text-gray-900">¥{selectedInvoice.system_fee.toLocaleString()}</span>
-                          </div>
-                          <div className="flex justify-between border-t pt-2 font-semibold">
-                            <span className="text-gray-900">合計金額</span>
+                          {(() => {
+                            const supportFee = selectedInvoice.contract.bid_amount - selectedInvoice.total_amount
+                            if (supportFee > 0) {
+                              return (
+                                <div className="flex justify-between text-red-600">
+                                  <span>サポート利用料</span>
+                                  <span>-¥{supportFee.toLocaleString()}</span>
+                                </div>
+                              )
+                            }
+                            return null
+                          })()}
+                          <div className="flex justify-between border-t pt-2">
+                            <span className="text-gray-900">小計</span>
                             <span className="text-gray-900">¥{selectedInvoice.total_amount.toLocaleString()}</span>
                           </div>
+                          {(() => {
+                            const total = selectedInvoice.total_amount
+                            const withholding = calculateWithholding(total)
+                            const finalAmount = total - withholding
+                            return (
+                              <>
+                                <div className="flex justify-between text-orange-600">
+                                  <span>源泉徴収税（{total <= 1000000 ? '10.21%' : '20.42%'}）</span>
+                                  <span>-¥{withholding.toLocaleString()}</span>
+                                </div>
+                                <div className="flex justify-between border-t pt-2 font-bold text-lg">
+                                  <span className="text-engineering-blue">請求額</span>
+                                  <span className="text-engineering-blue">¥{finalAmount.toLocaleString()}</span>
+                                </div>
+                              </>
+                            )
+                          })()}
                         </div>
                       </div>
 

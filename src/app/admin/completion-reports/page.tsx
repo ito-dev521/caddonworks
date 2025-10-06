@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { supabase } from '@/lib/supabase'
 import { GenerateInvoiceButton } from '@/components/completion-report/generate-invoice-button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
@@ -26,7 +26,6 @@ interface CompletionReport {
 export default function AdminCompletionReportsPage() {
   const [reports, setReports] = useState<CompletionReport[]>([])
   const [loading, setLoading] = useState(true)
-  const supabase = createClient()
 
   const fetchReports = async () => {
     try {

@@ -31,10 +31,14 @@ export async function GET(request: NextRequest) {
     const to = searchParams.get('to')
 
     let query = supabase.from('invoices').select(`
-      id, status, issue_date, due_date, total_amount,
+      id, status, issue_date, due_date, total_amount, contractor_id,
       projects:project_id ( id, title ),
-      organizations:org_id ( id, name )
+      organizations:org_id ( id, name ),
+      users:contractor_id ( id, display_name )
     `)
+
+    // 受注者が存在する請求書のみ（受注者からの請求）
+    query = query.not('contractor_id', 'is', null)
 
     if (status) query = query.eq('status', status)
     if (from) query = query.gte('issue_date', from)
@@ -45,13 +49,14 @@ export async function GET(request: NextRequest) {
 
     const rows = (data || []).map((d: any) => ({
       id: d.id,
-      invoice_number: d.invoice_number || `INV-${String(d.id).slice(0,8).toUpperCase()}`,
+      invoice_number: `CINV-${String(d.id).slice(0,8).toUpperCase()}`,
       status: d.status,
       issue_date: d.issue_date,
       due_date: d.due_date,
       total_amount: d.total_amount ?? 0,
       project: { id: d.projects?.id, title: d.projects?.title },
-      client_org: { id: d.organizations?.id, name: d.organizations?.name }
+      client_org: { id: d.organizations?.id, name: d.organizations?.name },
+      contractor: { id: d.users?.id, name: d.users?.display_name }
     }))
 
     const filtered = q

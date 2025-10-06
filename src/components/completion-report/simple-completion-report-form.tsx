@@ -61,7 +61,6 @@ interface SimpleCompletionReportFormProps {
   contract: Contract
   organization: Organization
   onSubmit: (data: CompletionReportData) => void
-  onCreateSignatureRequest?: (data: CompletionReportData) => void
   existingReport?: CompletionReportData
   readOnly?: boolean
 }
@@ -71,7 +70,6 @@ export function SimpleCompletionReportForm({
   contract,
   organization,
   onSubmit,
-  onCreateSignatureRequest,
   existingReport,
   readOnly = false
 }: SimpleCompletionReportFormProps) {
@@ -124,23 +122,6 @@ export function SimpleCompletionReportForm({
     }
   }
 
-  // デジタル署名リクエスト作成
-  const handleCreateSignatureRequest = async () => {
-    if (!validate()) return
-    if (!onCreateSignatureRequest) return
-
-    setLoading(true)
-    try {
-      await onCreateSignatureRequest({
-        ...formData,
-        status: 'submitted'
-      })
-    } catch (err: any) {
-      setError(err.message || 'エラーが発生しました')
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const getStatusBadge = (status: string) => {
     const statusConfig = {
@@ -423,64 +404,12 @@ export function SimpleCompletionReportForm({
               <Button
                 onClick={handleSubmit}
                 disabled={loading}
-                variant="outline"
                 size="lg"
+                className="bg-engineering-blue hover:bg-engineering-blue-dark"
               >
                 <Send className="w-4 h-4 mr-2" />
                 {loading ? '提出中...' : '完了届を提出'}
               </Button>
-
-              {onCreateSignatureRequest && (
-                <Button
-                  onClick={handleCreateSignatureRequest}
-                  disabled={loading}
-                  size="lg"
-                  className="bg-engineering-blue hover:bg-engineering-blue-dark"
-                >
-                  <FileText className="w-4 h-4 mr-2" />
-                  {loading ? 'デジタル署名作成中...' : 'デジタル署名で提出'}
-                </Button>
-              )}
-            </div>
-
-            <div className="mt-4 text-center text-sm text-gray-600">
-              デジタル署名を使用すると、受注者と発注者の電子署名による正式な完了届が作成されます
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* デジタル署名進行状況 */}
-      {formData.box_sign_request_id && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <FileText className="w-5 h-5 text-engineering-blue" />
-              デジタル署名進行状況
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
-                <span className="font-medium">Box Sign リクエストID</span>
-                <span className="font-mono text-sm">{formData.box_sign_request_id}</span>
-              </div>
-
-              {formData.signed_document_id && (
-                <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
-                  <span className="font-medium">署名済み文書</span>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      // ダウンロード処理
-                      window.open(`/api/box/download/${formData.signed_document_id}`, '_blank')
-                    }}
-                  >
-                    ダウンロード
-                  </Button>
-                </div>
-              )}
             </div>
           </CardContent>
         </Card>

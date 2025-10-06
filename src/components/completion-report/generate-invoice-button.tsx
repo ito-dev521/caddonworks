@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { createClient } from '@/lib/supabase/client'
+import { supabase } from '@/lib/supabase'
 
 interface GenerateInvoiceButtonProps {
   completionReportId: string
@@ -11,7 +11,6 @@ interface GenerateInvoiceButtonProps {
 
 export function GenerateInvoiceButton({ completionReportId, onSuccess }: GenerateInvoiceButtonProps) {
   const [loading, setLoading] = useState(false)
-  const supabase = createClient()
 
   const handleGenerateInvoice = async () => {
     try {
