@@ -58,7 +58,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     const { data: project, error: pErr } = await supabase
       .from('projects')
-      .select('status, completed_at')
+      .select('status')
       .eq('id', contract.project_id)
       .single()
 
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return NextResponse.json({ message: 'プロジェクトが見つかりません' }, { status: 404 })
     }
 
-    if (project.status === 'completed' || project.completed_at) {
+    if (project.status === 'completed' || project.status === 'archived') {
       return NextResponse.json({ message: '案件完了後はサポートを変更できません' }, { status: 400 })
     }
 

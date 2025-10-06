@@ -47,7 +47,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     if (contract.project_id) {
       const { data: project, error: pErr } = await supabase
         .from('projects')
-        .select('id, title, status, completed_at')
+        .select('id, title, status')
         .eq('id', contract.project_id)
         .single()
 
@@ -61,8 +61,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         result.project = {
           id: project.id,
           title: project.title,
-          status: project.status,
-          completed_at: project.completed_at
+          status: project.status
         }
       }
     } else {
