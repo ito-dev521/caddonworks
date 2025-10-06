@@ -25,10 +25,20 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       .select('id, contractor_id, project_id')
       .eq('id', contractId)
       .single()
-    if (cErr || !contract) return NextResponse.json({ message: '契約が見つかりません' }, { status: 404 })
+
+    if (cErr || !contract) {
+      console.error('契約取得エラー:', { contractId, error: cErr })
+      return NextResponse.json({ message: '契約が見つかりません' }, { status: 404 })
+    }
 
     if (contract.contractor_id !== me.id) {
       return NextResponse.json({ message: 'この契約を操作する権限がありません' }, { status: 403 })
+    }
+
+    // project_idがnullの場合のチェック
+    if (!contract.project_id) {
+      console.error('契約にproject_idが設定されていません:', { contractId, contract })
+      return NextResponse.json({ message: '契約にプロジェクトが関連付けられていません' }, { status: 400 })
     }
 
     const { data: project, error: pErr } = await supabase
@@ -38,6 +48,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       .single()
 
     if (pErr || !project) {
+      console.error('プロジェクト取得エラー:', { project_id: contract.project_id, error: pErr })
       return NextResponse.json({ message: 'プロジェクトが見つかりません' }, { status: 404 })
     }
 
