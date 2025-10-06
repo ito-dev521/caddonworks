@@ -22,14 +22,27 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const contractId = params.id
     const { data: contract, error: cErr } = await supabase
       .from('contracts')
-      .select('id, contractor_id, project_id')
+      .select('id, contractor_id, project_id, contract_title')
       .eq('id', contractId)
       .single()
 
     if (cErr || !contract) {
-      console.error('契約取得エラー:', { contractId, error: cErr })
+      console.error('契約取得エラー:', {
+        contractId,
+        error: cErr,
+        errorCode: cErr?.code,
+        errorMessage: cErr?.message,
+        errorDetails: cErr?.details
+      })
       return NextResponse.json({ message: '契約が見つかりません' }, { status: 404 })
     }
+
+    console.log('契約データ:', {
+      id: contract.id,
+      project_id: contract.project_id,
+      contract_title: contract.contract_title,
+      contractor_id: contract.contractor_id
+    })
 
     if (contract.contractor_id !== me.id) {
       return NextResponse.json({ message: 'この契約を操作する権限がありません' }, { status: 403 })
