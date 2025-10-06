@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getAppAuthAccessToken, getBoxFolderItems } from '@/lib/box'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET() {
   try {
     const token = await getAppAuthAccessToken()

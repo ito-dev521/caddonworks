@@ -3,6 +3,8 @@ import PDFDocument from 'pdfkit'
 import { renderTemplatePdf } from '@/lib/pdf'
 import { createSupabaseAdmin } from '@/lib/supabase'
 
+export const dynamic = 'force-dynamic'
+
 type Kind = 'invoice' | 'ack' | 'order'
 
 const BUCKET = 'documents'

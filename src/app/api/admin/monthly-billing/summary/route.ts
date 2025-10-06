@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdmin } from '@/lib/supabase'
 
+export const dynamic = 'force-dynamic'
+
 /**
  * 月次請求の集計APIエンドポイント
  * 指定された年月（または当月）の完了案件を組織ごとに集計

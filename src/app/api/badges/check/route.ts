@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createBadgeChecker } from '@/lib/badge-checker'
 
+export const dynamic = 'force-dynamic'
+
 /**
  * POST /api/badges/check
  * ユーザーのバッジ取得条件をチェックし、新規バッジを付与

@@ -7,6 +7,8 @@ import {
 } from '@/lib/mailgun'
   import { getMemberLevelInfo } from '@/lib/member-level'
 
+export const dynamic = 'force-dynamic'
+
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,

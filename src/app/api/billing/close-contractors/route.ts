@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdmin } from '@/lib/supabase'
 import { calculateContractorPayout } from '@/lib/billing'
 
+export const dynamic = 'force-dynamic'
+
 // 20日締め → 月末支払いの受注者集計を作成
 // GET /api/billing/close-contractors?year=2025&month=9
 

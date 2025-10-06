@@ -4,6 +4,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import jwt, { SignOptions } from 'jsonwebtoken'
 import crypto from 'crypto'
 
+export const dynamic = 'force-dynamic'
+
 function getEnv(name: string): string {
   const v = process.env[name]
   if (!v) throw new Error(`Env ${name} is not set`)

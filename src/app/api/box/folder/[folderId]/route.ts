@@ -3,6 +3,8 @@ export const runtime = 'nodejs'
 import { NextRequest, NextResponse } from 'next/server'
 import { getBoxFolderItems } from '@/lib/box'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: NextRequest, { params }: { params: { folderId: string } }) {
   try {
     // Authorizationヘッダーからユーザー情報を取得

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { PDFDocument, StandardFonts, rgb, PDFFont } from 'pdf-lib'
 
+export const dynamic = 'force-dynamic'
+
 // GET /api/billing/pdf?type=invoice&title=請求書&total=66000
 export async function GET(request: NextRequest) {
   try {

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdmin } from '@/lib/supabase'
 
+export const dynamic = 'force-dynamic'
+
 // 受注者が自身の契約でサポート利用を有効化/無効化する
 // POST /api/contracts/:id/support  { enable: boolean }
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {

@@ -3,6 +3,8 @@ import { createClient } from '@supabase/supabase-js'
 import { deleteBoxFolder } from '@/lib/box'
 import { createBadgeChecker } from '@/lib/badge-checker'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }

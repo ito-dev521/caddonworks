@@ -2,6 +2,8 @@ export const runtime = 'nodejs'
 
 import { NextRequest, NextResponse } from 'next/server'
 
+export const dynamic = 'force-dynamic'
+
 export async function POST(request: NextRequest) {
   // 緊急対応: Box Sign機能を一時停止
   return NextResponse.json({

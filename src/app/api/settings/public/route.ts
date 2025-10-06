@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdmin } from '@/lib/supabase'
 
+export const dynamic = 'force-dynamic'
+
 // 認証不要の公開設定（現在は support_fee_percent のみ）
 export async function GET(_request: NextRequest) {
   try {

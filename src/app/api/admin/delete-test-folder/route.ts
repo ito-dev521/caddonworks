@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { deleteBoxFolder } from '@/lib/box'
 
+export const dynamic = 'force-dynamic'
+
 export async function POST(request: NextRequest) {
   try {
     console.log('🗑️ Deleting test folder...')

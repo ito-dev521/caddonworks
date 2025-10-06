@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdmin } from '@/lib/supabase'
 
+export const dynamic = 'force-dynamic'
+
 // チャット関連テーブル(chat_rooms, chat_participants, chat_messages)を作成/補修する
 export async function POST(request: NextRequest) {
   try {

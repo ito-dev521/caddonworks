@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+export const dynamic = 'force-dynamic'
+
 // 国税庁法人番号システムWeb-API Ver 4.0
 // 公式仕様: https://www.houjin-bangou.nta.go.jp/webapi/
 const API_BASE_URL = 'https://api.houjin-bangou.nta.go.jp/4'

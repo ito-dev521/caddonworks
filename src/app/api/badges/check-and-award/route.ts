@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createBadgeChecker } from '@/lib/badge-checker'
 import { createSupabaseAdmin } from '@/lib/supabase'
 
+export const dynamic = 'force-dynamic'
+
 const supabaseAdmin = createSupabaseAdmin()
 
 /**

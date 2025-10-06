@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdmin } from '@/lib/supabase'
 
+export const dynamic = 'force-dynamic'
+
 type OperatorRole = 'Admin' | 'Reviewer' | 'Auditor'
 
 async function assertAdminAndGetOperatorOrgId(request: NextRequest) {

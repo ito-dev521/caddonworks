@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdmin } from '@/lib/supabase'
 import { generatePassword } from '@/lib/password-generator'
 
+export const dynamic = 'force-dynamic'
+
 // 管理者が対象ユーザーのパスワードを即時リセット（ランダム再発行）するAPI
 // 注意: 新しいパスワードはレスポンスで管理者へ返すため、取り扱いに注意。
 export async function POST(request: NextRequest) {

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase, createSupabaseAdmin } from '@/lib/supabase'
 
+export const dynamic = 'force-dynamic'
+
 // 添付資料の一覧取得
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {

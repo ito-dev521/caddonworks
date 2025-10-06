@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAppAuthAccessToken } from '@/lib/box'
 
+export const dynamic = 'force-dynamic'
+
 export async function DELETE(request: NextRequest, { params }: { params: { fileId: string } }) {
   try {
     const authHeader = request.headers.get('authorization')

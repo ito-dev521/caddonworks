@@ -3,6 +3,8 @@ import { createSupabaseAdmin } from '@/lib/supabase'
 import { calculateOrgInvoice } from '@/lib/billing'
 import { generatePdfPlaceholder } from '@/lib/pdf'
 
+export const dynamic = 'force-dynamic'
+
 // 発注者向け: 20日締め → 翌月5日支払いの請求書作成
 // GET /api/billing/invoice-orgs?year=2025&month=9&org_id=...
 

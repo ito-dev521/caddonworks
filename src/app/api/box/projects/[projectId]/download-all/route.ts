@@ -3,6 +3,8 @@ import { createClient } from '@supabase/supabase-js'
 import BoxSDK from 'box-node-sdk'
 import JSZip from 'jszip'
 
+export const dynamic = 'force-dynamic'
+
 interface BoxItem {
   id: string
   name: string

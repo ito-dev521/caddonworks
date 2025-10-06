@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdmin } from '@/lib/supabase'
 
+export const dynamic = 'force-dynamic'
+
 // 管理者が対象ユーザーへパスワードリセットメールを送信するAPI
 export async function POST(request: NextRequest) {
   try {

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createCompanyFolder } from '@/lib/box'
 
+export const dynamic = 'force-dynamic'
+
 export async function POST(request: NextRequest) {
   try {
     const { companyName } = await request.json()

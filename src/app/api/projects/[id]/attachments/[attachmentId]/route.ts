@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 
+export const dynamic = 'force-dynamic'
+
 // 添付資料の削除
 export async function DELETE(request: NextRequest, { params }: { params: { id: string, attachmentId: string } }) {
   try {

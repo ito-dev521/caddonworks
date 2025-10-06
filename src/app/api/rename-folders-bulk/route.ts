@@ -3,6 +3,8 @@ export const runtime = 'nodejs'
 import { NextRequest, NextResponse } from 'next/server'
 import { getBoxFolderItems, renameBoxFolder } from '@/lib/box'
 
+export const dynamic = 'force-dynamic'
+
 export async function POST(request: NextRequest) {
   try {
     const { rootFolderId, dryRun = true } = await request.json()

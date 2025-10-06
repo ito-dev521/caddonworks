@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdmin } from '@/lib/supabase'
 
+export const dynamic = 'force-dynamic'
+
 // デバッグ用: 契約データを確認
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {

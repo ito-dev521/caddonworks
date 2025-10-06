@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { documentGenerator, createOrderAcceptanceDocumentData } from '@/lib/document-generator'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET() {
   try {
     console.log('📋 テスト用注文請書PDF生成開始')

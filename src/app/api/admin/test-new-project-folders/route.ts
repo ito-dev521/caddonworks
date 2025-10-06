@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createProjectFolderStructure } from '@/lib/box'
 
+export const dynamic = 'force-dynamic'
+
 export async function POST(request: NextRequest) {
   try {
     console.log('🧪 Testing new project folder creation with numbered subfolders...')

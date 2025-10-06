@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { calculateMemberLevel, canAccessProject, type MemberLevel } from '@/lib/member-level'
 
+export const dynamic = 'force-dynamic'
+
 // アドバイス生成関数
 function generateAdvice(job: any, currentBidCount: number, isExpired: boolean): string {
   if (isExpired) {

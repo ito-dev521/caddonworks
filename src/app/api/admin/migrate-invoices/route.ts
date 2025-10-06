@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdmin } from '@/lib/supabase'
 
+export const dynamic = 'force-dynamic'
+
 /**
  * invoicesテーブルに月次請求用の列を追加するマイグレーション
  * 運営者のみ実行可能

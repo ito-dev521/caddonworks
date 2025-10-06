@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdmin } from '@/lib/supabase'
 
+export const dynamic = 'force-dynamic'
+
 export const runtime = 'nodejs'
 
 // 開発環境専用: 指定メールアドレスのパスワードを任意の値に更新

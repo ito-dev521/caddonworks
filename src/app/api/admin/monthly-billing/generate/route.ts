@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdmin } from '@/lib/supabase'
 
+export const dynamic = 'force-dynamic'
+
 /**
  * 月次請求書一括生成API
  * 指定された年月の完了案件をもとに、組織ごとの請求書を一括生成

@@ -3,6 +3,8 @@ import { createSupabaseAdmin } from '@/lib/supabase'
 import { calculateContractorPayout, calculateOrgInvoice } from '@/lib/billing'
 import { generatePdfPlaceholder } from '@/lib/pdf'
 
+export const dynamic = 'force-dynamic'
+
 // 業務完了届（contract_id基準）から、
 // 受注者向け請求（contractor->operator）と、後続の事業者請求の下準備を作成
 

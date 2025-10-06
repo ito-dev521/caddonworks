@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { withOrganizationCheck } from '@/lib/api-organization-check'
 
+export const dynamic = 'force-dynamic'
+
 // Service roleキーでSupabaseクライアントを作成（RLSをバイパス）
 
 const supabaseAdmin = createClient(

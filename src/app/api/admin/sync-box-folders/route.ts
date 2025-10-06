@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdmin } from '@/lib/supabase'
 import { createCompanyFolder, createProjectFolderStructure } from '@/lib/box'
 
+export const dynamic = 'force-dynamic'
+
 const supabaseAdmin = createSupabaseAdmin()
 
 export async function POST(request: NextRequest) {

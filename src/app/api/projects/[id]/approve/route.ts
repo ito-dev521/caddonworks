@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+
+export const dynamic = 'force-dynamic'
 // Box SDK経由ではなく、安定化のためHTTPのプロビジョナに委譲する
 
 const supabaseAdmin = createClient(

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdmin } from '@/lib/supabase'
 
+export const dynamic = 'force-dynamic'
+
 const supabaseAdmin = createSupabaseAdmin()
 
 export async function GET(request: NextRequest) {

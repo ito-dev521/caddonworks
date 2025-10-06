@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdmin } from '@/lib/supabase'
 
+export const dynamic = 'force-dynamic'
+
 const supabase = createSupabaseAdmin()
 
 // 受注者向けの案件添付資料一覧取得
