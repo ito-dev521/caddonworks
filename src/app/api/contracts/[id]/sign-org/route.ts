@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { addFolderCollaboration } from '@/lib/box-collaboration'
+import { getBoxFolderItems } from '@/lib/box'
 
 export const dynamic = 'force-dynamic'
 
@@ -320,6 +322,106 @@ export async function POST(
           }
         }
       }
+    }
+
+    // BOXフォルダへのアクセス権限を付与
+    try {
+      // プロジェクト情報とBOXフォルダIDを取得
+      const { data: projectWithBox } = await supabaseAdmin
+        .from('projects')
+        .select('box_folder_id, box_subfolders, title')
+        .eq('id', contract.project_id)
+        .single()
+
+      if (projectWithBox?.box_folder_id) {
+        console.log('📁 受注者にBOXアクセス権限を付与開始')
+
+        // 受注者情報を取得
+        const { data: contractorInfo } = await supabaseAdmin
+          .from('users')
+          .select('email, display_name')
+          .eq('id', contract.contractor_id)
+          .single()
+
+        if (contractorInfo?.email) {
+          console.log('✅ 受注者メールアドレス:', contractorInfo.email)
+
+          // メインプロジェクトフォルダに権限付与（editor権限、メールアドレスで直接コラボレーション）
+          const mainFolderResult = await addFolderCollaboration(
+            projectWithBox.box_folder_id,
+            contractorInfo.email,
+            'editor',
+            projectWithBox.title
+          )
+
+          if (mainFolderResult.success) {
+            console.log('✅ メインプロジェクトフォルダへのアクセス権限を付与しました')
+
+            // サブフォルダにも権限付与
+            if (projectWithBox.box_subfolders) {
+              const subfolders = projectWithBox.box_subfolders as Record<string, string>
+
+              for (const [folderName, folderId] of Object.entries(subfolders)) {
+                if (folderId) {
+                  const subfolderResult = await addFolderCollaboration(
+                    folderId,
+                    contractorInfo.email,
+                    'editor',
+                    `${projectWithBox.title} - ${folderName}`
+                  )
+
+                  if (subfolderResult.success) {
+                    console.log(`✅ サブフォルダ「${folderName}」へのアクセス権限を付与しました`)
+                  } else {
+                    console.error(`❌ サブフォルダ「${folderName}」への権限付与失敗:`, subfolderResult.error)
+                  }
+
+                  // API Rate Limitを考慮
+                  await new Promise(resolve => setTimeout(resolve, 300))
+                }
+              }
+            } else {
+              // box_subfoldersがない場合、フォルダ構造を直接取得して権限付与
+              console.log('📁 サブフォルダ情報がないため、BOXから直接取得します')
+
+              try {
+                const items = await getBoxFolderItems(projectWithBox.box_folder_id)
+                const subfolders = items.filter(item => item.type === 'folder')
+
+                for (const subfolder of subfolders) {
+                  const subfolderResult = await addFolderCollaboration(
+                    subfolder.id,
+                    contractorInfo.email,
+                    'editor',
+                    `${projectWithBox.title} - ${subfolder.name}`
+                  )
+
+                  if (subfolderResult.success) {
+                    console.log(`✅ サブフォルダ「${subfolder.name}」へのアクセス権限を付与しました`)
+                  } else {
+                    console.error(`❌ サブフォルダ「${subfolder.name}」への権限付与失敗:`, subfolderResult.error)
+                  }
+
+                  // API Rate Limitを考慮
+                  await new Promise(resolve => setTimeout(resolve, 300))
+                }
+              } catch (folderError) {
+                console.error('❌ サブフォルダ取得エラー:', folderError)
+              }
+            }
+
+          } else {
+            console.error('❌ メインフォルダへの権限付与失敗:', mainFolderResult.error)
+          }
+        } else {
+          console.warn('⚠️ 受注者のメールアドレスが見つかりません')
+        }
+      } else {
+        console.warn('⚠️ プロジェクトにBOXフォルダが設定されていません')
+      }
+    } catch (boxError) {
+      console.error('❌ BOXアクセス権限付与エラー（処理は継続）:', boxError)
+      // BOXエラーでも契約署名は成功とする
     }
 
     // 受注者に署名完了通知を送信

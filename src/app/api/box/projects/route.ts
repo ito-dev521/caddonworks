@@ -186,12 +186,48 @@ export async function GET(request: NextRequest) {
       }, { status: 200 })
     }
 
-    // 組織のすべての案件を取得（BOX連携の有無に関わらず）
-    const { data: projects, error: projectsError } = await supabaseAdmin
-      .from('projects')
-      .select('id, title, box_folder_id, status, created_at')
-      .eq('org_id', orgAdminMembership.org_id)
-      .order('created_at', { ascending: false })
+    // 受注者の場合は、自分が契約したプロジェクトのみを取得
+    let projects: any[] | null = []
+    let projectsError: any = null
+
+    if (orgAdminMembership.role === 'Contractor') {
+      // 受注者：自分が契約済み（signed）のプロジェクトのみ取得
+      const { data: contracts, error: contractsError } = await supabaseAdmin
+        .from('contracts')
+        .select('project_id')
+        .eq('contractor_id', userProfile.id)
+        .eq('status', 'signed')
+
+      if (contractsError) {
+        projectsError = contractsError
+      } else {
+        const projectIds = contracts?.map(c => c.project_id) || []
+
+        if (projectIds.length > 0) {
+          const { data: contractedProjects, error: contractedProjectsError } = await supabaseAdmin
+            .from('projects')
+            .select('id, title, box_folder_id, status, created_at')
+            .in('id', projectIds)
+            .order('created_at', { ascending: false })
+
+          projects = contractedProjects
+          projectsError = contractedProjectsError
+        } else {
+          // 契約がない場合は空の配列を返す
+          projects = []
+        }
+      }
+    } else {
+      // 発注者（OrgAdmin/Staff）：組織のすべてのプロジェクトを取得
+      const { data: allProjects, error: allProjectsError } = await supabaseAdmin
+        .from('projects')
+        .select('id, title, box_folder_id, status, created_at')
+        .eq('org_id', orgAdminMembership.org_id)
+        .order('created_at', { ascending: false })
+
+      projects = allProjects
+      projectsError = allProjectsError
+    }
 
     
 

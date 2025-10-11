@@ -123,7 +123,7 @@ export async function findOrCreateBoxUser(email: string, displayName: string): P
       body: JSON.stringify({
         name: displayName,
         login: email,
-        is_platform_access_only: false, // Box Drive アクセス可能
+        is_platform_access_only: true, // App User（API経由でアクセス、無料アカウントでも作成可能）
         role: 'user',
         status: 'active'
       })
@@ -179,11 +179,14 @@ export async function findOrCreateBoxUser(email: string, displayName: string): P
 }
 
 /**
- * フォルダにユーザーを協力者として追加
+ * フォルダにユーザーを協力者として追加（メールアドレスベース）
+ * メールアドレスで直接コラボレーション招待を送信
+ * - 既存のBoxアカウントを持つユーザーは即座にアクセス可能
+ * - アカウントを持っていないユーザーには招待メールが送信される
  */
 export async function addFolderCollaboration(
   folderId: string,
-  boxUserId: string,
+  email: string,
   role: BoxRole,
   folderName?: string
 ): Promise<{
@@ -192,7 +195,7 @@ export async function addFolderCollaboration(
   error?: string
 }> {
   try {
-    console.log(`🤝 フォルダ協力者を追加中: ${folderName} (${folderId}) - Role: ${role}`)
+    console.log(`🤝 フォルダ協力者を追加中: ${folderName} (${folderId}) - Email: ${email} - Role: ${role}`)
 
     const accessToken = await getAppAuthAccessToken()
 
@@ -206,7 +209,7 @@ export async function addFolderCollaboration(
     if (existingCollabResponse.ok) {
       const existingCollabs = await existingCollabResponse.json()
       const existingCollab = existingCollabs.entries?.find((collab: any) =>
-        collab.accessible_by?.id === boxUserId
+        collab.accessible_by?.login?.toLowerCase() === email.toLowerCase()
       )
 
       if (existingCollab) {
@@ -232,7 +235,7 @@ export async function addFolderCollaboration(
       }
     }
 
-    // 新しい協力者を追加
+    // 新しい協力者を追加（メールアドレスで直接招待）
     const addResponse = await fetch('https://api.box.com/2.0/collaborations', {
       method: 'POST',
       headers: {
@@ -245,7 +248,7 @@ export async function addFolderCollaboration(
           type: 'folder'
         },
         accessible_by: {
-          id: boxUserId,
+          login: email,
           type: 'user'
         },
         role: role
@@ -253,8 +256,15 @@ export async function addFolderCollaboration(
     })
 
     if (!addResponse.ok) {
-      const errorData = await addResponse.json()
-      throw new Error(`Collaboration creation failed: ${addResponse.status} - ${errorData.message}`)
+      const errorText = await addResponse.text()
+      let errorMessage = `HTTP ${addResponse.status}`
+      try {
+        const errorData = JSON.parse(errorText)
+        errorMessage = errorData.message || errorData.error_description || errorText
+      } catch {
+        errorMessage = errorText
+      }
+      throw new Error(`Collaboration creation failed: ${addResponse.status} - ${errorMessage}`)
     }
 
     const newCollab = await addResponse.json()
@@ -275,11 +285,11 @@ export async function addFolderCollaboration(
 }
 
 /**
- * ユーザーの全フォルダ権限を同期
+ * ユーザーの全フォルダ権限を同期（メールアドレスベース）
  */
 export async function syncUserBoxPermissions(
   userId: string,
-  boxUserId: string,
+  email: string,
   permissions: Array<{
     folderId: string
     folderName: string
@@ -293,7 +303,7 @@ export async function syncUserBoxPermissions(
   syncedPermissions: number
   errors: string[]
 }> {
-  console.log(`🔄 ユーザーのBox権限同期開始: ${userId}`)
+  console.log(`🔄 ユーザーのBox権限同期開始: ${userId} (${email})`)
 
   const errors: string[] = []
   let syncedPermissions = 0
@@ -303,7 +313,7 @@ export async function syncUserBoxPermissions(
       const boxRole = mapAppPermissionsToBoxRole(permission)
       const result = await addFolderCollaboration(
         permission.folderId,
-        boxUserId,
+        email,
         boxRole,
         permission.folderName
       )
@@ -335,11 +345,11 @@ export async function syncUserBoxPermissions(
 }
 
 /**
- * フォルダから協力者を削除
+ * フォルダから協力者を削除（メールアドレスベース）
  */
 export async function removeFolderCollaboration(
   folderId: string,
-  boxUserId: string
+  email: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const accessToken = await getAppAuthAccessToken()
@@ -357,7 +367,7 @@ export async function removeFolderCollaboration(
 
     const data = await response.json()
     const collaboration = data.entries?.find((collab: any) =>
-      collab.accessible_by?.id === boxUserId
+      collab.accessible_by?.login?.toLowerCase() === email.toLowerCase()
     )
 
     if (!collaboration) {

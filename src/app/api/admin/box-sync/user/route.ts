@@ -2,7 +2,7 @@ export const runtime = 'nodejs'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { findOrCreateBoxUser, syncUserBoxPermissions } from '@/lib/box-collaboration'
+import { syncUserBoxPermissions } from '@/lib/box-collaboration'
 
 export const dynamic = 'force-dynamic'
 
@@ -53,40 +53,23 @@ export async function POST(request: NextRequest) {
 
     console.log('👤 同期対象ユーザー:', user.display_name)
 
-    // Box ユーザーを検索または作成
-    const boxUserResult = await findOrCreateBoxUser(
-      boxEmail || boxLogin || user.email,
-      user.display_name
-    )
-
-    if (!boxUserResult.success) {
-      console.error('❌ Box ユーザー作成失敗:', boxUserResult.error)
-
-      // エラーログを記録
-      await logBoxSync({
-        userId,
-        action: 'user_creation_failed',
-        status: 'failed',
-        errorMessage: boxUserResult.error,
-        syncedBy: authUser.id
-      })
-
+    // メールアドレスを決定
+    const userEmail = boxEmail || boxLogin || user.email
+    if (!userEmail) {
       return NextResponse.json({
         success: false,
-        error: 'Box ユーザーの作成に失敗しました',
-        details: boxUserResult.error
-      }, { status: 500 })
+        error: 'ユーザーのメールアドレスが見つかりません'
+      }, { status: 400 })
     }
 
-    console.log('✅ Box ユーザー確認完了:', boxUserResult.boxUserLogin)
+    console.log('✅ Box コラボレーション対象メールアドレス:', userEmail)
 
     // ユーザー情報を更新
     const { error: updateError } = await supabaseAdmin
       .from('users')
       .update({
-        box_user_id: boxUserResult.boxUserId,
-        box_email: boxUserResult.boxUserLogin,
-        box_login: boxUserResult.boxUserLogin,
+        box_email: userEmail,
+        box_login: userEmail,
         box_sync_status: 'syncing',
         box_last_synced_at: new Date().toISOString()
       })
@@ -127,17 +110,17 @@ export async function POST(request: NextRequest) {
 
     console.log('🔧 Box権限同期中...')
 
-    // Box権限を同期
+    // Box権限を同期（メールアドレスベースのコラボレーション）
     const syncResult = await syncUserBoxPermissions(
       userId,
-      boxUserResult.boxUserId!,
+      userEmail,
       boxPermissions
     )
 
     // 成功ログを記録
     await logBoxSync({
       userId,
-      boxUserId: boxUserResult.boxUserId,
+      boxUserId: userEmail, // メールアドレスを記録
       action: 'permissions_synced',
       status: syncResult.success ? 'success' : 'partial_success',
       errorMessage: syncResult.errors.length > 0 ? syncResult.errors.join('; ') : undefined,
@@ -163,8 +146,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: 'Box同期が完了しました',
-      boxUserId: boxUserResult.boxUserId,
-      boxUserLogin: boxUserResult.boxUserLogin,
+      boxEmail: userEmail,
       syncedPermissions: syncResult.syncedPermissions,
       totalPermissions: boxPermissions.length,
       errors: syncResult.errors

@@ -445,30 +445,72 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ projects: [] }, { status: 200 })
     }
 
-    // OrgAdminまたはStaffのメンバーシップを探す
-    const membership = memberships.find(m => m.role === 'OrgAdmin' || m.role === 'Staff')
-    if (!membership) {
-      return NextResponse.json({ projects: [] }, { status: 200 })
-    }
-
-    const company = membership.organizations as any
-
     // クエリパラメータを取得
     const { searchParams } = new URL(request.url)
     const statusFilter = searchParams.get('status')
 
-    // 組織の案件データを取得（会社間分離）
-    let query = supabaseAdmin
-      .from('projects')
-      .select('*')
-      .eq('org_id', company.id) // 組織IDでフィルタリング
+    let projectsData: any[] | null = []
+    let projectsError: any = null
 
-    // ステータスフィルタを適用
-    if (statusFilter) {
-      query = query.eq('status', statusFilter)
+    // OrgAdminまたはStaffのメンバーシップを探す
+    const orgMembership = memberships.find(m => m.role === 'OrgAdmin' || m.role === 'Staff')
+    const contractorMembership = memberships.find(m => m.role === 'Contractor')
+
+    if (orgMembership) {
+      // 発注者の場合：組織のすべてのプロジェクトを取得
+      const company = orgMembership.organizations as any
+
+      // 組織の案件データを取得（会社間分離）
+      let query = supabaseAdmin
+        .from('projects')
+        .select('*')
+        .eq('org_id', company.id) // 組織IDでフィルタリング
+
+      // ステータスフィルタを適用
+      if (statusFilter) {
+        query = query.eq('status', statusFilter)
+      }
+
+      const { data, error } = await query.order('created_at', { ascending: false })
+      projectsData = data
+      projectsError = error
+
+    } else if (contractorMembership) {
+      // 受注者の場合：自分が契約したプロジェクトのみを取得
+      const { data: contracts, error: contractsError } = await supabaseAdmin
+        .from('contracts')
+        .select('project_id')
+        .eq('contractor_id', userProfile.id)
+        .eq('status', 'signed')
+
+      if (contractsError) {
+        projectsError = contractsError
+      } else {
+        const projectIds = contracts?.map(c => c.project_id) || []
+
+        if (projectIds.length > 0) {
+          let query = supabaseAdmin
+            .from('projects')
+            .select('*')
+            .in('id', projectIds)
+
+          // ステータスフィルタを適用
+          if (statusFilter) {
+            query = query.eq('status', statusFilter)
+          }
+
+          const { data, error } = await query.order('created_at', { ascending: false })
+          projectsData = data
+          projectsError = error
+        } else {
+          // 契約がない場合は空の配列を返す
+          projectsData = []
+        }
+      }
+    } else {
+      // どちらの権限もない場合は空の配列を返す
+      return NextResponse.json({ projects: [] }, { status: 200 })
     }
-
-    const { data: projectsData, error: projectsError } = await query.order('created_at', { ascending: false })
 
     if (projectsError) {
       console.error('案件データの取得に失敗:', projectsError)
@@ -660,18 +702,23 @@ export async function GET(request: NextRequest) {
 
     // 承認待ちの案件の表示ロジック
     const filteredProjects = formattedProjects.filter(project => {
+      // 受注者の場合は、承認待ちプロジェクトを表示しない
+      if (contractorMembership && project.status === 'pending_approval') {
+        return false
+      }
+
       // 承認待ち以外の案件は全て表示
       if (project.status !== 'pending_approval') {
         return true
       }
 
       // OrgAdminは全ての承認待ち案件を表示
-      if (membership.role === 'OrgAdmin') {
+      if (orgMembership && orgMembership.role === 'OrgAdmin') {
         return true
       }
 
       // Staffは承認者として選択されている案件、自分が作成した案件、または自分が担当者に指定された案件を表示
-      if (membership.role === 'Staff') {
+      if (orgMembership && orgMembership.role === 'Staff') {
         // 自分が作成した案件は表示
         if (project.created_by === userProfile.id) {
           return true
