@@ -62,10 +62,26 @@ async function createBoxFolder(name: string, parentId: string): Promise<string> 
     headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ name, parent: { id: parentId } })
   })
+
   if (!res.ok) {
-    throw new Error(`Box create folder error ${res.status}: ${await res.text()}`)
+    const errorText = await res.text()
+    // 409エラー（フォルダが既に存在する）の場合は、既存のフォルダIDを返す
+    if (res.status === 409) {
+      try {
+        const errorData: any = JSON.parse(errorText)
+        if (errorData.context_info?.conflicts?.[0]?.id) {
+          console.log(`✓ Folder already exists: ${name} (ID: ${errorData.context_info.conflicts[0].id})`)
+          return errorData.context_info.conflicts[0].id as string
+        }
+      } catch (e) {
+        // JSON parse error - fall through to throw error
+      }
+    }
+    throw new Error(`Box create folder error ${res.status}: ${errorText}`)
   }
+
   const data: any = await res.json()
+  console.log(`✓ Created folder: ${name} (ID: ${data.id})`)
   return data.id as string
 }
 

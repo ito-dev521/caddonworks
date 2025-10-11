@@ -149,23 +149,24 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ message: '添付資料の取得に失敗しました' }, { status: 500 })
     }
 
-    // ファイルのダウンロードURLを生成（署名付きURL）
-    const attachmentsWithUrls = await Promise.all(
-      (attachments || []).map(async (attachment) => {
-        const { data, error: urlError } = await supabase.storage
-          .from('project-attachments')
-          .createSignedUrl(attachment.file_path, 3600) // 1時間有効
+    // 添付資料一覧を返す（Boxファイル対応）
+    const attachmentsFormatted = (attachments || []).map((attachment) => {
+      // Box file IDを抽出
+      const isBoxFile = attachment.file_path && attachment.file_path.startsWith('box://')
+      const downloadUrl = isBoxFile
+        ? `/api/projects/${projectId}/attachments/${attachment.id}` // Box download endpoint
+        : null
 
-        return {
-          ...attachment,
-          download_url: data?.signedUrl,
-          uploaded_by_name: (attachment.users as any)?.display_name || '不明'
-        }
-      })
-    )
+      return {
+        ...attachment,
+        download_url: downloadUrl,
+        uploaded_by_name: (attachment.users as any)?.display_name || '不明',
+        storage_type: isBoxFile ? 'box' : 'supabase'
+      }
+    })
 
     return NextResponse.json({
-      attachments: attachmentsWithUrls
+      attachments: attachmentsFormatted
     })
 
   } catch (error) {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase, createSupabaseAdmin } from '@/lib/supabase'
+import { uploadFileToBox, getBoxFolderItems } from '@/lib/box'
 
 export const dynamic = 'force-dynamic'
 
@@ -95,9 +96,14 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 // 添付資料のアップロード
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   const startTime = Date.now()
-  
+  console.log('🚀 POST /api/projects/[id]/attachments リクエスト受信')
+  console.log('🚀 params:', params)
+  console.log('🚀 params.id:', params.id)
+  console.log('🚀 Request URL:', request.url)
+
   try {
     const { id: projectId } = params
+    console.log('🚀 projectId extracted:', projectId)
 
     // 認証チェック
     const authHeader = request.headers.get('authorization')
@@ -125,15 +131,97 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return NextResponse.json({ message: 'ユーザープロフィールが見つかりません' }, { status: 403 })
     }
 
-    // 案件の存在確認
-    const { data: project, error: projectError } = await supabase
+    // Admin clientを作成
+    const supabaseAdmin = createSupabaseAdmin()
+
+    // 案件の存在確認（Box情報も取得）
+    console.log('🔍 データベースクエリ開始 - projectId:', projectId)
+    const { data: project, error: projectError } = await supabaseAdmin
       .from('projects')
-      .select('id, org_id, title')
+      .select('id, org_id, title, box_folder_id')
       .eq('id', projectId)
       .single()
 
+    console.log('🔍 データベースクエリ結果:', {
+      found: !!project,
+      error: projectError,
+      projectData: project
+    })
+
     if (projectError || !project) {
+      console.error('❌ 案件が見つかりません:', {
+        projectId,
+        error: projectError
+      })
       return NextResponse.json({ message: '案件が見つかりません' }, { status: 404 })
+    }
+
+    console.log('✅ 案件が見つかりました:', project.id, project.title)
+
+    // Box設定の確認
+    console.log('📦 Box設定チェック:', {
+      projectId: project.id,
+      hasBoxFolderId: !!project.box_folder_id,
+      boxFolderId: project.box_folder_id
+    })
+
+    if (!project.box_folder_id) {
+      console.error('❌ box_folder_idが設定されていません:', project.id)
+      return NextResponse.json({
+        message: 'この案件はまだBoxフォルダが設定されていません',
+        details: 'プロジェクトにbox_folder_idが設定されていません。案件を承認してBoxフォルダを作成してください。'
+      }, { status: 400 })
+    }
+
+    // Boxフォルダからサブフォルダを取得
+    console.log('📁 Boxフォルダからサブフォルダを取得中...')
+    let items: any[]
+    try {
+      items = await getBoxFolderItems(project.box_folder_id)
+      console.log('📁 Boxフォルダアイテム取得成功:', items.length, 'items')
+    } catch (boxError: any) {
+      console.error('❌ Boxフォルダアイテム取得エラー:', boxError)
+      return NextResponse.json({
+        message: 'Boxフォルダへのアクセスに失敗しました',
+        error: boxError.message
+      }, { status: 500 })
+    }
+
+    // サブフォルダを特定
+    const folderMapping: Record<string, string[]> = {
+      '受取': ['01_受取データ', '受取', '01_受取', '01_'],
+      '作業': ['02_作業フォルダ', '作業', '02_作業', '02_'],
+      '納品': ['03_納品データ', '納品', '03_納品', '03_'],
+      '契約': ['04_契約資料', '契約', '04_契約', '04_']
+    }
+
+    const subfolders: Record<string, string> = {}
+    items.forEach(item => {
+      if (item.type === 'folder') {
+        const itemName = item.name
+        Object.entries(folderMapping).forEach(([category, patterns]) => {
+          patterns.forEach(pattern => {
+            if (itemName.includes(pattern) && !subfolders[category]) {
+              subfolders[category] = item.id
+            }
+          })
+        })
+      }
+    })
+
+    console.log('📁 特定されたサブフォルダ:', subfolders)
+
+    // 受取フォルダIDを取得
+    const receiveFolderId = subfolders['受取']
+
+    if (!receiveFolderId) {
+      console.error('❌ 受取フォルダが見つかりません:', {
+        availableFolders: Object.keys(subfolders)
+      })
+      return NextResponse.json({
+        message: '受取フォルダが見つかりません',
+        details: `利用可能なフォルダ: ${Object.keys(subfolders).join(', ')}`
+      }, { status: 400 })
     }
 
     // ユーザーの権限チェック（発注者または受注者）
@@ -153,10 +241,10 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return NextResponse.json({ message: 'ファイルアップロードの権限がありません' }, { status: 403 })
     }
 
-    // ファイルアップロード処理（簡易実装）
+    // ファイルアップロード処理
     const formData = await request.formData()
-    
-        const file = formData.get('file') as File
+
+    const file = formData.get('file') as File
 
     if (!file) {
       return NextResponse.json({ message: 'ファイルが選択されていません' }, { status: 400 })
@@ -194,98 +282,43 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       'application/x-sfc',
       'application/x-bfo'
     ]
-    
+
     // ファイル拡張子もチェック（MIMEタイプが正しく設定されていない場合の対応）
     const allowedExtensions = ['.pdf', '.jpg', '.jpeg', '.png', '.gif', '.webp', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.zip', '.rar', '.dwg', '.p21', '.sfc', '.bfo']
     const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase()
-    
+
     if (!allowedTypes.includes(file.type) && !allowedExtensions.includes(fileExtension)) {
-      return NextResponse.json({ 
+      return NextResponse.json({
         message: 'サポートされていないファイル形式です',
         details: `対応形式: PDF, Word, Excel, PowerPoint, 画像, ZIP, RAR, DWG, P21, SFC, BFO。現在のファイル: ${file.name} (${file.type})`
       }, { status: 400 })
     }
 
-    // ファイル名のサニタイズ（日本語文字や特殊文字を安全な文字に変換）
-    const sanitizeFileName = (fileName: string) => {
-      // ファイル名から拡張子を分離
-      const lastDotIndex = fileName.lastIndexOf('.')
-      const nameWithoutExt = lastDotIndex > 0 ? fileName.substring(0, lastDotIndex) : fileName
-      const extension = lastDotIndex > 0 ? fileName.substring(lastDotIndex) : ''
-      
-      // 日本語文字や特殊文字を安全な文字に変換
-      const sanitizedName = nameWithoutExt
-        .replace(/[^\w\-_.]/g, '_') // 英数字、ハイフン、アンダースコア、ドット以外をアンダースコアに変換
-        .replace(/_{2,}/g, '_') // 連続するアンダースコアを1つに
-        .replace(/^_|_$/g, '') // 先頭と末尾のアンダースコアを削除
-        .substring(0, 100) // ファイル名の長さを制限
-      
-      return sanitizedName + extension
-    }
+    console.log(`📤 Boxへアップロード開始: ${file.name} -> 受取フォルダ (${receiveFolderId})`)
 
-    // ファイル名の生成（重複回避）
-    const timestamp = Date.now()
-    const sanitizedFileName = sanitizeFileName(file.name)
-    const fileName = `${timestamp}_${sanitizedFileName}`
-    const filePath = `projects/${projectId}/${fileName}`
+    // ファイルをArrayBufferに変換
+    const arrayBuffer = await file.arrayBuffer()
 
-    // バケットの存在確認（Admin clientを使用）
-    const supabaseAdmin = createSupabaseAdmin()
-    const { data: buckets, error: bucketError } = await supabaseAdmin.storage.listBuckets()
-    
-    if (bucketError) {
-      console.error('バケット一覧取得エラー:', bucketError)
-      return NextResponse.json({ 
-        message: 'Storageバケットの確認に失敗しました',
-        error: bucketError.message
+    // Boxの受取フォルダにアップロード
+    let boxFileId: string
+    try {
+      boxFileId = await uploadFileToBox(arrayBuffer, file.name, receiveFolderId)
+      console.log(`✅ Boxアップロード成功: ${file.name} (ID: ${boxFileId})`)
+    } catch (uploadError: any) {
+      console.error('Boxアップロードエラー:', uploadError)
+      return NextResponse.json({
+        message: 'Boxへのファイルアップロードに失敗しました',
+        error: uploadError.message
       }, { status: 500 })
     }
-    
-        const bucketExists = buckets?.some(bucket => bucket.id === 'project-attachments')
-    
-    if (!bucketExists) {
-      console.error('バケットが存在しません:', { 
-        requestedBucket: 'project-attachments',
-        availableBuckets: buckets?.map(b => b.id)
-      })
-      return NextResponse.json({ 
-        message: 'Storageバケット "project-attachments" が存在しません',
-        error: 'Bucket not found',
-        details: `利用可能なバケット: ${buckets?.map(b => b.id).join(', ') || 'なし'}`
-      }, { status: 404 })
-    }
-
-        // Supabase Storageにファイルをアップロード（Admin clientを使用）
-
-    const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
-      .from('project-attachments')
-      .upload(filePath, file)
-
-    if (uploadError) {
-      console.error('ファイルアップロードエラー:', {
-        error: uploadError,
-        filePath,
-        fileName: file.name,
-        fileSize: file.size,
-        errorCode: (uploadError as any).statusCode || 'UNKNOWN',
-        errorMessage: uploadError.message
-      })
-      return NextResponse.json({ 
-        message: 'ファイルのアップロードに失敗しました',
-        error: uploadError.message,
-        details: `エラーコード: ${(uploadError as any).statusCode || 'Unknown'}, バケット: project-attachments`
-      }, { status: 400 })
-    }
-
 
     // データベースに添付資料情報を保存
-
     const { data: attachmentData, error: attachmentError } = await supabaseAdmin
       .from('project_attachments')
       .insert({
         project_id: projectId,
-        file_name: file.name, // 元のファイル名を保存
-        file_path: filePath, // サニタイズされたファイルパス
+        file_name: file.name,
+        file_path: `box://${boxFileId}`, // Box file IDを保存
         file_size: file.size,
         file_type: file.type,
         uploaded_by: userProfile.id
@@ -299,12 +332,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         project_id: projectId,
         uploaded_by: userProfile.id
       })
-      // アップロードしたファイルを削除
-      await supabaseAdmin.storage.from('project-attachments').remove([filePath])
-      return NextResponse.json({ 
+      return NextResponse.json({
         message: '添付資料の保存に失敗しました',
-        error: attachmentError.message,
-        details: 'project_attachmentsテーブルが存在しないか、アクセス権限がありません'
+        error: attachmentError.message
       }, { status: 400 })
     }
 

@@ -17,6 +17,7 @@ const supabaseAdmin = createClient(
 export async function GET(request: NextRequest) {
   try {
     let orgAdminMembership: any = null
+    let currentUserProfile: any = null
 
     // サーバーサイドSupabaseクライアントを使用
     const supabase = await createServerClient()
@@ -39,6 +40,7 @@ export async function GET(request: NextRequest) {
         console.error('👤 [Box Projects] User profile not found:', userError)
       } else {
         console.log('✅ [Box Projects] User profile found:', userProfile.id)
+        currentUserProfile = userProfile
 
         // 組織情報を取得（発注者権限チェック）
         const { data: memberships, error: membershipError } = await supabaseAdmin
@@ -195,7 +197,7 @@ export async function GET(request: NextRequest) {
       const { data: contracts, error: contractsError } = await supabaseAdmin
         .from('contracts')
         .select('project_id')
-        .eq('contractor_id', userProfile.id)
+        .eq('contractor_id', currentUserProfile.id)
         .eq('status', 'signed')
 
       if (contractsError) {

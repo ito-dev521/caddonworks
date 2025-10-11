@@ -742,8 +742,10 @@ function ProjectsPageContent() {
   }
 
   const uploadFile = async (projectId: string, file: File) => {
+    console.log('📤 uploadFile called with projectId:', projectId)
+    console.log('📤 projectId length:', projectId.length)
     setIsUploadingFile(true)
-    
+
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
@@ -755,7 +757,7 @@ function ProjectsPageContent() {
       const formData = new FormData()
       formData.append('file', file)
 
-      
+
       // タイムアウト処理を追加（5分）
       const controller = new AbortController()
       const timeoutId = setTimeout(() => {
@@ -763,7 +765,12 @@ function ProjectsPageContent() {
         controller.abort()
       }, 5 * 60 * 1000)
 
-      const response = await fetch(`/api/projects/${projectId}/attachments`, {
+      const encodedProjectId = encodeURIComponent(projectId)
+      const requestUrl = `/api/projects/${encodedProjectId}/attachments`
+      console.log('📤 Original projectId:', projectId)
+      console.log('📤 Encoded projectId:', encodedProjectId)
+      console.log('📤 Sending request to:', requestUrl)
+      const response = await fetch(requestUrl, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.access_token}`
@@ -847,6 +854,8 @@ function ProjectsPageContent() {
   }
 
   const openAttachmentsModal = (projectId: string) => {
+    console.log('🔍 openAttachmentsModal called with projectId:', projectId)
+    console.log('🔍 projectId length:', projectId.length)
     setShowAttachmentsModal(projectId)
     loadAttachments(projectId)
   }
@@ -1434,6 +1443,8 @@ function ProjectsPageContent() {
                             size="sm"
                             onClick={(e) => {
                               e.stopPropagation()
+                              console.log('📎 Attachment button clicked for project:', project.id)
+                              console.log('📎 Project ID length:', project.id.length)
                               openAttachmentsModal(project.id)
                             }}
                           >
