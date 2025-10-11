@@ -212,7 +212,33 @@ export async function GET(request: NextRequest) {
             .in('id', projectIds)
             .order('created_at', { ascending: false })
 
-          projects = contractedProjects
+          // 01_受取データにファイルがある案件のみフィルタリング
+          if (contractedProjects && contractedProjects.length > 0) {
+            const projectsWithFiles = await Promise.all(
+              contractedProjects.map(async (project) => {
+                try {
+                  // 受取フォルダにファイルがあるかチェック
+                  const { data: attachments } = await supabaseAdmin
+                    .from('project_attachments')
+                    .select('id')
+                    .eq('project_id', project.id)
+                    .limit(1)
+
+                  // ファイルが1つ以上ある場合のみ返す
+                  return attachments && attachments.length > 0 ? project : null
+                } catch (error) {
+                  console.error(`Error checking attachments for project ${project.id}:`, error)
+                  return null
+                }
+              })
+            )
+
+            // nullを除外
+            projects = projectsWithFiles.filter(p => p !== null)
+          } else {
+            projects = []
+          }
+
           projectsError = contractedProjectsError
         } else {
           // 契約がない場合は空の配列を返す
