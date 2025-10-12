@@ -403,9 +403,18 @@ export async function GET(request: NextRequest) {
           }
 
           // 最新5件の時間順でソート
-          const recentFiles = allRecentFiles
+          const sortedFiles = allRecentFiles
             .sort((a, b) => new Date(b.modified_at).getTime() - new Date(a.modified_at).getTime())
-            .slice(0, 10) // 少し多めに取得
+
+          // Box file IDで重複排除（同じIDのファイルは1つだけ残す）
+          const uniqueFileMap = new Map()
+          sortedFiles.forEach(file => {
+            if (!uniqueFileMap.has(file.id)) {
+              uniqueFileMap.set(file.id, file)
+            }
+          })
+
+          const recentFiles = Array.from(uniqueFileMap.values()).slice(0, 10) // 少し多めに取得
 
           
 

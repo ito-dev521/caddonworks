@@ -72,6 +72,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     }
 
     // ユーザーの権限チェック（発注者または受注者）
+    // まず発注者の組織メンバーシップをチェック
     const { data: membership, error: membershipError } = await supabase
       .from('memberships')
       .select('role, org_id')
@@ -79,13 +80,28 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       .eq('org_id', (attachment.projects as any).org_id)
       .single()
 
-    if (membershipError || !membership) {
-      return NextResponse.json({ message: 'この案件へのアクセス権限がありません' }, { status: 403 })
+    let hasAccess = false
+
+    // 発注者の組織メンバーの場合
+    if (membership && ['OrgAdmin', 'Staff'].includes(membership.role)) {
+      hasAccess = true
+    } else {
+      // 受注者の場合は契約をチェック
+      const { data: contract, error: contractError } = await supabaseAdmin
+        .from('contracts')
+        .select('id, status')
+        .eq('project_id', projectId)
+        .eq('contractor_id', userProfile.id)
+        .eq('status', 'signed')
+        .single()
+
+      if (contract) {
+        hasAccess = true
+      }
     }
 
-    // 権限チェック（発注者または受注者）
-    if (!['OrgAdmin', 'Staff', 'Contractor'].includes(membership.role)) {
-      return NextResponse.json({ message: '添付資料のダウンロード権限がありません' }, { status: 403 })
+    if (!hasAccess) {
+      return NextResponse.json({ message: 'この案件へのアクセス権限がありません' }, { status: 403 })
     }
 
     // Boxからファイルをダウンロード
@@ -172,6 +188,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     }
 
     // ユーザーの権限チェック（発注者または受注者）
+    // まず発注者の組織メンバーシップをチェック
     const { data: membership, error: membershipError } = await supabase
       .from('memberships')
       .select('role, org_id')
@@ -179,13 +196,28 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
       .eq('org_id', (attachment.projects as any).org_id)
       .single()
 
-    if (membershipError || !membership) {
-      return NextResponse.json({ message: 'この案件へのアクセス権限がありません' }, { status: 403 })
+    let hasAccess = false
+
+    // 発注者の組織メンバーの場合
+    if (membership && ['OrgAdmin', 'Staff'].includes(membership.role)) {
+      hasAccess = true
+    } else {
+      // 受注者の場合は契約をチェック
+      const { data: contract, error: contractError } = await supabaseAdmin
+        .from('contracts')
+        .select('id, status')
+        .eq('project_id', projectId)
+        .eq('contractor_id', userProfile.id)
+        .eq('status', 'signed')
+        .single()
+
+      if (contract) {
+        hasAccess = true
+      }
     }
 
-    // 権限チェック（発注者または受注者）
-    if (!['OrgAdmin', 'Staff', 'Contractor'].includes(membership.role)) {
-      return NextResponse.json({ message: '添付資料の削除権限がありません' }, { status: 403 })
+    if (!hasAccess) {
+      return NextResponse.json({ message: 'この案件へのアクセス権限がありません' }, { status: 403 })
     }
 
     // Boxからファイルを削除

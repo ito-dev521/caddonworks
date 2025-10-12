@@ -45,6 +45,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     }
 
     // ユーザーの権限チェック（発注者または受注者）
+    // まず発注者の組織メンバーシップをチェック
     const { data: membership, error: membershipError } = await supabase
       .from('memberships')
       .select('role, org_id')
@@ -52,17 +53,33 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       .eq('org_id', project.org_id)
       .single()
 
-    if (membershipError || !membership) {
+    // Admin clientを使用
+    const supabaseAdmin = createSupabaseAdmin()
+    let hasAccess = false
+
+    // 発注者の組織メンバーの場合
+    if (membership && ['OrgAdmin', 'Staff'].includes(membership.role)) {
+      hasAccess = true
+    } else {
+      // 受注者の場合は契約をチェック
+      const { data: contract, error: contractError } = await supabaseAdmin
+        .from('contracts')
+        .select('id, status')
+        .eq('project_id', projectId)
+        .eq('contractor_id', userProfile.id)
+        .eq('status', 'signed')
+        .single()
+
+      if (contract) {
+        hasAccess = true
+      }
+    }
+
+    if (!hasAccess) {
       return NextResponse.json({ message: 'この案件へのアクセス権限がありません' }, { status: 403 })
     }
 
-    // 権限チェック（発注者または受注者）
-    if (!['OrgAdmin', 'Staff', 'Contractor'].includes(membership.role)) {
-      return NextResponse.json({ message: '添付資料の閲覧権限がありません' }, { status: 403 })
-    }
-
     // Admin clientを使用して添付資料を取得
-    const supabaseAdmin = createSupabaseAdmin()
     const { data: attachments, error: attachmentsError } = await supabaseAdmin
       .from('project_attachments')
       .select(`
@@ -247,6 +264,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     }
 
     // ユーザーの権限チェック（発注者または受注者）
+    // まず発注者の組織メンバーシップをチェック
     const { data: membership, error: membershipError } = await supabase
       .from('memberships')
       .select('role, org_id')
@@ -254,13 +272,28 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       .eq('org_id', project.org_id)
       .single()
 
-    if (membershipError || !membership) {
-      return NextResponse.json({ message: 'この案件へのアクセス権限がありません' }, { status: 403 })
+    let hasAccess = false
+
+    // 発注者の組織メンバーの場合
+    if (membership && ['OrgAdmin', 'Staff'].includes(membership.role)) {
+      hasAccess = true
+    } else {
+      // 受注者の場合は契約をチェック
+      const { data: contract, error: contractError } = await supabaseAdmin
+        .from('contracts')
+        .select('id, status')
+        .eq('project_id', projectId)
+        .eq('contractor_id', userProfile.id)
+        .eq('status', 'signed')
+        .single()
+
+      if (contract) {
+        hasAccess = true
+      }
     }
 
-    // 権限チェック（発注者または受注者）
-    if (!['OrgAdmin', 'Staff', 'Contractor'].includes(membership.role)) {
-      return NextResponse.json({ message: 'ファイルアップロードの権限がありません' }, { status: 403 })
+    if (!hasAccess) {
+      return NextResponse.json({ message: 'この案件へのアクセス権限がありません' }, { status: 403 })
     }
 
     // ファイルアップロード処理

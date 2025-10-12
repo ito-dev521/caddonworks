@@ -402,6 +402,44 @@ function JobsPageContent() {
     loadAttachments(jobId)
   }
 
+  // ファイルをダウンロードする関数（認証ヘッダー付き）
+  const handleDownload = async (downloadUrl: string, fileName: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        alert('ログインが必要です')
+        return
+      }
+
+      const response = await fetch(downloadUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`
+        }
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        alert('ダウンロードに失敗しました: ' + (error.message || 'Unknown error'))
+        return
+      }
+
+      // Blobとしてダウンロード
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = fileName
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+    } catch (error) {
+      console.error('ダウンロードエラー:', error)
+      alert('ダウンロード中にエラーが発生しました')
+    }
+  }
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'bidding':
@@ -1199,7 +1237,7 @@ function JobsPageContent() {
                                     <Button
                                       variant="outline"
                                       size="sm"
-                                      onClick={() => window.open(attachment.download_url, '_blank')}
+                                      onClick={() => handleDownload(attachment.download_url, attachment.file_name)}
                                     >
                                       <FileText className="w-4 h-4 mr-1" />
                                       ダウンロード
