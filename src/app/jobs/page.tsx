@@ -672,7 +672,7 @@ function JobsPageContent() {
                     <CardContent className="space-y-4">
                       {/* 案件詳細 */}
                       <div className="space-y-2 text-sm">
-                        {job.bidding_deadline && (
+                        {job.bidding_deadline && job.status !== 'awarded' && (
                           <div className={`flex items-center gap-2 ${getDeadlineColor(job.bidding_deadline)}`}>
                             <Clock className="w-4 h-4" />
                             入札締切: {new Date(job.bidding_deadline).toLocaleDateString('ja-JP')}

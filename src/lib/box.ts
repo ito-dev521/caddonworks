@@ -522,6 +522,36 @@ export async function renameBoxFolder(folderId: string, newName: string): Promis
   }
 }
 
+export async function moveBoxFile(fileId: string, newParentFolderId: string): Promise<any> {
+  try {
+    const accessToken = await getAppAuthAccessToken()
+
+    const res = await fetch(`https://api.box.com/2.0/files/${fileId}`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        parent: { id: newParentFolderId }
+      })
+    })
+
+    if (!res.ok) {
+      const errorText = await res.text()
+      throw new Error(`Box file move failed ${res.status}: ${errorText}`)
+    }
+
+    const file: any = await res.json()
+    console.log(`📄 Moved file: ${file.name} to folder ${newParentFolderId}`)
+    return file
+
+  } catch (error) {
+    console.error('❌ Box file move failed:', error)
+    throw error
+  }
+}
+
 export async function deleteBoxFolder(folderId: string, recursive: boolean = true): Promise<void> {
   try {
     const accessToken = await getAppAuthAccessToken()
@@ -670,19 +700,9 @@ export async function createProjectFolderStructure(projectTitle: string, project
             }
             console.log(`🔁 Renamed subfolder: ${currentName} -> ${standardName}`)
           } catch (e: any) {
-            // 競合などで失敗した場合は標準名で新規作成にフォールバック
-            console.warn(`⚠️ Rename failed (${currentName} -> ${standardName}). Creating new one.`, e?.message || e)
-            try {
-              const subFolderResult = await ensureProjectFolder({
-                name: standardName,
-                parentFolderId: mainFolderId
-              })
-              subfolders[category] = subFolderResult.id
-              subfolderNames[category] = standardName
-              console.log(`✅ Created subfolder: ${standardName} (ID: ${subFolderResult.id})`)
-            } catch (error) {
-              console.error(`❌ Failed to create subfolder ${standardName}:`, error)
-            }
+            // リネームに失敗した場合は、既存のフォルダをそのまま使用
+            console.warn(`⚠️ Rename failed (${currentName} -> ${standardName}). Using existing folder as-is.`, e?.message || e)
+            // subfoldersとsubfolderNamesは既に設定されているので、何もしない
           }
         }
       } else {

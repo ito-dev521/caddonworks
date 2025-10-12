@@ -372,9 +372,9 @@ export async function GET(request: NextRequest) {
       // この案件で現在のユーザーが辞退したかどうかをチェック
       const isDeclined = hasDeclinedContract
       
-      // アドバイス生成
-      const advice = generateAdvice(job, currentBidCount, isExpired)
-      
+      // アドバイス生成（落札済みの場合は空文字列）
+      const advice = job.status === 'awarded' ? '' : generateAdvice(job, currentBidCount, isExpired)
+
       return {
         id: job.id,
         title: job.title,

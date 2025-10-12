@@ -167,32 +167,17 @@ export async function GET(request: NextRequest) {
       })
     )
 
-    // 並び順の優先順位: 完了は常に最後 → 最新コメント → 進行中 → 登録順
+    // 並び順: 完了は常に最後 → 最新コメント時刻の降順（新しい順）
     const sortedChatRooms = chatRooms.sort((a: any, b: any) => {
-      // 0) 完了を常に最後へ
+      // 1) 完了を常に最後へ
       const aCompleted = a.project_status === 'completed'
       const bCompleted = b.project_status === 'completed'
       if (aCompleted !== bCompleted) return aCompleted ? 1 : -1
 
-      // 1) 最新コメント（ある方を優先、同時刻なら新しい方）
-      const aHasMsg = Boolean(a.last_message)
-      const bHasMsg = Boolean(b.last_message)
-      if (aHasMsg !== bHasMsg) return aHasMsg ? -1 : 1
-      if (aHasMsg && bHasMsg) {
-        const msgDiff = new Date(b.last_message.created_at).getTime() - new Date(a.last_message.created_at).getTime()
-        if (msgDiff !== 0) return msgDiff
-      }
-
-      // 2) 進行中（in_progress）優先
-      const aActiveRank = a.is_active ? 0 : 1
-      const bActiveRank = b.is_active ? 0 : 1
-      if (aActiveRank !== bActiveRank) return aActiveRank - bActiveRank
-
-      // 3) 登録順（作成日時の昇順 = 早く作られた順）
-      const regDiff = new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-      if (regDiff !== 0) return regDiff
-
-      return 0
+      // 2) updated_at（最新コメント時刻）で降順ソート（新しいものが上）
+      const aTime = new Date(a.updated_at).getTime()
+      const bTime = new Date(b.updated_at).getTime()
+      return bTime - aTime
     })
 
     return NextResponse.json({

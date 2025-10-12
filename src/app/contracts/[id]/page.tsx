@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react"
 import { motion } from "framer-motion"
-import { FileText, ArrowLeft, CheckCircle, AlertCircle, User, DollarSign, Calendar, PenTool } from "lucide-react"
+import { FileText, ArrowLeft, CheckCircle, AlertCircle, User, DollarSign, Calendar, PenTool, Mail } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -51,6 +51,7 @@ function ContractDetailPageContent() {
   const [showDeclineModal, setShowDeclineModal] = useState(false)
   const [declineComment, setDeclineComment] = useState('')
   const [isDeclining, setIsDeclining] = useState(false)
+  const [isResendingBoxInvitation, setIsResendingBoxInvitation] = useState(false)
 
   // 契約情報を取得
   const fetchContract = async () => {
@@ -198,7 +199,7 @@ function ContractDetailPageContent() {
     try {
       setIsDeclining(true)
       const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-      
+
       if (sessionError || !session) {
         console.error('セッション取得エラー:', sessionError)
         setError('認証が必要です')
@@ -232,6 +233,46 @@ function ContractDetailPageContent() {
       setError('サーバーエラーが発生しました')
     } finally {
       setIsDeclining(false)
+    }
+  }
+
+  // Box招待を再送信
+  const handleResendBoxInvitation = async () => {
+    if (!contract) {
+      setError('契約情報が見つかりません')
+      return
+    }
+
+    try {
+      setIsResendingBoxInvitation(true)
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+
+      if (sessionError || !session) {
+        console.error('セッション取得エラー:', sessionError)
+        setError('認証が必要です')
+        return
+      }
+
+      const response = await fetch(`/api/contracts/${contractId}/resend-box-invitation`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        alert(`Box招待メールを送信しました。\n受注者: ${result.contractor_email}\n招待フォルダ: ${result.invited_folders.join(', ')}`)
+      } else {
+        setError(result.message || 'Box招待の送信に失敗しました')
+      }
+    } catch (err: any) {
+      console.error('Box招待送信エラー:', err)
+      setError('サーバーエラーが発生しました')
+    } finally {
+      setIsResendingBoxInvitation(false)
     }
   }
 
@@ -600,12 +641,34 @@ function ContractDetailPageContent() {
                   <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
                   <h2 className="text-xl font-semibold text-gray-900 mb-2">契約が署名済みです</h2>
                   <p className="text-gray-600 mb-4">この契約は有効です。チャットルームでやりとりを開始できます。</p>
-                  <Button
-                    onClick={() => router.push('/chat')}
-                    variant="engineering"
-                  >
-                    チャットルームへ
-                  </Button>
+                  <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
+                    <Button
+                      onClick={() => router.push('/chat')}
+                      variant="engineering"
+                    >
+                      チャットルームへ
+                    </Button>
+                    {userRole === 'OrgAdmin' && (
+                      <Button
+                        onClick={handleResendBoxInvitation}
+                        disabled={isResendingBoxInvitation}
+                        variant="outline"
+                        className="border-engineering-blue text-engineering-blue hover:bg-engineering-blue/10"
+                      >
+                        {isResendingBoxInvitation ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-engineering-blue mr-2"></div>
+                            送信中...
+                          </>
+                        ) : (
+                          <>
+                            <Mail className="w-4 h-4 mr-2" />
+                            Box招待を再送信
+                          </>
+                        )}
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </Card>
             )}
