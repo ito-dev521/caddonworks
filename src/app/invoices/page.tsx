@@ -33,6 +33,7 @@ interface Invoice {
   issue_date: string
   due_date: string
   base_amount: number
+  fee_amount: number
   system_fee: number
   total_amount: number
   project: {
@@ -155,26 +156,28 @@ function InvoicesPageContent() {
     }
   }
 
-  // 選択月の業務完了届を組織別にグループ化
+  // 選択月の請求書（作成済み）を組織別にグループ化
   const getOrgGroups = (): OrgGroup[] => {
     const [year, month] = selectedMonth.split('-').map(Number)
-    const filtered = completionReports.filter(report => {
-      if (!report.actual_completion_date) return false
-      const completionDate = new Date(report.actual_completion_date)
-      return completionDate.getFullYear() === year && completionDate.getMonth() + 1 === month
+
+    // 選択月に発行された請求書をフィルタリング
+    const filteredInvoices = invoices.filter(invoice => {
+      if (!invoice.issue_date) return false
+      const issueDate = new Date(invoice.issue_date)
+      return issueDate.getFullYear() === year && issueDate.getMonth() + 1 === month
     })
 
     const groups: Record<string, OrgGroup> = {}
 
-    filtered.forEach(report => {
-      const orgId = report.projects?.org_id || 'unknown'
-      const orgName = report.projects?.organizations?.name || '不明な組織'
+    filteredInvoices.forEach(invoice => {
+      const orgId = invoice.client_org.id
+      const orgName = invoice.client_org.name
 
       if (!groups[orgId]) {
         groups[orgId] = {
           org_id: orgId,
           org_name: orgName,
-          reports: [],
+          reports: [], // 請求書ベースなので空配列
           total_contract_amount: 0,
           total_support_fee: 0,
           total_withholding: 0,
@@ -182,15 +185,11 @@ function InvoicesPageContent() {
         }
       }
 
-      groups[orgId].reports.push(report)
-
-      const contractAmount = report.contracts?.bid_amount || 0
-      // 受注者サポート利用（contract.support_enabled = true）の場合のみ、受注者がサポート料を支払う
-      const isContractorSupport = report.contracts?.support_enabled || false
-      const supportFee = isContractorSupport ? Math.round(contractAmount * 0.08) : 0
-      const subtotal = contractAmount - supportFee
-      const withholding = calculateWithholding(subtotal)
-      const finalAmount = subtotal - withholding
+      // テーブル表示と同じ計算ロジックを使用
+      const contractAmount = invoice.contract.bid_amount
+      const supportFee = contractAmount - invoice.total_amount // 契約金額 - 小計 = サポート料
+      const withholding = calculateWithholding(invoice.total_amount) // 小計から源泉徴収税を計算
+      const finalAmount = invoice.total_amount - withholding // 小計 - 源泉税 = 請求額
 
       groups[orgId].total_contract_amount += contractAmount
       groups[orgId].total_support_fee += supportFee
@@ -298,9 +297,18 @@ function InvoicesPageContent() {
     }
   }
 
-  // 請求書作成（運営者へ）
-  const handleCreateContractorInvoice = async (orgGroup: OrgGroup) => {
-    if (!confirm(`${orgGroup.org_name}への請求書を作成しますか？\n請求額: ¥${orgGroup.total_final_amount.toLocaleString()}`)) {
+  // 請求書作成（月単位で全組織まとめて作成）
+  const handleCreateContractorInvoice = async () => {
+    const orgGroups = getOrgGroups()
+    if (orgGroups.length === 0) {
+      alert('対象月の業務完了届がありません')
+      return
+    }
+
+    const totalAmount = orgGroups.reduce((sum, group) => sum + group.total_final_amount, 0)
+    const orgNames = orgGroups.map(g => g.org_name).join('、')
+
+    if (!confirm(`${selectedMonth}の請求書を作成しますか？\n\n対象組織: ${orgNames}\n合計請求額: ¥${totalAmount.toLocaleString()}\n\n※各組織ごとに請求書が作成されます。`)) {
       return
     }
 
@@ -312,42 +320,66 @@ function InvoicesPageContent() {
         return
       }
 
-      console.log('請求書作成リクエスト:', {
-        org_id: orgGroup.org_id,
-        month: selectedMonth,
-        completion_report_ids: orgGroup.reports.map(r => r.id),
-        reports_count: orgGroup.reports.length
-      })
+      let successCount = 0
+      let errorMessages: string[] = []
 
-      const response = await fetch('/api/contractor-invoices', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`
-        },
-        body: JSON.stringify({
+      // 各組織ごとに請求書を作成
+      for (const orgGroup of orgGroups) {
+        console.log('請求書作成リクエスト:', {
           org_id: orgGroup.org_id,
           month: selectedMonth,
-          completion_report_ids: orgGroup.reports.map(r => r.id)
+          completion_report_ids: orgGroup.reports.map(r => r.id),
+          reports_count: orgGroup.reports.length
         })
-      })
 
-      const result = await response.json()
-      console.log('請求書作成レスポンス:', result)
+        const response = await fetch('/api/contractor-invoices', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`
+          },
+          body: JSON.stringify({
+            org_id: orgGroup.org_id,
+            month: selectedMonth,
+            completion_report_ids: orgGroup.reports.map(r => r.id)
+          })
+        })
 
-      if (response.ok) {
-        alert('請求書を作成しました。管理者の請求書管理ページで確認できます。')
-        await fetchInvoices()
-      } else {
-        console.error('請求書作成エラー:', result)
-        alert(`請求書作成に失敗しました: ${result.message}\n${result.error || result.detail || ''}`)
+        const result = await response.json()
+        console.log(`${orgGroup.org_name} 請求書作成レスポンス:`, result)
+        console.log(`ステータスコード: ${response.status}`)
+
+        if (response.ok) {
+          successCount++
+        } else {
+          console.error('請求書作成エラー:', result)
+          const errorDetail = result.error ? `\n詳細: ${result.error}` : ''
+          const errorContext = result.detail ? `\n詳細情報: ${result.detail}` : ''
+          errorMessages.push(`${orgGroup.org_name}: ${result.message}${errorDetail}${errorContext}`)
+        }
       }
+
+      if (errorMessages.length > 0) {
+        alert(`請求書作成結果:\n成功: ${successCount}件\n失敗: ${errorMessages.length}件\n\n失敗詳細:\n${errorMessages.join('\n')}`)
+      } else {
+        alert(`請求書を${successCount}件作成しました。管理者の請求書管理ページで確認できます。`)
+      }
+
+      await fetchInvoices()
     } catch (error) {
       console.error('請求書作成エラー:', error)
       alert('ネットワークエラーが発生しました: ' + (error as Error).message)
     } finally {
       setIsSubmitting(false)
     }
+  }
+
+  // 請求書作成ボタンの表示判定（選択月の20日を過ぎているかチェック）
+  const canCreateInvoice = () => {
+    const [year, month] = selectedMonth.split('-').map(Number)
+    const today = new Date()
+    const targetDate = new Date(year, month - 1, 21) // 21日になったら作成可能
+    return today >= targetDate
   }
 
   useEffect(() => {
@@ -476,13 +508,13 @@ function InvoicesPageContent() {
                       </div>
                     </CardHeader>
                     <CardContent>
-                      {/* 業務一覧テーブル */}
-                      <div className="overflow-x-auto mb-4">
+                      {/* 請求書一覧テーブル */}
+                      <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                           <thead className="bg-gray-100">
                             <tr>
                               <th className="px-4 py-2 text-left">プロジェクト</th>
-                              <th className="px-4 py-2 text-left">完了日</th>
+                              <th className="px-4 py-2 text-left">発行日</th>
                               <th className="px-4 py-2 text-right">契約金額</th>
                               <th className="px-4 py-2 text-right">サポート利用金額</th>
                               <th className="px-4 py-2 text-right">源泉税</th>
@@ -490,29 +522,46 @@ function InvoicesPageContent() {
                             </tr>
                           </thead>
                           <tbody>
-                            {group.reports.map((report) => {
-                              const contractAmount = report.contracts?.bid_amount || 0
-                              // 受注者サポート利用の場合のみサポート料を差し引く
-                              const isContractorSupport = report.contracts?.support_enabled || false
-                              const supportFee = isContractorSupport ? Math.round(contractAmount * 0.08) : 0
-                              const subtotal = contractAmount - supportFee
-                              const withholding = calculateWithholding(subtotal)
-                              const finalAmount = subtotal - withholding
-                              return (
-                                <tr key={report.id} className="border-t">
-                                  <td className="px-4 py-2">{report.projects?.title || '—'}</td>
-                                  <td className="px-4 py-2">{new Date(report.actual_completion_date).toLocaleDateString('ja-JP')}</td>
-                                  <td className="px-4 py-2 text-right">¥{contractAmount.toLocaleString()}</td>
-                                  <td className="px-4 py-2 text-right text-red-600">¥{supportFee.toLocaleString()}</td>
-                                  <td className="px-4 py-2 text-right text-orange-600">¥{withholding.toLocaleString()}</td>
-                                  <td className="px-4 py-2 text-right font-semibold">¥{finalAmount.toLocaleString()}</td>
-                                </tr>
-                              )
-                            })}
+                            {(() => {
+                              const [year, month] = selectedMonth.split('-').map(Number)
+                              const orgInvoices = invoices.filter(invoice => {
+                                if (!invoice.issue_date) return false
+                                const issueDate = new Date(invoice.issue_date)
+                                return invoice.client_org.id === group.org_id &&
+                                       issueDate.getFullYear() === year &&
+                                       issueDate.getMonth() + 1 === month
+                              })
+
+                              return orgInvoices.map((invoice) => {
+                                const contractAmount = invoice.contract.bid_amount
+                                const supportFee = contractAmount - invoice.total_amount // 契約金額 - 小計 = サポート料
+                                const withholding = calculateWithholding(invoice.total_amount) // 小計から源泉徴収税を計算
+                                const finalAmount = invoice.total_amount - withholding // 小計 - 源泉税 = 請求額
+                                return (
+                                  <tr key={invoice.id} className="border-t">
+                                    <td className="px-4 py-2">{invoice.project.title}</td>
+                                    <td className="px-4 py-2">{new Date(invoice.issue_date).toLocaleDateString('ja-JP')}</td>
+                                    <td className="px-4 py-2 text-right">¥{contractAmount.toLocaleString()}</td>
+                                    <td className="px-4 py-2 text-right text-red-600">¥{supportFee.toLocaleString()}</td>
+                                    <td className="px-4 py-2 text-right text-orange-600">¥{withholding.toLocaleString()}</td>
+                                    <td className="px-4 py-2 text-right font-semibold">¥{finalAmount.toLocaleString()}</td>
+                                  </tr>
+                                )
+                              })
+                            })()}
                           </tbody>
                           <tfoot className="bg-gray-50 font-bold">
                             <tr>
-                              <td className="px-4 py-2" colSpan={2}>合計 ({group.reports.length}件)</td>
+                              <td className="px-4 py-2" colSpan={2}>合計 ({(() => {
+                                const [year, month] = selectedMonth.split('-').map(Number)
+                                return invoices.filter(invoice => {
+                                  if (!invoice.issue_date) return false
+                                  const issueDate = new Date(invoice.issue_date)
+                                  return invoice.client_org.id === group.org_id &&
+                                         issueDate.getFullYear() === year &&
+                                         issueDate.getMonth() + 1 === month
+                                }).length
+                              })()}件)</td>
                               <td className="px-4 py-2 text-right">¥{group.total_contract_amount.toLocaleString()}</td>
                               <td className="px-4 py-2 text-right text-red-600">¥{group.total_support_fee.toLocaleString()}</td>
                               <td className="px-4 py-2 text-right text-orange-600">¥{group.total_withholding.toLocaleString()}</td>
@@ -521,26 +570,43 @@ function InvoicesPageContent() {
                           </tfoot>
                         </table>
                       </div>
-
-                      {/* 請求書作成ボタン */}
-                      <div className="flex justify-end">
-                        <Button
-                          className="bg-engineering-blue hover:bg-engineering-blue-dark"
-                          onClick={() => handleCreateContractorInvoice(group)}
-                          disabled={isSubmitting}
-                        >
-                          <FileText className="w-4 h-4 mr-2" />
-                          {isSubmitting ? '作成中...' : '請求書作成'}
-                        </Button>
-                      </div>
                     </CardContent>
                   </Card>
                 ))}
 
-                {getOrgGroups().length === 0 && (
+                {getOrgGroups().length === 0 ? (
                   <Card>
                     <CardContent className="py-8 text-center text-gray-500">
-                      {selectedMonth}の業務完了届はありません
+                      {selectedMonth}の請求書はありません
+                    </CardContent>
+                  </Card>
+                ) : (
+                  /* 月単位の集計情報 */
+                  <Card className="bg-gradient-to-br from-blue-50 to-white border-2 border-engineering-blue">
+                    <CardContent className="pt-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="font-semibold text-gray-900 mb-1">
+                            {selectedMonth}の請求書集計
+                          </h3>
+                          <p className="text-sm text-gray-600">
+                            全{getOrgGroups().length}社 合計 {(() => {
+                              const [year, month] = selectedMonth.split('-').map(Number)
+                              return invoices.filter(invoice => {
+                                if (!invoice.issue_date) return false
+                                const issueDate = new Date(invoice.issue_date)
+                                return issueDate.getFullYear() === year && issueDate.getMonth() + 1 === month
+                              }).length
+                            })()}件の請求書
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-2xl font-bold text-engineering-blue">
+                            ¥{getOrgGroups().reduce((sum, g) => sum + g.total_final_amount, 0).toLocaleString()}
+                          </p>
+                          <p className="text-sm text-gray-600">合計請求額</p>
+                        </div>
+                      </div>
                     </CardContent>
                   </Card>
                 )}

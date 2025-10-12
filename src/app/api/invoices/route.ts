@@ -207,7 +207,32 @@ export async function POST(request: NextRequest) {
     const baseAmount = applyContractorDeduct ? Math.max(0, contractAmount - supportFee) : contractAmount
     const systemFee = (!isCompletion && projectSupport) ? supportFee : 0
     const totalAmount = baseAmount + systemFee
-    
+
+    // 発行日を設定
+    const issueDate = type === 'completion' ? new Date().toISOString().split('T')[0] : null
+
+    // 支払日を完了日(業務完了届の発行日)から計算（20日までなら当月末、21日以降なら翌月末）
+    let dueDate: string
+    if (issueDate) {
+      const compDate = new Date(issueDate)
+      const day = compDate.getDate()
+
+      if (day <= 20) {
+        // 当月末
+        const lastDay = new Date(compDate.getFullYear(), compDate.getMonth() + 1, 0)
+        dueDate = lastDay.toISOString().split('T')[0]
+        console.log(`完了日(業務完了届発行日) ${issueDate} (${day}日) → 当月末支払い: ${dueDate}`)
+      } else {
+        // 翌月末
+        const lastDay = new Date(compDate.getFullYear(), compDate.getMonth() + 2, 0)
+        dueDate = lastDay.toISOString().split('T')[0]
+        console.log(`完了日(業務完了届発行日) ${issueDate} (${day}日) → 翌月末支払い: ${dueDate}`)
+      }
+    } else {
+      // デフォルト: 30日後
+      dueDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    }
+
     const invoiceData: any = {
       project_id: effectiveProjectId,
       client_org_id: project.org_id,
@@ -216,8 +241,8 @@ export async function POST(request: NextRequest) {
       system_fee: systemFee,
       total_amount: totalAmount,
       status: type === 'completion' ? 'issued' : 'draft', // 業務完了届の場合は発行済み、その他は下書き
-      issue_date: type === 'completion' ? new Date().toISOString().split('T')[0] : null, // 業務完了届の場合は発行日を設定
-      due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30日後
+      issue_date: issueDate, // 業務完了届の場合は発行日を設定
+      due_date: dueDate, // 完了日から計算した支払期限
       org_id: project.org_id,
       contractor_id: contract.contractor_id,
       contract_id: contract.id
@@ -347,54 +372,134 @@ export async function GET(request: NextRequest) {
 
       try {
         // 付随情報の取得（発注者/受注者、プロジェクト）
-        const { data: project } = await supabaseAdmin
+        console.log('=== デバッグ: 請求書のproject_id:', invoice.project_id)
+        const { data: project, error: projectError } = await supabaseAdmin
           .from('projects')
           .select('id, title, start_date, end_date, assignee_name, org_id, contractor_id')
           .eq('id', invoice.project_id)
           .single()
 
+        console.log('取得したプロジェクトデータ:', JSON.stringify(project))
+        if (projectError) console.log('プロジェクト取得エラー:', projectError.message)
+
         const { data: org } = await supabaseAdmin
           .from('organizations')
-          .select('name, address, invoice_registration_number')
+          .select('name, address, invoice_registration_number, contact_person, building, representative_name, representative_title')
           .eq('id', project?.org_id)
           .single()
 
-        const { data: contractor } = await supabaseAdmin
-          .from('users')
-          .select('display_name, address')
-          .eq('id', project?.contractor_id)
+        // 契約から受注者IDを取得
+        const { data: contract } = await supabaseAdmin
+          .from('contracts')
+          .select('contractor_id')
+          .eq('id', invoice.contract_id)
           .single()
 
+        const contractorId = contract?.contractor_id || invoice.contractor_id
+        console.log('契約ID:', invoice.contract_id, '受注者ID:', contractorId)
+
+        const { data: contractor, error: contractorError } = await supabaseAdmin
+          .from('users')
+          .select('display_name, address, address_detail, formal_name')
+          .eq('id', contractorId)
+          .single()
+
+        console.log('取得した受注者データ:', JSON.stringify(contractor))
+        if (contractorError) console.log('受注者データエラー:', contractorError.message)
+
         const taxRate = 0.1
-        // base_amount/subtotal が無い旧データ向けフォールバック
-        const amountExcl = Number((invoice as any).base_amount ?? (invoice as any).subtotal ?? (invoice as any).amount ?? 0)
-        const tax = Math.round(amountExcl * taxRate)
-        const total = amountExcl + tax
-        // 源泉: 100万未満 → 総額*0.1021, 100万以上 → (総額-1000000)*0.2042 + 102100
-        const withholding = total < 1000000
-          ? Math.floor(total * 0.1021)
-          : Math.floor((total - 1000000) * 0.2042 + 102100)
+        // base_amount は既に税込金額
+        const totalIncludingTax = Number((invoice as any).base_amount ?? (invoice as any).subtotal ?? (invoice as any).amount ?? 0)
+
+        // 税抜金額を計算（表示用）
+        const amountExcl = Math.round(totalIncludingTax / (1 + taxRate))
+
+        // サポート利用料を取得
+        const supportFee = Number((invoice as any).system_fee ?? 0)
+
+        // 小計（税込金額 - サポート利用料）
+        const subtotal = totalIncludingTax - supportFee
+
+        // 源泉: 小計に対して計算（100万未満 → 総額*0.1021, 100万以上 → (総額-1000000)*0.2042 + 102100）
+        const withholding = subtotal < 1000000
+          ? Math.floor(subtotal * 0.1021)
+          : Math.floor((subtotal - 1000000) * 0.2042 + 102100)
+
+        // 注文番号を半角英数に変換し、全ての空白と不可視文字を削除
+        let orderNo = (invoice.contract_id ?? '—')
+        console.log('元の契約ID:', JSON.stringify(orderNo), 'length:', orderNo.length)
+
+        // 全角を半角に変換
+        orderNo = orderNo.replace(/[！-～]/g, (s: string) => String.fromCharCode(s.charCodeAt(0) - 0xFEE0))
+
+        // 英数字とハイフンのみを残す（それ以外の文字は全て削除）
+        orderNo = orderNo.split('').filter(c => /[a-zA-Z0-9\-]/.test(c)).join('')
+
+        console.log('クリーニング後:', JSON.stringify(orderNo), 'length:', orderNo.length)
+
+        // 支払日を完了日(業務完了届の発行日)から計算（20日までなら当月末、21日以降なら翌月末）
+        let paymentDate: string | null = null
+        const completionDate = (invoice as any).issue_date // 業務完了届の発行日
+
+        if (completionDate) {
+          const compDate = new Date(completionDate)
+          const day = compDate.getDate()
+
+          if (day <= 20) {
+            // 当月末
+            const lastDay = new Date(compDate.getFullYear(), compDate.getMonth() + 1, 0)
+            paymentDate = lastDay.toISOString().split('T')[0]
+            console.log(`完了日(業務完了届発行日) ${completionDate} (${day}日) → 当月末支払い: ${paymentDate}`)
+          } else {
+            // 翌月末
+            const lastDay = new Date(compDate.getFullYear(), compDate.getMonth() + 2, 0)
+            paymentDate = lastDay.toISOString().split('T')[0]
+            console.log(`完了日(業務完了届発行日) ${completionDate} (${day}日) → 翌月末支払い: ${paymentDate}`)
+          }
+        } else {
+          // フォールバック: due_dateを使用
+          const dueDate = (invoice as any).due_date
+          if (dueDate) {
+            const date = new Date(dueDate)
+            const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0)
+            paymentDate = lastDay.toISOString().split('T')[0]
+            console.log(`完了日がないため納期を使用: ${dueDate} → ${paymentDate}`)
+          }
+        }
+
+        // 請負者の氏名を決定（優先順位: formal_name > display_name）
+        const contractorName = (contractor as any)?.formal_name || contractor?.display_name || ''
+
+        // 請負者の住所を結合（address + address_detail）
+        const contractorAddress = [
+          contractor?.address || '',
+          (contractor as any)?.address_detail || ''
+        ].filter(Boolean).join('')
 
         const pdfBuf = await renderJapaneseInvoicePdf({
           issuer: {
             name: org?.name || '',
             address: org?.address || '',
+            building: (org as any)?.building || null,
+            contact: (org as any)?.contact_person || (org as any)?.representative_name || null,
+            representativeTitle: (org as any)?.representative_title || '代表取締役',
             invoiceRegNo: org?.invoice_registration_number || null
           },
           contractor: {
-            name: contractor?.display_name || '',
-            address: contractor?.address || ''
+            name: contractorName,
+            address: contractorAddress
           },
-          orderNo: invoice.contract_id ?? '—',
+          orderNo: orderNo,
           assignee: project?.assignee_name ?? null,
           title: project?.title || '',
           period: { from: project?.start_date, to: project?.end_date },
           amountExcl,
           taxRate,
-          dueDate: (invoice as any).due_date ?? null,
+          dueDate: paymentDate,
           payMethod: '口座振込',
           note: '※支払金額は振込手数料等、源泉徴収を控除した金額とする',
-          withHolding: withholding
+          withHolding: withholding,
+          supportFee: supportFee
         })
 
         return new NextResponse(new Uint8Array(pdfBuf), {

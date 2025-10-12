@@ -19,6 +19,7 @@ export async function generatePdfPlaceholder(payload: InvoicePdfPayload): Promis
 
 // --- 雛形に寄せた簡易テンプレの描画 ---
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
+import fontkit from '@pdf-lib/fontkit'
 import fs from 'fs'
 import path from 'path'
 
@@ -33,8 +34,18 @@ export interface BaseTemplateData {
 
 export async function renderTemplatePdf(kind: DocKind, data: BaseTemplateData): Promise<Buffer> {
   const pdfDoc = await PDFDocument.create()
+
+  // fontkitを登録（カスタムフォント使用に必要）
+  pdfDoc.registerFontkit(fontkit)
+
   const page = pdfDoc.addPage([595.28, 841.89])
-  const font = await pdfDoc.embedFont(StandardFonts.Helvetica)
+
+  // 日本語フォントを読み込み（利用不可の場合はHelveticaにフォールバック）
+  const jpFontData = loadJPFont()
+  const font = jpFontData
+    ? await pdfDoc.embedFont(jpFontData)
+    : await pdfDoc.embedFont(StandardFonts.Helvetica)
+
   const drawText = (t: string, x: number, y: number, s = 12) => page.drawText(t, { x, y, size: s, font, color: rgb(0,0,0) })
 
   drawText(new Date().toLocaleDateString('ja-JP'), 500, 810, 10)
@@ -67,7 +78,9 @@ export interface JapaneseInvoiceData {
   issuer: { // 発注者（請求元）
     name: string
     address?: string
-    contact?: string
+    building?: string | null // ビル名・階数
+    contact?: string | null // 代表者名
+    representativeTitle?: string // 代表者肩書（デフォルト: 代表取締役）
     invoiceRegNo?: string | null
   }
   contractor: { // 請負者（受注者）
@@ -84,6 +97,7 @@ export interface JapaneseInvoiceData {
   payMethod: string
   note?: string
   withHolding: number // 源泉
+  supportFee?: number // サポート利用料（オプション）
 }
 
 function loadJPFont(): Uint8Array | null {
@@ -100,24 +114,58 @@ function loadJPFont(): Uint8Array | null {
 
 export async function renderJapaneseInvoicePdf(data: JapaneseInvoiceData): Promise<Buffer> {
   const pdfDoc = await PDFDocument.create()
+
+  // fontkitを登録（カスタムフォント使用に必要）
+  pdfDoc.registerFontkit(fontkit)
+
   const page = pdfDoc.addPage([595.28, 841.89]) // A4
   const jpFontData = loadJPFont()
   const font = jpFontData
     ? await pdfDoc.embedFont(jpFontData)
     : await pdfDoc.embedFont(StandardFonts.Helvetica)
-  const draw = (t: string, x: number, y: number, s = 10) =>
-    page.drawText(t ?? '', { x, y, size: s, font, color: rgb(0, 0, 0) })
+
+  // 英数字専用フォント（注文番号など）
+  const enFont = await pdfDoc.embedFont(StandardFonts.Helvetica)
+
+  const draw = (t: string, x: number, y: number, s = 10, useEnFont = false) =>
+    page.drawText(t ?? '', { x, y, size: s, font: useEnFont ? enFont : font, color: rgb(0, 0, 0) })
 
   // ヘッダ（左右）
-  draw('（発注者）', 50, 800)
-  draw(data.issuer.address || '', 50, 785)
-  draw(data.issuer.name || '', 50, 770)
-  if (data.issuer.contact) draw(`代表者 ${data.issuer.contact}`, 50, 756)
+  // 左側：発注者（固定情報）
+  let issuerY = 815
+  draw('福岡県福岡市早良区西新1-10-13', 50, issuerY)
+  issuerY -= 15
+  draw('西新新田ビル403', 50, issuerY)
+  issuerY -= 15
+  draw('イースタイルラボ株式会社', 50, issuerY)
+  issuerY -= 15
+  draw('代表取締役　井上直樹', 50, issuerY)
 
-  draw('（請負者）', 420, 800)
-  if (data.issuer.invoiceRegNo) draw(`登録番号: ${data.issuer.invoiceRegNo}`, 420, 815)
-  if (data.contractor.address) draw(data.contractor.address, 420, 785)
-  draw(data.contractor.name || '', 420, 770)
+  // 右側：請負者（受注者）
+  console.log('請負者データ:', JSON.stringify(data.contractor))
+  draw('（請負者）', 420, 815)
+  if (data.contractor.address) {
+    // 住所を適切な位置で2行に分割
+    const address = data.contractor.address
+    // 「丁目」の後で分割、なければ20文字で分割
+    const splitIndex = address.indexOf('丁目') !== -1 ? address.indexOf('丁目') + 2 : 20
+    if (address.length > splitIndex) {
+      // 長い場合は2行に分割
+      const line1 = address.substring(0, splitIndex)
+      const line2 = address.substring(splitIndex)
+      draw(line1, 420, 800, 9)
+      draw(line2, 420, 788, 9)
+    } else {
+      draw(address, 420, 800, 9)
+    }
+  } else {
+    console.log('請負者の住所が空です')
+  }
+  if (data.contractor.name) {
+    draw(data.contractor.name, 420, 770, 10)
+  } else {
+    console.log('請負者の氏名が空です')
+  }
 
   // タイトル
   draw('請 求 書', 270, 720, 18)
@@ -128,31 +176,63 @@ export async function renderJapaneseInvoicePdf(data: JapaneseInvoiceData): Promi
   let y = 700
   const rowH = 22
 
-  const box = (label: string, content: string, cols = [120, width - 120]) => {
+  const box = (label: string, content: string, cols = [120, width - 120], fontSize = 10, useEnFont = false) => {
     page.drawRectangle({ x: left, y: y - rowH, width, height: rowH, borderColor: rgb(0, 0, 0), borderWidth: 1 })
     page.drawLine({ start: { x: left + cols[0], y: y - rowH }, end: { x: left + cols[0], y: y }, color: rgb(0, 0, 0) })
-    draw(label, left + 6, y - 15)
-    draw(content, left + cols[0] + 6, y - 15)
+    draw(label, left + 6, y - 15, fontSize)
+    draw(content, left + cols[0] + 6, y - 15, fontSize, useEnFont)
     y -= rowH
   }
 
-  box('注文番号', data.orderNo)
+  // 注文番号の空白を完全に除去し、英数字フォントで描画
+  const cleanOrderNo = (data.orderNo || '').replace(/\s+/g, '')
+  box('注文番号', cleanOrderNo, [120, width - 120], 10, true)
   box('担当者', data.assignee || '')
   box('業務名', data.title)
   box('工期', `${data.period.from ?? ''} 〜 ${data.period.to ?? ''}`)
 
-  // 金額ボックス
+  // 金額詳細（税込ベース）
   const tax = Math.round(data.amountExcl * data.taxRate)
-  const total = data.amountExcl + tax
-  page.drawRectangle({ x: left, y: y - rowH * 2, width, height: rowH * 2, borderColor: rgb(0, 0, 0), borderWidth: 1 })
-  page.drawLine({ start: { x: left + 250, y: y - rowH * 2 }, end: { x: left + 250, y: y }, color: rgb(0, 0, 0) })
-  draw('契約金額', left + 6, y - 15)
-  draw(`${data.amountExcl.toLocaleString('ja-JP')} 円`, left + 120, y - 15)
-  draw('内、消費税(10%)', left + 260, y - 15)
-  draw(`${tax.toLocaleString('ja-JP')} 円`, left + 390, y - 15)
-  draw('税込金額', left + 260, y - 15 - rowH)
-  draw(`${total.toLocaleString('ja-JP')} 円`, left + 390, y - 15 - rowH)
-  y -= rowH * 2
+  const totalIncludingTax = data.amountExcl + tax
+  const supportFee = data.supportFee || 0
+  const subtotal = totalIncludingTax - supportFee
+  const paymentAmount = subtotal - data.withHolding
+
+  // 金額ボックス（高さを動的に調整）
+  const numRows = supportFee > 0 ? 5 : 4
+  page.drawRectangle({ x: left, y: y - rowH * numRows, width, height: rowH * numRows, borderColor: rgb(0, 0, 0), borderWidth: 1 })
+
+  // 契約金額（税込）
+  draw('契約金額（税込）', left + 6, y - 15)
+  draw(`¥${totalIncludingTax.toLocaleString('ja-JP')}`, left + 400, y - 15)
+  page.drawLine({ start: { x: left, y: y - rowH }, end: { x: left + width, y: y - rowH }, color: rgb(0, 0, 0) })
+  y -= rowH
+
+  // サポート利用料（該当する場合のみ）
+  if (supportFee > 0) {
+    draw('サポート利用料', left + 6, y - 15)
+    draw(`-¥${supportFee.toLocaleString('ja-JP')}`, left + 400, y - 15)
+    page.drawLine({ start: { x: left, y: y - rowH }, end: { x: left + width, y: y - rowH }, color: rgb(0, 0, 0) })
+    y -= rowH
+  }
+
+  // 小計
+  draw('小計', left + 6, y - 15)
+  draw(`¥${subtotal.toLocaleString('ja-JP')}`, left + 400, y - 15)
+  page.drawLine({ start: { x: left, y: y - rowH }, end: { x: left + width, y: y - rowH }, color: rgb(0, 0, 0) })
+  y -= rowH
+
+  // 源泉徴収税
+  const withholdingRate = ((data.withHolding / subtotal) * 100).toFixed(2)
+  draw(`源泉徴収税 (${withholdingRate}%)`, left + 6, y - 15)
+  draw(`-¥${data.withHolding.toLocaleString('ja-JP')}`, left + 400, y - 15)
+  page.drawLine({ start: { x: left, y: y - rowH }, end: { x: left + width, y: y - rowH }, color: rgb(0, 0, 0) })
+  y -= rowH
+
+  // お振込金額
+  draw('お振込金額', left + 6, y - 15, 11)
+  draw(`¥${paymentAmount.toLocaleString('ja-JP')}`, left + 400, y - 15, 12)
+  y -= rowH
 
   box('支払日', data.dueDate || '')
   box('支払方法', data.payMethod)
@@ -162,13 +242,6 @@ export async function renderJapaneseInvoicePdf(data: JapaneseInvoiceData): Promi
   draw('備考', left + 6, y - 15)
   draw(data.note || '※支払金額は振込手数料等、源泉徴収を控除した金額とする', left + 50, y - 15)
   y -= rowH * 2 + 10
-
-  // 合計、源泉
-  draw(`小計:  ¥${data.amountExcl.toLocaleString('ja-JP')}`, left, y)
-  draw(`消費税(10%):  ¥${tax.toLocaleString('ja-JP')}`, left + 180, y)
-  draw(`合計:  ¥${total.toLocaleString('ja-JP')}`, left + 360, y)
-  y -= 18
-  draw(`源泉徴収税:  ¥${data.withHolding.toLocaleString('ja-JP')}`, left, y)
 
   return Buffer.from(await pdfDoc.save())
 }

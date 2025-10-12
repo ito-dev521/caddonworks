@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdmin } from '@/lib/supabase'
+import {
+  calculateInvoiceAmountsFromContracts,
+  validateInvoiceAmounts
+} from '@/lib/invoice-calculations'
 
 export const dynamic = 'force-dynamic'
 
@@ -92,43 +96,27 @@ export async function POST(request: NextRequest) {
       }, { status: 403 })
     }
 
-    // システム設定からサポート手数料率を取得
+    // システム設定からサポート手数料率を取得（key-value構造）
     const { data: sysSettings } = await supabaseAdmin
       .from('system_settings')
-      .select('support_fee_percent')
-      .eq('id', 'global')
+      .select('setting_value')
+      .eq('setting_key', 'support_fee_percent')
       .maybeSingle()
-    const supportPercent = Number(sysSettings?.support_fee_percent ?? 8)
+    const supportPercent = Number(sysSettings?.setting_value ?? 8)
 
-    // 集計計算
-    let totalContractAmount = 0
-    let totalSupportFee = 0
-    let totalSubtotal = 0
-    let totalWithholding = 0
+    // 集計計算（一元化された計算ロジックを使用）
+    const contracts = reports.map((report: any) => ({
+      bid_amount: report.contracts?.bid_amount || 0,
+      support_enabled: report.contracts?.support_enabled || false
+    }))
 
-    const calculateWithholding = (amount: number) => {
-      if (amount <= 1000000) {
-        return Math.floor(amount * 0.1021)
-      } else {
-        return Math.floor((amount - 1000000) * 0.2042 + 102100)
-      }
-    }
-
-    reports.forEach((report: any) => {
-      const contractAmount = report.contracts?.bid_amount || 0
-      // 受注者サポート利用（contract.support_enabled = true）の場合のみ、受注者がサポート料を支払う
-      const isContractorSupport = report.contracts?.support_enabled || false
-      const supportFee = isContractorSupport ? Math.round((contractAmount * supportPercent) / 100) : 0
-      const subtotal = contractAmount - supportFee
-      const withholding = calculateWithholding(subtotal)
-
-      totalContractAmount += contractAmount
-      totalSupportFee += supportFee
-      totalSubtotal += subtotal
-      totalWithholding += withholding
-    })
-
-    const totalFinalAmount = totalSubtotal - totalWithholding
+    const {
+      totalContractAmount,
+      totalSupportFee,
+      totalSubtotal,
+      totalWithholding,
+      totalFinalAmount
+    } = calculateInvoiceAmountsFromContracts(contracts, supportPercent)
 
     // 請求書番号を生成
     const invoiceNumber = `CINV-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`
@@ -143,9 +131,10 @@ export async function POST(request: NextRequest) {
       contractor_id: userProfile.id,
       org_id: org_id,
       project_id: reports[0]?.project_id, // 最初のプロジェクトIDを使用
-      base_amount: totalSubtotal,
-      system_fee: totalSupportFee,
-      total_amount: totalFinalAmount,
+      base_amount: totalContractAmount, // 契約金額
+      fee_amount: totalSupportFee, // サポート手数料
+      system_fee: totalWithholding, // 源泉徴収税
+      total_amount: totalSubtotal, // 小計（契約金額 - サポート料）
       status: 'issued',
       issue_date: issueDate,
       due_date: dueDate
@@ -202,6 +191,31 @@ export async function POST(request: NextRequest) {
       }
     } catch (_) {
       // 列が存在しない場合はスキップ
+    }
+
+    // データの整合性を検証
+    const validationErrors = validateInvoiceAmounts(
+      {
+        base_amount: invoiceData.base_amount,
+        fee_amount: invoiceData.fee_amount,
+        total_amount: invoiceData.total_amount,
+        system_fee: invoiceData.system_fee
+      },
+      supportPercent,
+      contracts.some(c => c.support_enabled) // 少なくとも1つの契約でサポートが有効か
+    )
+
+    if (validationErrors.length > 0) {
+      console.error('請求書データの検証エラー:', validationErrors)
+      return NextResponse.json({
+        message: '請求書データの計算に誤りがあります',
+        errors: validationErrors,
+        debug: {
+          contracts,
+          supportPercent,
+          invoiceData
+        }
+      }, { status: 500 })
     }
 
     // 請求書を保存
