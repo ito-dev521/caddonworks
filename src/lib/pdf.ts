@@ -211,7 +211,7 @@ export async function renderJapaneseInvoicePdf(data: JapaneseInvoiceData): Promi
   // サポート利用料（該当する場合のみ）
   if (supportFee > 0) {
     draw('サポート利用料', left + 6, y - 15)
-    draw(`-¥${supportFee.toLocaleString('ja-JP')}`, left + 400, y - 15)
+    draw(`¥${supportFee.toLocaleString('ja-JP')}`, left + 400, y - 15)
     page.drawLine({ start: { x: left, y: y - rowH }, end: { x: left + width, y: y - rowH }, color: rgb(0, 0, 0) })
     y -= rowH
   }

@@ -187,7 +187,7 @@ function InvoicesPageContent() {
 
       // テーブル表示と同じ計算ロジックを使用
       const contractAmount = invoice.contract.bid_amount
-      const supportFee = contractAmount - invoice.total_amount // 契約金額 - 小計 = サポート料
+      const supportFee = invoice.fee_amount // fee_amountを直接使用
       const withholding = calculateWithholding(invoice.total_amount) // 小計から源泉徴収税を計算
       const finalAmount = invoice.total_amount - withholding // 小計 - 源泉税 = 請求額
 
@@ -534,7 +534,7 @@ function InvoicesPageContent() {
 
                               return orgInvoices.map((invoice) => {
                                 const contractAmount = invoice.contract.bid_amount
-                                const supportFee = contractAmount - invoice.total_amount // 契約金額 - 小計 = サポート料
+                                const supportFee = invoice.fee_amount // fee_amountを直接使用
                                 const withholding = calculateWithholding(invoice.total_amount) // 小計から源泉徴収税を計算
                                 const finalAmount = invoice.total_amount - withholding // 小計 - 源泉税 = 請求額
                                 return (
@@ -799,7 +799,7 @@ function InvoicesPageContent() {
                             <span className="text-gray-900">¥{selectedInvoice.contract.bid_amount.toLocaleString()}</span>
                           </div>
                           {(() => {
-                            const supportFee = selectedInvoice.contract.bid_amount - selectedInvoice.total_amount
+                            const supportFee = selectedInvoice.fee_amount // fee_amountを直接使用
                             if (supportFee > 0) {
                               return (
                                 <div className="flex justify-between text-red-600">

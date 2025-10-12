@@ -36,6 +36,12 @@ interface Contract {
   org_admin_name?: string
   contractor_name?: string
   contractor_email?: string
+  order_acceptance_box_id?: string
+  order_acceptance_number?: string
+  order_acceptance_generated_at?: string
+  order_acceptance_sign_request_id?: string
+  order_acceptance_sign_started_at?: string
+  order_acceptance_signed_at?: string
 }
 
 function ContractDetailPageContent() {
@@ -52,6 +58,8 @@ function ContractDetailPageContent() {
   const [declineComment, setDeclineComment] = useState('')
   const [isDeclining, setIsDeclining] = useState(false)
   const [isResendingBoxInvitation, setIsResendingBoxInvitation] = useState(false)
+  const [isGeneratingOrderAcceptance, setIsGeneratingOrderAcceptance] = useState(false)
+  const [isStartingOrderAcceptanceSign, setIsStartingOrderAcceptanceSign] = useState(false)
 
   // 契約情報を取得
   const fetchContract = async () => {
@@ -273,6 +281,90 @@ function ContractDetailPageContent() {
       setError('サーバーエラーが発生しました')
     } finally {
       setIsResendingBoxInvitation(false)
+    }
+  }
+
+  // 注文請書を生成
+  const handleGenerateOrderAcceptance = async () => {
+    if (!contract) {
+      setError('契約情報が見つかりません')
+      return
+    }
+
+    try {
+      setIsGeneratingOrderAcceptance(true)
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+
+      if (sessionError || !session) {
+        console.error('セッション取得エラー:', sessionError)
+        setError('認証が必要です')
+        return
+      }
+
+      const response = await fetch(`/api/contracts/${contractId}/order-acceptance`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        // 契約情報を再取得
+        await fetchContract()
+        alert('注文請書を生成しました。')
+      } else {
+        setError(result.message || '注文請書の生成に失敗しました')
+      }
+    } catch (err: any) {
+      console.error('注文請書生成エラー:', err)
+      setError('サーバーエラーが発生しました')
+    } finally {
+      setIsGeneratingOrderAcceptance(false)
+    }
+  }
+
+  // 注文請書の電子署名を開始
+  const handleStartOrderAcceptanceSign = async () => {
+    if (!contract) {
+      setError('契約情報が見つかりません')
+      return
+    }
+
+    try {
+      setIsStartingOrderAcceptanceSign(true)
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+
+      if (sessionError || !session) {
+        console.error('セッション取得エラー:', sessionError)
+        setError('認証が必要です')
+        return
+      }
+
+      const response = await fetch(`/api/contracts/${contractId}/order-acceptance/sign`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        // 契約情報を再取得
+        await fetchContract()
+        alert('注文請書の署名リクエストを送信しました。受注者にメールで通知されます。')
+      } else {
+        setError(result.message || '署名リクエストの送信に失敗しました')
+      }
+    } catch (err: any) {
+      console.error('注文請書署名開始エラー:', err)
+      setError('サーバーエラーが発生しました')
+    } finally {
+      setIsStartingOrderAcceptanceSign(false)
     }
   }
 
@@ -670,6 +762,130 @@ function ContractDetailPageContent() {
                     )}
                   </div>
                 </div>
+              </Card>
+            )}
+
+            {/* 注文請書セクション */}
+            {contract.status === 'signed' && (
+              <Card className="p-6">
+                <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+                  <FileText className="w-5 h-5 mr-2" />
+                  注文請書（電子署名）
+                </h2>
+
+                {!contract.order_acceptance_box_id && userRole === 'OrgAdmin' && (
+                  <div className="space-y-4">
+                    <div className="bg-blue-50 p-4 rounded-lg">
+                      <h3 className="font-semibold text-blue-900 mb-2">注文請書の生成</h3>
+                      <p className="text-sm text-blue-800">
+                        契約が署名済みです。注文請書を生成して受注者に電子署名を依頼できます。
+                      </p>
+                    </div>
+                    <div className="flex justify-end">
+                      <Button
+                        onClick={handleGenerateOrderAcceptance}
+                        disabled={isGeneratingOrderAcceptance}
+                        variant="engineering"
+                      >
+                        {isGeneratingOrderAcceptance ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                            生成中...
+                          </>
+                        ) : (
+                          <>
+                            <FileText className="w-4 h-4 mr-2" />
+                            注文請書を生成
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {contract.order_acceptance_box_id && !contract.order_acceptance_sign_request_id && userRole === 'OrgAdmin' && (
+                  <div className="space-y-4">
+                    <div className="bg-green-50 p-4 rounded-lg">
+                      <h3 className="font-semibold text-green-900 mb-2">注文請書が生成されました</h3>
+                      <p className="text-sm text-green-800">
+                        注文請書番号: {contract.order_acceptance_number}
+                      </p>
+                      <p className="text-sm text-green-800">
+                        生成日時: {contract.order_acceptance_generated_at && new Date(contract.order_acceptance_generated_at).toLocaleString('ja-JP')}
+                      </p>
+                    </div>
+                    <div className="bg-blue-50 p-4 rounded-lg">
+                      <h3 className="font-semibold text-blue-900 mb-2">電子署名の開始</h3>
+                      <p className="text-sm text-blue-800">
+                        注文請書が生成されました。受注者に電子署名を依頼します。
+                      </p>
+                    </div>
+                    <div className="flex justify-end">
+                      <Button
+                        onClick={handleStartOrderAcceptanceSign}
+                        disabled={isStartingOrderAcceptanceSign}
+                        variant="engineering"
+                      >
+                        {isStartingOrderAcceptanceSign ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                            送信中...
+                          </>
+                        ) : (
+                          <>
+                            <PenTool className="w-4 h-4 mr-2" />
+                            署名を依頼
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {contract.order_acceptance_sign_request_id && !contract.order_acceptance_signed_at && (
+                  <div className="space-y-4">
+                    <div className="bg-yellow-50 p-4 rounded-lg">
+                      <h3 className="font-semibold text-yellow-900 mb-2">受注者署名待ち</h3>
+                      <p className="text-sm text-yellow-800">
+                        注文請書番号: {contract.order_acceptance_number}
+                      </p>
+                      <p className="text-sm text-yellow-800">
+                        署名リクエスト送信日時: {contract.order_acceptance_sign_started_at && new Date(contract.order_acceptance_sign_started_at).toLocaleString('ja-JP')}
+                      </p>
+                      <p className="text-sm text-yellow-800 mt-2">
+                        受注者に電子署名リクエストを送信しました。受注者が署名を完了するまでお待ちください。
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {contract.order_acceptance_signed_at && (
+                  <div className="space-y-4">
+                    <div className="bg-green-50 p-4 rounded-lg">
+                      <h3 className="font-semibold text-green-900 mb-2 flex items-center">
+                        <CheckCircle className="w-5 h-5 mr-2" />
+                        注文請書署名完了
+                      </h3>
+                      <p className="text-sm text-green-800">
+                        注文請書番号: {contract.order_acceptance_number}
+                      </p>
+                      <p className="text-sm text-green-800">
+                        署名完了日時: {new Date(contract.order_acceptance_signed_at).toLocaleString('ja-JP')}
+                      </p>
+                      <p className="text-sm text-green-800 mt-2">
+                        受注者が注文請書に署名しました。署名済みの注文請書はBoxに保存されています。
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {!contract.order_acceptance_box_id && userRole === 'Contractor' && (
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <p className="text-sm text-gray-700">
+                      発注者が注文請書を生成するまでお待ちください。
+                    </p>
+                  </div>
+                )}
               </Card>
             )}
 

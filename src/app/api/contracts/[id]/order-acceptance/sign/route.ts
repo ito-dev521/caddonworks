@@ -115,19 +115,13 @@ export async function POST(
       return NextResponse.json({ message: '受注者情報が見つかりません' }, { status: 404 })
     }
 
-    // Box Sign署名リクエストを作成
+    // Box Sign署名リクエストを作成（受注者のみ署名）
     const signers = [
       {
         email: contractorProfile.email,
         role: 'contractor' as const,
         name: contractorProfile.display_name,
         order: 1
-      },
-      {
-        email: project.organizations.billing_email || project.created_by_user?.email || userProfile.email,
-        role: 'client' as const,
-        name: project.organizations.name,
-        order: 2
       }
     ]
 
@@ -162,37 +156,23 @@ export async function POST(
       return NextResponse.json({ message: '契約の更新に失敗しました' }, { status: 500 })
     }
 
-    // 両方の署名者に通知
-    const notifications = [
-      {
-        user_id: contract.contractor_id,
-        type: 'order_acceptance_signature_request',
-        title: '注文請書への署名が必要です',
-        message: `プロジェクト「${project.title}」の注文請書への署名をお願いいたします。`,
-        data: {
-          project_id: project.id,
-          contract_id: contractId,
-          sign_request_id: signatureRequest.signRequestId,
-          signing_url: signatureRequest.signingUrls?.find(s => s.email === contractorProfile.email)?.url
-        }
-      },
-      {
-        user_id: project.created_by_user?.id || userProfile.id,
-        type: 'order_acceptance_signature_request',
-        title: '注文請書への署名が必要です',
-        message: `プロジェクト「${project.title}」の注文請書への署名をお願いいたします。`,
-        data: {
-          project_id: project.id,
-          contract_id: contractId,
-          sign_request_id: signatureRequest.signRequestId,
-          signing_url: signatureRequest.signingUrls?.find(s => s.email !== contractorProfile.email)?.url
-        }
+    // 受注者に通知
+    const notification = {
+      user_id: contract.contractor_id,
+      type: 'order_acceptance_signature_request',
+      title: '注文請書への署名が必要です',
+      message: `プロジェクト「${project.title}」の注文請書への署名をお願いいたします。`,
+      data: {
+        project_id: project.id,
+        contract_id: contractId,
+        sign_request_id: signatureRequest.signRequestId,
+        signing_url: signatureRequest.signingUrls?.[0]?.url
       }
-    ]
+    }
 
     await supabaseAdmin
       .from('notifications')
-      .insert(notifications)
+      .insert([notification])
 
     console.log('✅ 注文請書署名リクエスト作成完了:', signatureRequest.signRequestId)
 

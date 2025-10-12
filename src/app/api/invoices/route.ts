@@ -237,7 +237,7 @@ export async function POST(request: NextRequest) {
       project_id: effectiveProjectId,
       client_org_id: project.org_id,
       base_amount: baseAmount,
-      fee_amount: 0,
+      fee_amount: applyContractorDeduct ? supportFee : 0, // サポート料を正しく設定
       system_fee: systemFee,
       total_amount: totalAmount,
       status: type === 'completion' ? 'issued' : 'draft', // 業務完了届の場合は発行済み、その他は下書き
@@ -414,11 +414,11 @@ export async function GET(request: NextRequest) {
         // 税抜金額を計算（表示用）
         const amountExcl = Math.round(totalIncludingTax / (1 + taxRate))
 
-        // サポート利用料を取得
-        const supportFee = Number((invoice as any).system_fee ?? 0)
+        // サポート利用料を正しく取得（fee_amountから）
+        const supportFee = Number((invoice as any).fee_amount ?? 0)
 
-        // 小計（税込金額 - サポート利用料）
-        const subtotal = totalIncludingTax - supportFee
+        // 小計はtotal_amountを使用（既に正しく計算済み）
+        const subtotal = Number((invoice as any).total_amount ?? totalIncludingTax)
 
         // 源泉: 小計に対して計算（100万未満 → 総額*0.1021, 100万以上 → (総額-1000000)*0.2042 + 102100）
         const withholding = subtotal < 1000000
@@ -566,6 +566,7 @@ export async function GET(request: NextRequest) {
         issue_date,
         due_date,
         base_amount,
+        fee_amount,
         system_fee,
         total_amount,
         updated_at,
@@ -620,7 +621,8 @@ export async function GET(request: NextRequest) {
       issue_date: inv.issue_date,
       due_date: inv.due_date,
       base_amount: inv.base_amount ?? inv.subtotal ?? 0,
-      system_fee: inv.system_fee ?? inv.fee_amount ?? 0,
+      fee_amount: inv.fee_amount ?? 0,
+      system_fee: inv.system_fee ?? 0,
       total_amount: inv.total_amount ?? 0,
       project: {
         id: inv.projects?.id,
