@@ -108,6 +108,7 @@ export async function GET(request: NextRequest) {
                   created_at: tesut2Project.created_at,
                   box_items: tesut2Items,
                   subfolders: {
+                    '作業内容': tesut2Items.find(item => item.name.includes('作業内容') || item.name.includes('00_'))?.id || 'not_found',
                     '受取': ukeToriFolder?.id || 'not_found',
                     '作業': tesut2Items.find(item => item.name.includes('作業') || item.name.includes('02_'))?.id || 'not_found',
                     '納品': tesut2Items.find(item => item.name.includes('納品') || item.name.includes('03_'))?.id || 'not_found',
@@ -139,6 +140,7 @@ export async function GET(request: NextRequest) {
             created_at: new Date().toISOString(),
             box_items: realBoxItems.slice(0, 5), // First 5 items
             subfolders: {
+              '作業内容': realBoxItems.find(item => item.type === 'folder' && item.name.includes('作業内容'))?.id || 'not_found',
               '受取': realBoxItems.find(item => item.type === 'folder' && item.name.includes('受取'))?.id || 'not_found',
               '作業': realBoxItems.find(item => item.type === 'folder' && item.name.includes('作業'))?.id || 'not_found',
               '納品': realBoxItems.find(item => item.type === 'folder' && item.name.includes('納品'))?.id || 'not_found',
@@ -177,6 +179,7 @@ export async function GET(request: NextRequest) {
               }
             ],
             subfolders: {
+              '作業内容': 'demo_subfolder_0',
               '受取': 'demo_subfolder_1',
               '作業': 'demo_subfolder_2',
               '納品': 'demo_subfolder_3',
@@ -212,22 +215,39 @@ export async function GET(request: NextRequest) {
             .in('id', projectIds)
             .order('created_at', { ascending: false })
 
-          // 01_受取データにファイルがある案件のみフィルタリング
+          // 00_作業内容フォルダにファイルがある案件のみフィルタリング
           if (contractedProjects && contractedProjects.length > 0) {
             const projectsWithFiles = await Promise.all(
               contractedProjects.map(async (project) => {
                 try {
-                  // 受取フォルダにファイルがあるかチェック
-                  const { data: attachments } = await supabaseAdmin
-                    .from('project_attachments')
-                    .select('id')
-                    .eq('project_id', project.id)
-                    .limit(1)
+                  // Boxフォルダが設定されていない場合は非表示
+                  if (!project.box_folder_id) {
+                    return null
+                  }
+
+                  // Boxフォルダ内のアイテムを取得
+                  const items = await getBoxFolderItems(project.box_folder_id)
+
+                  // 00_作業内容フォルダを検索
+                  const workContentFolder = items.find(
+                    (item: any) =>
+                      item.type === 'folder' &&
+                      (item.name.includes('00_作業内容') || item.name === '作業内容')
+                  )
+
+                  // 00_作業内容フォルダが見つからない場合は非表示
+                  if (!workContentFolder) {
+                    return null
+                  }
+
+                  // 00_作業内容フォルダ内のファイルをチェック
+                  const workContentItems = await getBoxFolderItems(workContentFolder.id)
+                  const hasFiles = workContentItems.some((item: any) => item.type === 'file')
 
                   // ファイルが1つ以上ある場合のみ返す
-                  return attachments && attachments.length > 0 ? project : null
+                  return hasFiles ? project : null
                 } catch (error) {
-                  console.error(`Error checking attachments for project ${project.id}:`, error)
+                  console.error(`Error checking Box folder for project ${project.id}:`, error)
                   return null
                 }
               })
@@ -334,6 +354,7 @@ export async function GET(request: NextRequest) {
 
           // BOXフォルダ内のアイテムからサブフォルダを特定
           const folderMapping: Record<string, string[]> = {
+            '作業内容': ['00_作業内容', '作業内容', '00_'],
             '受取': ['01_受取データ', '受取', '01_受取', '01_'],
             '作業': ['02_作業フォルダ', '作業', '02_作業', '02_'],
             '納品': ['03_納品データ', '納品', '03_納品', '03_'],

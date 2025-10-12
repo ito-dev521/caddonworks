@@ -637,10 +637,11 @@ export async function createProjectFolderStructure(projectTitle: string, project
 
     // フォルダ名マッピング（Box内の実際のフォルダ名に対応）
     const folderMapping: Record<string, string[]> = {
+      '作業内容': ['00_作業内容', '作業内容', '00_'],
       '受取': ['01_受取データ', '受取', '01_受取', '01_', '01受取データ'],
-      '作業': ['02_作業データ', '作業', '02_作業', '02_', '02作業データ'],
+      '作業': ['02_作業フォルダ', '作業', '02_作業', '02_', '02作業フォルダ'],
       '納品': ['03_納品データ', '納品', '03_納品', '03_', '03納品データ'],
-      '契約': ['04_契約データ', '契約', '04_契約', '04_', '04契約データ']
+      '契約': ['04_契約資料', '契約', '04_契約', '04_', '04契約資料']
     }
 
     // 既存のフォルダから該当するサブフォルダを見つける
@@ -664,13 +665,24 @@ export async function createProjectFolderStructure(projectTitle: string, project
     // 番号付き名称に正規化：
     // - 既に番号付きがある → それを採用
     // - 番号なしのみある → リネームして番号付きへ
+    // - 両方ある → 番号付きを採用、番号なしは削除
     // - どちらもない → 番号付きで新規作成
-    const expectedCategories = ['受取', '作業', '納品', '契約']
+    const expectedCategories = ['作業内容', '受取', '作業', '納品', '契約']
     const standardFolderNames: Record<string, string> = {
+      '作業内容': '00_作業内容',
       '受取': '01_受取データ',
-      '作業': '02_作業データ',
+      '作業': '02_作業フォルダ',
       '納品': '03_納品データ',
-      '契約': '04_契約データ'
+      '契約': '04_契約資料'
+    }
+
+    // 番号なしフォルダのパターン（番号付きでないもの）
+    const nonNumberedPatterns: Record<string, string[]> = {
+      '作業内容': ['作業内容'],
+      '受取': ['受取'],
+      '作業': ['作業', '作業フォルダ'],
+      '納品': ['納品'],
+      '契約': ['契約', '契約資料']
     }
 
     for (const category of expectedCategories) {
@@ -680,9 +692,28 @@ export async function createProjectFolderStructure(projectTitle: string, project
       const exact = existingItems.find(
         (it: any) => it.type === 'folder' && it.name === standardName
       )
+
       if (exact) {
         subfolders[category] = exact.id
         subfolderNames[category] = standardName
+        console.log(`✅ Found standard folder: ${standardName} (ID: ${exact.id})`)
+
+        // 番号なしフォルダが残っている場合は削除
+        const nonNumberedPats = nonNumberedPatterns[category] || []
+        for (const pattern of nonNumberedPats) {
+          const nonNumberedFolder = existingItems.find(
+            (it: any) => it.type === 'folder' && it.name === pattern && it.id !== exact.id
+          )
+          if (nonNumberedFolder) {
+            try {
+              console.log(`🗑️ Deleting non-numbered folder: ${pattern} (ID: ${nonNumberedFolder.id})`)
+              await deleteBoxFolder(nonNumberedFolder.id, true)
+              console.log(`✅ Deleted non-numbered folder: ${pattern}`)
+            } catch (deleteError: any) {
+              console.warn(`⚠️ Failed to delete folder ${pattern}: ${deleteError.message}`)
+            }
+          }
+        }
         continue
       }
 

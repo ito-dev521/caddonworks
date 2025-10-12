@@ -85,7 +85,18 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ message: '添付資料の取得に失敗しました' }, { status: 400 })
     }
 
-    return NextResponse.json({ attachments: attachments || [] }, { status: 200 })
+    // ファイル名とファイルパスが同じものを重複排除（最新のもののみ残す）
+    const uniqueAttachments = (attachments || []).reduce((acc: any[], current: any) => {
+      const duplicate = acc.find((item: any) =>
+        item.file_name === current.file_name && item.file_path === current.file_path
+      )
+      if (!duplicate) {
+        acc.push(current)
+      }
+      return acc
+    }, [])
+
+    return NextResponse.json({ attachments: uniqueAttachments }, { status: 200 })
 
   } catch (error) {
     console.error('添付資料取得エラー:', error)
@@ -189,6 +200,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     // サブフォルダを特定
     const folderMapping: Record<string, string[]> = {
+      '作業内容': ['00_作業内容', '作業内容', '00_'],
       '受取': ['01_受取データ', '受取', '01_受取', '01_'],
       '作業': ['02_作業フォルダ', '作業', '02_作業', '02_'],
       '納品': ['03_納品データ', '納品', '03_納品', '03_'],
@@ -211,17 +223,27 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     console.log('📁 特定されたサブフォルダ:', subfolders)
 
-    // 受取フォルダIDを取得
-    const receiveFolderId = subfolders['受取']
+    // 作業内容フォルダIDを取得
+    let workContentFolderId = subfolders['作業内容']
 
-    if (!receiveFolderId) {
-      console.error('❌ 受取フォルダが見つかりません:', {
-        availableFolders: Object.keys(subfolders)
-      })
-      return NextResponse.json({
-        message: '受取フォルダが見つかりません',
-        details: `利用可能なフォルダ: ${Object.keys(subfolders).join(', ')}`
-      }, { status: 400 })
+    // 作業内容フォルダが存在しない場合は作成
+    if (!workContentFolderId) {
+      console.log('📁 作業内容フォルダが見つからないため、自動作成します')
+      try {
+        const { ensureProjectFolder } = await import('@/lib/box')
+        const folderResult = await ensureProjectFolder({
+          name: '00_作業内容',
+          parentFolderId: project.box_folder_id
+        })
+        workContentFolderId = folderResult.id
+        console.log(`✅ 作業内容フォルダを作成しました (ID: ${workContentFolderId})`)
+      } catch (createError: any) {
+        console.error('❌ 作業内容フォルダの作成に失敗:', createError)
+        return NextResponse.json({
+          message: '作業内容フォルダの作成に失敗しました',
+          error: createError.message
+        }, { status: 500 })
+      }
     }
 
     // ユーザーの権限チェック（発注者または受注者）
@@ -294,15 +316,15 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       }, { status: 400 })
     }
 
-    console.log(`📤 Boxへアップロード開始: ${file.name} -> 受取フォルダ (${receiveFolderId})`)
+    console.log(`📤 Boxへアップロード開始: ${file.name} -> 作業内容フォルダ (${workContentFolderId})`)
 
     // ファイルをArrayBufferに変換
     const arrayBuffer = await file.arrayBuffer()
 
-    // Boxの受取フォルダにアップロード
+    // Boxの作業内容フォルダにアップロード
     let boxFileId: string
     try {
-      boxFileId = await uploadFileToBox(arrayBuffer, file.name, receiveFolderId)
+      boxFileId = await uploadFileToBox(arrayBuffer, file.name, workContentFolderId)
       console.log(`✅ Boxアップロード成功: ${file.name} (ID: ${boxFileId})`)
     } catch (uploadError: any) {
       console.error('Boxアップロードエラー:', uploadError)

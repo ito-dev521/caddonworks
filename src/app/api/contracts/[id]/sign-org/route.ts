@@ -403,6 +403,8 @@ export async function POST(
       }
 
       console.log('✅ 受注者メールアドレス:', contractorInfo.email)
+      console.log('📦 BoxフォルダID:', boxFolderId)
+      console.log('📧 コラボレーション追加開始...')
 
       // メインプロジェクトフォルダに権限付与（editor権限、メールアドレスで直接コラボレーション）
       const mainFolderResult = await addFolderCollaboration(
@@ -412,13 +414,20 @@ export async function POST(
         projectWithBox.title
       )
 
+      console.log('📊 コラボレーション追加結果:', {
+        success: mainFolderResult.success,
+        collaborationId: mainFolderResult.collaborationId,
+        error: mainFolderResult.error
+      })
+
       if (!mainFolderResult.success) {
         console.error('❌ メインフォルダへの権限付与失敗:', mainFolderResult.error)
         throw new Error(`メインフォルダへの権限付与に失敗しました: ${mainFolderResult.error}`)
       }
 
       console.log('✅ メインプロジェクトフォルダへのアクセス権限を付与しました')
-      console.log('📧 Boxから受注者へ招待メールが送信されます:', contractorInfo.email)
+      console.log('📧 Boxから受注者へ招待メールが送信されました:', contractorInfo.email)
+      console.log('💡 コラボレーションID:', mainFolderResult.collaborationId)
 
       // サブフォルダにも権限付与
       try {

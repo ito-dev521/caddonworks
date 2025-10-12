@@ -146,8 +146,9 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
       return NextResponse.json({ message: 'ユーザープロフィールが見つかりません' }, { status: 403 })
     }
 
-    // 添付資料の存在確認
-    const { data: attachment, error: attachmentError } = await supabase
+    // 添付資料の存在確認（Admin clientを使用）
+    const supabaseAdmin = createSupabaseAdmin()
+    const { data: attachment, error: attachmentError } = await supabaseAdmin
       .from('project_attachments')
       .select(`
         id,
@@ -162,6 +163,11 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
       .single()
 
     if (attachmentError || !attachment) {
+      console.error('❌ 添付資料が見つかりません:', {
+        attachmentId,
+        projectId,
+        error: attachmentError
+      })
       return NextResponse.json({ message: '添付資料が見つかりません' }, { status: 404 })
     }
 
@@ -195,7 +201,6 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     }
 
     // データベースから添付資料情報を削除
-    const supabaseAdmin = createSupabaseAdmin()
     const { error: deleteError } = await supabaseAdmin
       .from('project_attachments')
       .delete()

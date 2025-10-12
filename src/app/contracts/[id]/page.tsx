@@ -356,6 +356,12 @@ function ContractDetailPageContent() {
       if (response.ok) {
         // 契約情報を再取得
         await fetchContract()
+
+        // Box Sign署名準備画面を開く（発注者が署名位置を設定）
+        if (result.prepareUrl) {
+          window.open(result.prepareUrl, '_blank')
+        }
+
         alert('注文請書の署名リクエストを送信しました。受注者にメールで通知されます。')
       } else {
         setError(result.message || '署名リクエストの送信に失敗しました')
@@ -766,7 +772,7 @@ function ContractDetailPageContent() {
             )}
 
             {/* 注文請書セクション */}
-            {contract.status === 'signed' && (
+            {(contract.status === 'pending_org' || contract.status === 'signed') && (
               <Card className="p-6">
                 <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
                   <FileText className="w-5 h-5 mr-2" />
@@ -778,7 +784,7 @@ function ContractDetailPageContent() {
                     <div className="bg-blue-50 p-4 rounded-lg">
                       <h3 className="font-semibold text-blue-900 mb-2">注文請書の生成</h3>
                       <p className="text-sm text-blue-800">
-                        契約が署名済みです。注文請書を生成して受注者に電子署名を依頼できます。
+                        受注者が契約に署名しました。注文請書を生成して受注者に電子署名を依頼できます。
                       </p>
                     </div>
                     <div className="flex justify-end">
