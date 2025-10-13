@@ -27,8 +27,6 @@ export async function POST(
   try {
     const contractId = params.id
 
-    console.log('📧 Box招待再送信開始 - 契約ID:', contractId)
-
     // Authorizationヘッダーからユーザー情報を取得
     const authHeader = request.headers.get('authorization')
     if (!authHeader) {
@@ -106,8 +104,6 @@ export async function POST(
       )
     }
 
-    console.log('✅ 契約情報取得成功:', contract.id, contract.contract_title)
-
     // プロジェクト情報とBOXフォルダIDを取得
     const { data: projectWithBox } = await supabaseAdmin
       .from('projects')
@@ -127,8 +123,6 @@ export async function POST(
 
     // BOXフォルダが未設定の場合、自動作成を試行
     if (!boxFolderId) {
-      console.log('📦 BOXフォルダが未設定のため、自動作成を開始します')
-
       try {
         // まず組織情報を取得
         const { data: organization, error: orgError } = await supabaseAdmin
@@ -143,7 +137,6 @@ export async function POST(
 
         // 会社フォルダを取得または作成
         const companyFolder = await createCompanyFolder(organization.name)
-        console.log(`📁 会社フォルダ取得: ${organization.name} (ID: ${companyFolder.id})`)
 
         // プロジェクトフォルダ構造を作成
         const folderStructure = await createProjectFolderStructure(
@@ -151,7 +144,6 @@ export async function POST(
           contract.project_id,
           companyFolder.id
         )
-        console.log(`📁 プロジェクトフォルダ作成: ${projectWithBox.title} (ID: ${folderStructure.folderId})`)
 
         // データベースにBoxフォルダIDを保存
         const { error: updateError } = await supabaseAdmin
@@ -165,7 +157,6 @@ export async function POST(
         }
 
         boxFolderId = folderStructure.folderId
-        console.log('✅ BOXフォルダを自動作成し、データベースに保存しました')
       } catch (createError: any) {
         console.error('❌ BOXフォルダの自動作成に失敗:', createError)
         return NextResponse.json(
@@ -174,8 +165,6 @@ export async function POST(
         )
       }
     }
-
-    console.log('📁 受注者にBOXアクセス権限を付与開始')
 
     // 受注者情報を取得
     const { data: contractorInfo } = await supabaseAdmin
@@ -191,8 +180,6 @@ export async function POST(
         { status: 400 }
       )
     }
-
-    console.log('✅ 受注者メールアドレス:', contractorInfo.email)
 
     // メインプロジェクトフォルダに権限付与（editor権限、メールアドレスで直接コラボレーション）
     const mainFolderResult = await addFolderCollaboration(
@@ -210,16 +197,11 @@ export async function POST(
       )
     }
 
-    console.log('✅ メインプロジェクトフォルダへのアクセス権限を付与しました')
-    console.log('📧 Boxから受注者へ招待メールが送信されます:', contractorInfo.email)
-
     const invitedFolders: string[] = [projectWithBox.title]
 
     // サブフォルダにも権限付与
     try {
       // フォルダ構造を直接取得して権限付与
-      console.log('📁 サブフォルダに権限を付与します')
-
       const items = await getBoxFolderItems(boxFolderId)
       const subfolders = items.filter(item => item.type === 'folder')
 
@@ -233,10 +215,7 @@ export async function POST(
         )
 
         if (subfolderResult.success) {
-          console.log(`✅ サブフォルダ「${subfolder.name}」へのアクセス権限を付与しました（削除不可）`)
           invitedFolders.push(subfolder.name)
-        } else {
-          console.warn(`⚠️ サブフォルダ「${subfolder.name}」への権限付与失敗:`, subfolderResult.error)
         }
 
         // API Rate Limitを考慮
@@ -267,10 +246,7 @@ export async function POST(
         .from('contracts')
         .update({ box_invitation_sent_at: new Date().toISOString() })
         .eq('id', contractId)
-      console.log('✅ Box招待送信日時を記録しました')
     }
-
-    console.log('✅ Box招待メール送信完了')
 
     return NextResponse.json({
       message: 'Box招待メールを送信しました',

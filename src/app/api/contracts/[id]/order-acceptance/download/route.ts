@@ -17,8 +17,6 @@ export async function GET(
   try {
     const contractId = params.id
 
-    console.log('📥 注文請書ダウンロード開始:', contractId)
-
     // 認証チェック
     const authHeader = request.headers.get('authorization')
     if (!authHeader) {
@@ -100,8 +98,6 @@ export async function GET(
 
     // ファイル名を生成
     const fileName = `注文請書_${contract.projects.title}_${contract.order_acceptance_number || 'N/A'}.pdf`
-
-    console.log('✅ 注文請書ダウンロード完了:', fileName)
 
     // PDFとして返す
     return new NextResponse(pdfBuffer, {

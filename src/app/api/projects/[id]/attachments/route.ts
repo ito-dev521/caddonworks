@@ -124,14 +124,9 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 // 添付資料のアップロード
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   const startTime = Date.now()
-  console.log('🚀 POST /api/projects/[id]/attachments リクエスト受信')
-  console.log('🚀 params:', params)
-  console.log('🚀 params.id:', params.id)
-  console.log('🚀 Request URL:', request.url)
 
   try {
     const { id: projectId } = params
-    console.log('🚀 projectId extracted:', projectId)
 
     // 認証チェック
     const authHeader = request.headers.get('authorization')
@@ -163,18 +158,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const supabaseAdmin = createSupabaseAdmin()
 
     // 案件の存在確認（Box情報も取得）
-    console.log('🔍 データベースクエリ開始 - projectId:', projectId)
     const { data: project, error: projectError } = await supabaseAdmin
       .from('projects')
       .select('id, org_id, title, box_folder_id')
       .eq('id', projectId)
       .single()
-
-    console.log('🔍 データベースクエリ結果:', {
-      found: !!project,
-      error: projectError,
-      projectData: project
-    })
 
     if (projectError || !project) {
       console.error('❌ 案件が見つかりません:', {
@@ -184,15 +172,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return NextResponse.json({ message: '案件が見つかりません' }, { status: 404 })
     }
 
-    console.log('✅ 案件が見つかりました:', project.id, project.title)
-
     // Box設定の確認
-    console.log('📦 Box設定チェック:', {
-      projectId: project.id,
-      hasBoxFolderId: !!project.box_folder_id,
-      boxFolderId: project.box_folder_id
-    })
-
     if (!project.box_folder_id) {
       console.error('❌ box_folder_idが設定されていません:', project.id)
       return NextResponse.json({
@@ -202,11 +182,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     }
 
     // Boxフォルダからサブフォルダを取得
-    console.log('📁 Boxフォルダからサブフォルダを取得中...')
     let items: any[]
     try {
       items = await getBoxFolderItems(project.box_folder_id)
-      console.log('📁 Boxフォルダアイテム取得成功:', items.length, 'items')
     } catch (boxError: any) {
       console.error('❌ Boxフォルダアイテム取得エラー:', boxError)
       return NextResponse.json({
@@ -238,14 +216,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       }
     })
 
-    console.log('📁 特定されたサブフォルダ:', subfolders)
-
     // 作業内容フォルダIDを取得
     let workContentFolderId = subfolders['作業内容']
 
     // 作業内容フォルダが存在しない場合は作成
     if (!workContentFolderId) {
-      console.log('📁 作業内容フォルダが見つからないため、自動作成します')
       try {
         const { ensureProjectFolder } = await import('@/lib/box')
         const folderResult = await ensureProjectFolder({
@@ -253,7 +228,6 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           parentFolderId: project.box_folder_id
         })
         workContentFolderId = folderResult.id
-        console.log(`✅ 作業内容フォルダを作成しました (ID: ${workContentFolderId})`)
       } catch (createError: any) {
         console.error('❌ 作業内容フォルダの作成に失敗:', createError)
         return NextResponse.json({
@@ -357,8 +331,6 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       }, { status: 400 })
     }
 
-    console.log(`📤 Boxへアップロード開始: ${file.name} -> 作業内容フォルダ (${workContentFolderId})`)
-
     // ファイルをArrayBufferに変換
     const arrayBuffer = await file.arrayBuffer()
 
@@ -366,7 +338,6 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     let boxFileId: string
     try {
       boxFileId = await uploadFileToBox(arrayBuffer, file.name, workContentFolderId)
-      console.log(`✅ Boxアップロード成功: ${file.name} (ID: ${boxFileId})`)
     } catch (uploadError: any) {
       console.error('Boxアップロードエラー:', uploadError)
       return NextResponse.json({

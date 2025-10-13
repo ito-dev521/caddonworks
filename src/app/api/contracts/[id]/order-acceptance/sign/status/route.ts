@@ -19,8 +19,6 @@ export async function POST(
     const contractId = params.id
     const { signRequestId, status } = await request.json()
 
-    console.log('📝 注文請書署名ステータス更新:', { contractId, signRequestId, status })
-
     // 契約情報を取得
     const { data: contract, error: contractError } = await supabaseAdmin
       .from('contracts')
@@ -102,8 +100,6 @@ export async function POST(
       await supabaseAdmin
         .from('notifications')
         .insert(notifications)
-
-      console.log('✅ 注文請書署名完了:', contractId)
     }
 
     // 署名拒否の場合
@@ -140,8 +136,6 @@ export async function POST(
       await supabaseAdmin
         .from('notifications')
         .insert(notifications)
-
-      console.log('❌ 注文請書署名拒否:', contractId)
     }
 
     return NextResponse.json({
@@ -222,8 +216,6 @@ export async function PATCH(
         console.error('契約更新エラー:', updateError)
         return NextResponse.json({ message: '契約の更新に失敗しました' }, { status: 500 })
       }
-
-      console.log('✅ 注文請書署名ステータス同期完了:', contractId)
     }
 
     return NextResponse.json({

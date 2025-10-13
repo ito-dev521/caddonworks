@@ -225,7 +225,6 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
       const boxFileId = attachment.file_path.replace('box://', '')
       try {
         await deleteBoxFile(boxFileId)
-        console.log(`✅ Boxファイル削除成功: ${boxFileId}`)
       } catch (storageError: any) {
         console.error('Boxファイル削除エラー:', storageError)
         // Box削除に失敗してもデータベースからは削除を続行

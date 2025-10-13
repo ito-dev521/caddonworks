@@ -131,8 +131,6 @@ export async function POST(
     // （この時点ではまだチャットルームを作成しない）
     /*
     if (project) {
-      console.log('チャットルーム作成開始 - プロジェクトID:', project.id, 'プロジェクト名:', project.title)
-
       // チャットルームが既に存在するかチェック
       const { data: existingRoom } = await supabaseAdmin
         .from('chat_rooms')
@@ -160,7 +158,6 @@ export async function POST(
           console.error('チャットルーム作成エラー:', roomError)
         } else if (newRoom) {
           chatRoomId = newRoom.id
-          console.log('チャットルーム作成成功 - ルームID:', chatRoomId)
 
           // 参加者を追加（重複を避けるため配列で管理）
           const participantsToAdd: Array<{ user_id: string; role: string; display_name: string }> = []
@@ -171,7 +168,6 @@ export async function POST(
             role: 'admin',
             display_name: userProfile.display_name || user.email || 'Unknown'
           })
-          console.log('署名した発注者を参加者に追加:', user.id)
 
           // 2. 案件承認者を追加（署名者と異なる場合のみ、admin権限）
           const { data: projectWithApprover } = await supabaseAdmin
@@ -193,7 +189,6 @@ export async function POST(
                 role: 'admin',
                 display_name: approver.display_name || 'Unknown'
               })
-              console.log('案件承認者を参加者に追加:', approver.auth_user_id)
             }
           }
 
@@ -205,8 +200,6 @@ export async function POST(
               .eq('display_name', project.assignee_name)
               .single()
 
-            console.log('担当者検索結果:', assignee)
-
             if (assignee?.auth_user_id &&
                 !participantsToAdd.some(p => p.user_id === assignee.auth_user_id)) {
               participantsToAdd.push({
@@ -214,7 +207,6 @@ export async function POST(
                 role: 'admin',
                 display_name: assignee.display_name || project.assignee_name
               })
-              console.log('案件担当者を参加者に追加:', assignee.auth_user_id)
             }
           }
 
@@ -226,15 +218,12 @@ export async function POST(
               .eq('id', contract.contractor_id)
               .single()
 
-            console.log('受注者検索結果:', contractor)
-
             if (contractor?.auth_user_id) {
               participantsToAdd.push({
                 user_id: contractor.auth_user_id,
                 role: 'member',
                 display_name: contractor.display_name || 'Unknown'
               })
-              console.log('受注者を参加者に追加:', contractor.auth_user_id)
             }
           }
 
@@ -250,14 +239,10 @@ export async function POST(
 
             if (participantsError) {
               console.error('参加者追加エラー:', participantsError)
-            } else {
-              console.log(`参加者追加成功: ${participantsToAdd.length}名`)
             }
           }
         }
       } else {
-        console.log('チャットルームは既に存在します - ルームID:', chatRoomId)
-
         // 既存のチャットルームでも署名した発注者を参加者に追加
         const { data: existingParticipant } = await supabaseAdmin
           .from('chat_participants')
@@ -277,8 +262,6 @@ export async function POST(
 
           if (addParticipantError) {
             console.error('既存チャットルームへの発注者追加エラー:', addParticipantError)
-          } else {
-            console.log('既存チャットルームに発注者を追加しました')
           }
         }
 
@@ -315,8 +298,6 @@ export async function POST(
 
               if (addApproverError) {
                 console.error('既存チャットルームへの承認者追加エラー:', addApproverError)
-              } else {
-                console.log('既存チャットルームに承認者を追加しました')
               }
             }
           }
@@ -343,8 +324,6 @@ export async function POST(
 
       // BOXフォルダが未設定の場合、自動作成を試行
       if (!boxFolderId) {
-        console.log('📦 BOXフォルダが未設定のため、自動作成を開始します')
-
         try {
           // まず組織情報を取得
           const { data: organization, error: orgError } = await supabaseAdmin
@@ -360,7 +339,6 @@ export async function POST(
           // 会社フォルダを取得または作成
           const { createCompanyFolder, createProjectFolderStructure } = await import('@/lib/box')
           const companyFolder = await createCompanyFolder(organization.name)
-          console.log(`📁 会社フォルダ取得: ${organization.name} (ID: ${companyFolder.id})`)
 
           // プロジェクトフォルダ構造を作成
           const folderStructure = await createProjectFolderStructure(
@@ -368,7 +346,6 @@ export async function POST(
             contract.project_id,
             companyFolder.id
           )
-          console.log(`📁 プロジェクトフォルダ作成: ${projectWithBox.title} (ID: ${folderStructure.folderId})`)
 
           // データベースにBoxフォルダIDを保存
           const { error: updateError } = await supabaseAdmin
@@ -382,14 +359,11 @@ export async function POST(
           }
 
           boxFolderId = folderStructure.folderId
-          console.log('✅ BOXフォルダを自動作成し、データベースに保存しました')
         } catch (createError: any) {
           console.error('❌ BOXフォルダの自動作成に失敗:', createError)
           throw new Error(`BOXフォルダの作成に失敗しました: ${createError.message}`)
         }
       }
-
-      console.log('📁 受注者にBOXアクセス権限を付与開始')
 
       // 受注者情報を取得
       const { data: contractorInfo } = await supabaseAdmin
@@ -403,10 +377,6 @@ export async function POST(
         throw new Error('受注者のメールアドレスが見つかりません')
       }
 
-      console.log('✅ 受注者メールアドレス:', contractorInfo.email)
-      console.log('📦 BoxフォルダID:', boxFolderId)
-      console.log('📧 コラボレーション追加開始...')
-
       // メインプロジェクトフォルダに権限付与（editor権限、メールアドレスで直接コラボレーション）
       const mainFolderResult = await addFolderCollaboration(
         boxFolderId,
@@ -415,26 +385,14 @@ export async function POST(
         projectWithBox.title
       )
 
-      console.log('📊 コラボレーション追加結果:', {
-        success: mainFolderResult.success,
-        collaborationId: mainFolderResult.collaborationId,
-        error: mainFolderResult.error
-      })
-
       if (!mainFolderResult.success) {
         console.error('❌ メインフォルダへの権限付与失敗:', mainFolderResult.error)
         throw new Error(`メインフォルダへの権限付与に失敗しました: ${mainFolderResult.error}`)
       }
 
-      console.log('✅ メインプロジェクトフォルダへのアクセス権限を付与しました')
-      console.log('📧 Boxから受注者へ招待メールが送信されました:', contractorInfo.email)
-      console.log('💡 コラボレーションID:', mainFolderResult.collaborationId)
-
       // サブフォルダにも権限付与
       try {
         // フォルダ構造を直接取得して権限付与
-        console.log('📁 サブフォルダに権限を付与します')
-
         const items = await getBoxFolderItems(boxFolderId)
         const subfolders = items.filter(item => item.type === 'folder')
 
@@ -446,12 +404,6 @@ export async function POST(
             'viewer_uploader', // 削除不可、閲覧・ダウンロード・アップロード可能
             `${projectWithBox.title} - ${subfolder.name}`
           )
-
-          if (subfolderResult.success) {
-            console.log(`✅ サブフォルダ「${subfolder.name}」へのアクセス権限を付与しました（削除不可）`)
-          } else {
-            console.warn(`⚠️ サブフォルダ「${subfolder.name}」への権限付与失敗:`, subfolderResult.error)
-          }
 
           // API Rate Limitを考慮
           await new Promise(resolve => setTimeout(resolve, 300))
@@ -505,8 +457,6 @@ export async function POST(
     // 注文請書を自動生成（発注者署名完了後）
     let orderAcceptanceInfo = null
     try {
-      console.log('📋 注文請書を自動生成します')
-
       // 注文請書生成APIを内部呼び出し
       const orderAcceptanceResponse = await fetch(
         `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/api/contracts/${contractId}/order-acceptance`,
@@ -526,12 +476,9 @@ export async function POST(
           fileName: orderAcceptanceResult.fileName,
           boxFileId: orderAcceptanceResult.boxFileId
         }
-        console.log('✅ 注文請書の自動生成が完了しました:', orderAcceptanceInfo)
 
         // 注文請書生成後、自動的にBox Sign署名リクエストを送信
         try {
-          console.log('📝 注文請書のBox Sign署名リクエストを送信します')
-
           const signRequestResponse = await fetch(
             `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/api/contracts/${contractId}/order-acceptance/sign`,
             {
@@ -545,7 +492,6 @@ export async function POST(
 
           if (signRequestResponse.ok) {
             const signRequestResult = await signRequestResponse.json()
-            console.log('✅ Box Sign署名リクエストの送信が完了しました:', signRequestResult.signRequestId)
 
             // orderAcceptanceInfoに署名リクエスト情報を追加
             orderAcceptanceInfo.signRequestId = signRequestResult.signRequestId

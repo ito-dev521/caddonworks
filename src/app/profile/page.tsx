@@ -366,8 +366,7 @@ function ProfilePageContent() {
   }
 
   const specialtyOptions = [
-    "未経験", "道路設計", "橋梁設計", "河川工事", "上下水道設計", "トンネル設計", "地下構造",
-    "構造物点検", "測量業務", "地質調査", "環境評価", "施工管理"
+    "未経験", "道路", "河川", "橋梁", "構造物", "上下水道", "共同溝", "造成", "電気設備"
   ]
 
   const qualificationOptions = [

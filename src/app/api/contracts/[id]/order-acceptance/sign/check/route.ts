@@ -17,8 +17,6 @@ export async function POST(
   try {
     const contractId = params.id
 
-    console.log('✅ 署名完了確認開始:', contractId)
-
     // 認証チェック
     const authHeader = request.headers.get('authorization')
     if (!authHeader) {
@@ -41,9 +39,6 @@ export async function POST(
       }
 
       user = userData.user
-    } else {
-      // Webhook からの呼び出しの場合、認証をスキップ
-      console.log('🔐 Webhook からの呼び出しを検出')
     }
 
     // 契約情報を取得
@@ -90,8 +85,6 @@ export async function POST(
       return NextResponse.json({ message: '署名ステータスの取得に失敗しました' }, { status: 500 })
     }
 
-    console.log('📊 署名ステータス:', signatureStatus.status)
-
     // 署名が完了しているかチェック
     if (signatureStatus.status !== 'signed') {
       return NextResponse.json({
@@ -103,7 +96,6 @@ export async function POST(
 
     // 署名済みファイルIDを取得
     const signedFileId = signatureStatus.signFiles?.files?.[0]?.id
-    console.log('📄 署名済みファイルID:', signedFileId)
 
     const project = contract.projects
 
@@ -128,11 +120,7 @@ export async function POST(
       .update({ status: 'in_progress' })
       .eq('id', project.id)
 
-    console.log('✅ プロジェクトステータスを進行中に更新しました')
-
     // チャットルームを作成
-    console.log('💬 チャットルーム作成開始')
-
     const { data: existingRoom } = await supabaseAdmin
       .from('chat_rooms')
       .select('id')
@@ -164,7 +152,6 @@ export async function POST(
 
       if (!roomError && newRoom) {
         const chatRoomId = newRoom.id
-        console.log('✅ チャットルーム作成成功:', chatRoomId)
 
         // 参加者を追加
         const participantsToAdd: Array<{ user_id: string; role: string }> = []
@@ -230,14 +217,8 @@ export async function POST(
               user_id: p.user_id,
               role: p.role
             })))
-
-          console.log(`✅ チャット参加者追加成功: ${participantsToAdd.length}名`)
         }
-      } else {
-        console.warn('⚠️ チャットルーム作成失敗:', roomError)
       }
-    } else {
-      console.log('ℹ️ チャットルームは既に存在します')
     }
 
     // 受注者と発注者に通知
@@ -293,8 +274,6 @@ export async function POST(
     await supabaseAdmin
       .from('notifications')
       .insert(notifications)
-
-    console.log('✅ 署名完了処理完了')
 
     return NextResponse.json({
       message: '署名が完了しました。署名済みドキュメントはプロジェクトの「04_契約資料」フォルダに保存されています。チャットルームが作成されました。',

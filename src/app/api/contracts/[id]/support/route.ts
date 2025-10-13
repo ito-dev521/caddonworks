@@ -39,13 +39,6 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return NextResponse.json({ message: '契約が見つかりません' }, { status: 404 })
     }
 
-    console.log('契約データ:', {
-      id: contract.id,
-      project_id: contract.project_id,
-      contract_title: contract.contract_title,
-      contractor_id: contract.contractor_id
-    })
-
     if (contract.contractor_id !== me.id) {
       return NextResponse.json({ message: 'この契約を操作する権限がありません' }, { status: 403 })
     }

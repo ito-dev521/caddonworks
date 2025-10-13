@@ -28,10 +28,7 @@ export async function POST(
       orderDate = body.orderDate
     } catch (e) {
       // リクエストボディが空の場合は自動生成される
-      console.log('📋 リクエストボディが空 - 注文番号と日付を自動生成します')
     }
-
-    console.log('📋 注文請書生成開始:', { contractId, orderNumber, orderDate })
 
     // 認証チェック
     const authHeader = request.headers.get('authorization')
@@ -185,7 +182,6 @@ export async function POST(
     )
 
     // PDFを生成
-    console.log('📄 注文請書PDF生成中...', orderAcceptanceData.title)
     const pdfBuffer = await documentGenerator.generateDocument('order_acceptance', orderAcceptanceData)
 
     // Boxにアップロード
@@ -212,7 +208,6 @@ export async function POST(
       }
     }
 
-    console.log('📤 Boxにアップロード中:', { fileName, folderId: uploadFolderId })
     const boxFileId = await uploadFileToBox(
       pdfBuffer as unknown as ArrayBuffer,
       fileName,
@@ -220,9 +215,7 @@ export async function POST(
     )
 
     // Box共有リンクを作成
-    console.log('🔗 Box共有リンク作成中:', boxFileId)
     const sharedLink = await createBoxSharedLink(boxFileId)
-    console.log('✅ Box共有リンク作成完了:', sharedLink)
 
     // 契約に注文請書情報を記録
     const { data: updatedContract, error: updateError } = await supabaseAdmin
@@ -261,8 +254,6 @@ export async function POST(
           creator_name: userProfile.display_name
         }
       })
-
-    console.log('✅ 注文請書生成完了:', fileName)
 
     return NextResponse.json({
       message: '注文請書を生成しました',

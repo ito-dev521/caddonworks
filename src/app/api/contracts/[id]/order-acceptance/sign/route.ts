@@ -18,8 +18,6 @@ export async function POST(
   try {
     const contractId = params.id
 
-    console.log('📝 注文請書電子署名開始:', contractId)
-
     // 認証チェック
     const authHeader = request.headers.get('authorization')
     if (!authHeader) {
@@ -144,9 +142,6 @@ export async function POST(
 
           if (contractFolder) {
             contractFolderId = contractFolder.id
-            console.log('✅ 契約フォルダを発見、署名済みドキュメントをここに保存:', contractFolderId)
-          } else {
-            console.warn('⚠️ 契約フォルダが見つかりません、デフォルトフォルダを使用します')
           }
         }
       } catch (error) {
@@ -198,9 +193,7 @@ export async function POST(
 
     // 元のPDFファイルを削除（署名前のファイルは不要）
     try {
-      console.log('🗑️ 署名前の元PDFファイルを削除:', contract.order_acceptance_box_id)
       await deleteBoxFile(contract.order_acceptance_box_id)
-      console.log('✅ 元PDFファイルを削除しました')
     } catch (deleteError) {
       // 削除に失敗してもエラーにはしない（署名リクエストは正常に作成されている）
       console.warn('⚠️ 元PDFファイルの削除に失敗しました（処理は続行）:', deleteError)
@@ -223,8 +216,6 @@ export async function POST(
     await supabaseAdmin
       .from('notifications')
       .insert([notification])
-
-    console.log('✅ 注文請書署名リクエスト作成完了:', signatureRequest.signRequestId)
 
     return NextResponse.json({
       message: '注文請書の署名リクエストを作成しました',
@@ -341,8 +332,6 @@ export async function PUT(
   try {
     const contractId = params.id
 
-    console.log('🔄 注文請書署名リクエスト再送信:', contractId)
-
     // 認証チェック
     const authHeader = request.headers.get('authorization')
     if (!authHeader) {
@@ -425,8 +414,6 @@ export async function PUT(
         message: '署名リクエストの再送信に失敗しました'
       }, { status: 500 })
     }
-
-    console.log('✅ 注文請書署名リクエスト再送信完了:', contract.order_acceptance_sign_request_id)
 
     return NextResponse.json({
       message: '注文請書の署名リクエストを再送信しました',

@@ -279,8 +279,6 @@ function ProjectsPageContent() {
         return
       }
 
-      console.log('API呼び出し実行中 - ユーザー:', session.user.email)
-
       const response = await fetch('/api/projects', {
         method: 'GET',
         headers: {
@@ -292,7 +290,6 @@ function ProjectsPageContent() {
 
       if (response.ok) {
         const projectsData = result.projects || []
-        console.log('取得した案件とステータス:', projectsData.map((p: any) => ({ title: p.title, status: p.status })))
         const now = Date.now()
         const visibleProjects = projectsData.filter((p: ProjectData) => {
           if (p.status !== 'completed') return true
@@ -359,11 +356,6 @@ function ProjectsPageContent() {
   // フィルタリング
   useEffect(() => {
     let filtered = projects
-    console.log('フィルタリング実行:', {
-      selectedTab,
-      totalProjects: projects.length,
-      projectStatuses: projects.map((p: any) => ({ title: p.title, status: p.status }))
-    })
 
     // ステータスフィルタ
     if (selectedTab === 'active') {
@@ -372,7 +364,6 @@ function ProjectsPageContent() {
       filtered = filtered.filter(p => p.status === 'completed' || p.status === 'suspended')
     } else if (selectedTab === 'pending_approval') {
       filtered = filtered.filter(p => p.status === 'pending_approval')
-      console.log('承認待ちフィルタ結果:', filtered.length, filtered.map((p: any) => ({ title: p.title, status: p.status })))
     }
 
     // 検索フィルタ
@@ -745,8 +736,6 @@ function ProjectsPageContent() {
   }
 
   const uploadFile = async (projectId: string, file: File) => {
-    console.log('📤 uploadFile called with projectId:', projectId)
-    console.log('📤 projectId length:', projectId.length)
     setIsUploadingFile(true)
 
     try {
@@ -770,9 +759,6 @@ function ProjectsPageContent() {
 
       const encodedProjectId = encodeURIComponent(projectId)
       const requestUrl = `/api/projects/${encodedProjectId}/attachments`
-      console.log('📤 Original projectId:', projectId)
-      console.log('📤 Encoded projectId:', encodedProjectId)
-      console.log('📤 Sending request to:', requestUrl)
       const response = await fetch(requestUrl, {
         method: 'POST',
         headers: {
@@ -857,8 +843,6 @@ function ProjectsPageContent() {
   }
 
   const openAttachmentsModal = (projectId: string) => {
-    console.log('🔍 openAttachmentsModal called with projectId:', projectId)
-    console.log('🔍 projectId length:', projectId.length)
     setShowAttachmentsModal(projectId)
     loadAttachments(projectId)
   }
@@ -1446,8 +1430,6 @@ function ProjectsPageContent() {
                             size="sm"
                             onClick={(e) => {
                               e.stopPropagation()
-                              console.log('📎 Attachment button clicked for project:', project.id)
-                              console.log('📎 Project ID length:', project.id.length)
                               openAttachmentsModal(project.id)
                             }}
                           >

@@ -281,8 +281,6 @@ export async function PUT(
               const newBadges = await badgeChecker.checkAndAwardBadges(contractor.id, projectId)
 
               if (newBadges.length > 0) {
-                console.log(`✅ ${newBadges.length}件の新しいバッジを付与しました`)
-
                 // バッジ取得通知を送信
                 for (const badge of newBadges) {
                   const { data: badgeInfo } = await supabaseAdmin
@@ -462,18 +460,12 @@ export async function DELETE(
     // Boxフォルダの削除処理（手動削除の場合のみ）
     if (!preserveBox && project.box_folder_id) {
       try {
-        console.log(`🗑️ Deleting Box folder for project: ${projectId} (folder: ${project.box_folder_id})`)
         await deleteBoxFolder(project.box_folder_id, true)
-        console.log(`✅ Successfully deleted Box folder: ${project.box_folder_id}`)
       } catch (boxError) {
         console.error('❌ Box folder deletion failed:', boxError)
         // Box削除が失敗してもプロジェクト削除は継続
         console.warn('⚠️ Continuing with project deletion despite Box folder deletion failure')
       }
-    } else if (preserveBox) {
-      console.log(`📦 Preserving Box folder for 30-day auto deletion: ${project.box_folder_id}`)
-    } else {
-      console.log(`📂 No Box folder to delete for project: ${projectId}`)
     }
 
     // 案件を削除

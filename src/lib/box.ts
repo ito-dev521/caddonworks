@@ -641,7 +641,6 @@ export async function createBoxSharedLink(fileId: string): Promise<string> {
       throw new Error('Shared link URL not found in response')
     }
 
-    console.log(`🔗 Created shared link for file ${fileId}: ${sharedLinkUrl}`)
     return sharedLinkUrl
 
   } catch (error) {
