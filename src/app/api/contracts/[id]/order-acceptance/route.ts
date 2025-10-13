@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { documentGenerator, createOrderAcceptanceDocumentData } from '@/lib/document-generator'
-import { uploadFileToBox } from '@/lib/box'
+import { uploadFileToBox, createBoxSharedLink } from '@/lib/box'
 
 export const dynamic = 'force-dynamic'
 
@@ -219,13 +219,19 @@ export async function POST(
       uploadFolderId
     )
 
+    // Box共有リンクを作成
+    console.log('🔗 Box共有リンク作成中:', boxFileId)
+    const sharedLink = await createBoxSharedLink(boxFileId)
+    console.log('✅ Box共有リンク作成完了:', sharedLink)
+
     // 契約に注文請書情報を記録
     const { data: updatedContract, error: updateError } = await supabaseAdmin
       .from('contracts')
       .update({
         order_acceptance_generated_at: new Date().toISOString(),
         order_acceptance_box_id: boxFileId,
-        order_acceptance_number: orderNumber || `ORD-${contractId.slice(0, 8)}`
+        order_acceptance_number: orderNumber || `ORD-${contractId.slice(0, 8)}`,
+        order_acceptance_shared_link: sharedLink
       })
       .eq('id', contractId)
       .select(`
@@ -263,7 +269,8 @@ export async function POST(
       contract: updatedContract,
       fileName,
       boxFileId,
-      orderAcceptanceNumber: orderNumber || `ORD-${contractId.slice(0, 8)}`
+      orderAcceptanceNumber: orderNumber || `ORD-${contractId.slice(0, 8)}`,
+      sharedLink
     }, { status: 201 })
 
   } catch (error: any) {
@@ -304,6 +311,7 @@ export async function GET(
         order_acceptance_generated_at,
         order_acceptance_box_id,
         order_acceptance_number,
+        order_acceptance_shared_link,
         contractor_id,
         projects!inner(
           id,
@@ -324,7 +332,8 @@ export async function GET(
         generatedAt: contract.order_acceptance_generated_at,
         boxFileId: contract.order_acceptance_box_id,
         orderNumber: contract.order_acceptance_number,
-        projectTitle: contract.projects.title
+        projectTitle: contract.projects.title,
+        sharedLink: contract.order_acceptance_shared_link
       } : null
     })
 

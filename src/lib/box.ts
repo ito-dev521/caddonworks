@@ -608,6 +608,48 @@ export async function deleteBoxFile(fileId: string): Promise<void> {
   }
 }
 
+export async function createBoxSharedLink(fileId: string): Promise<string> {
+  try {
+    const accessToken = await getAppAuthAccessToken()
+
+    const res = await fetch(`https://api.box.com/2.0/files/${fileId}`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        shared_link: {
+          access: 'open',
+          permissions: {
+            can_download: true,
+            can_preview: true
+          }
+        }
+      })
+    })
+
+    if (!res.ok) {
+      const errorText = await res.text()
+      throw new Error(`Box shared link creation failed ${res.status}: ${errorText}`)
+    }
+
+    const file: any = await res.json()
+    const sharedLinkUrl = file.shared_link?.url
+
+    if (!sharedLinkUrl) {
+      throw new Error('Shared link URL not found in response')
+    }
+
+    console.log(`🔗 Created shared link for file ${fileId}: ${sharedLinkUrl}`)
+    return sharedLinkUrl
+
+  } catch (error) {
+    console.error('❌ Box shared link creation failed:', error)
+    throw error
+  }
+}
+
 export async function createProjectFolderStructure(projectTitle: string, projectId: string, companyFolderId: string): Promise<{
   folderId: string;
   subfolders: Record<string, string>;

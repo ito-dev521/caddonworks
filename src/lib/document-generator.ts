@@ -485,9 +485,9 @@ export class DocumentGenerator {
         displayHeaderFooter: false,
         margin: {
           top: '8mm',
-          right: '8mm',
+          right: '16mm',
           bottom: '8mm',
-          left: '8mm'
+          left: '30mm'
         },
         scale: 0.98
       })
@@ -560,6 +560,14 @@ export class DocumentGenerator {
       colWidths.push(`.col-${col} { width: ${widthPercent}%; }`)
     }
 
+    // <colgroup>タグを生成（列幅を明示的に指定）
+    let colgroupHtml = '<colgroup>\n'
+    for (let col = 1; col <= maxCols; col++) {
+      const widthPercent = (columnWidths[col - 1] / totalWidth * 100).toFixed(2)
+      colgroupHtml += `    <col style="width: ${widthPercent}%;">\n`
+    }
+    colgroupHtml += '  </colgroup>\n'
+
     let html = `
       <!DOCTYPE html>
       <html>
@@ -568,7 +576,7 @@ export class DocumentGenerator {
           <style>
             @page {
               size: A4;
-              margin: 10mm 10mm 10mm 10mm;
+              margin: 10mm 20mm 10mm 30mm;
             }
             body {
               font-family: 'Noto Sans JP', 'Yu Gothic', 'MS PGothic', 'Hiragino Sans', sans-serif;
@@ -580,15 +588,16 @@ export class DocumentGenerator {
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
               max-width: 100%;
+              border: none;
             }
             table {
               width: 100%;
               border-collapse: collapse;
               table-layout: fixed;
               max-width: 100%;
+              border: none;
             }
             td {
-              border: 1px solid #333;
               padding: 8px 10px;
               vertical-align: middle;
               word-wrap: break-word;
@@ -612,6 +621,7 @@ export class DocumentGenerator {
         </head>
         <body>
           <table>
+            ${colgroupHtml}
     `
 
     const maxRow = worksheet.rowCount
@@ -739,9 +749,29 @@ export class DocumentGenerator {
           styles.push(`font-size: ${cell.font.size}pt`)
         }
 
-        // 罫線なし
-        if (cell.border && Object.keys(cell.border).length === 0) {
-          classes.push('no-border')
+        // 罫線情報を読み取ってスタイルに適用
+        if (cell.border) {
+          const borderSides = ['top', 'bottom', 'left', 'right'] as const
+          for (const side of borderSides) {
+            const borderSide = cell.border[side]
+            if (borderSide && borderSide.style) {
+              // 罫線スタイルを変換（thin, medium, thick -> 1px, 2px, 3px）
+              let width = '1px'
+              if (borderSide.style === 'medium') {
+                width = '2px'
+              } else if (borderSide.style === 'thick') {
+                width = '3px'
+              }
+
+              // 罫線の色を取得
+              let color = '#333'
+              if (borderSide.color && (borderSide.color as any).argb) {
+                color = this.argbToHex((borderSide.color as any).argb)
+              }
+
+              styles.push(`border-${side}: ${width} solid ${color}`)
+            }
+          }
         }
 
         // 完了届の場合、2行目と4行目の間の境界線を非表示
@@ -1071,7 +1101,7 @@ export class DocumentGenerator {
 
   private generateOrderAcceptanceDocument(doc: PDFKit.PDFDocument, data: DocumentData): void {
     const pageWidth = doc.page.width
-    const margin = 50  // 請求書と同じマージンに変更
+    const margin = 30  // マージンを小さくしてテーブルを広げる
     const contentWidth = pageWidth - (margin * 2)
 
     // ============================================
@@ -1131,7 +1161,7 @@ export class DocumentGenerator {
     // ============================================
     let tableY = centerY + 45  // 50 → 45に調整
     const tableStartX = margin
-    const col1Width = 110  // 130 → 110に変更（ラベル列をさらに狭めてデータ列を広く）
+    const col1Width = 200  // ラベル列の幅
     const col2Width = contentWidth - col1Width
 
     // 注文番号
