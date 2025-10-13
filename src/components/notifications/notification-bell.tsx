@@ -310,7 +310,7 @@ export function NotificationBell() {
     } else if (notification.type === 'completion_report_created') {
       // 業務完了届作成通知
       if (userRole === 'Contractor') {
-        router.push('/invoices')
+        router.push('/contracts?tab=completion')
       } else {
         router.push('/contracts?tab=invoice')
       }

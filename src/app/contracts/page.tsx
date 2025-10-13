@@ -530,6 +530,18 @@ function ContractsPageContent() {
         return
       }
 
+      // プロジェクトの完了日を取得
+      const project = completedProjects.find(p => p.id === projectId)
+      if (!project) {
+        alert('プロジェクト情報が見つかりません')
+        return
+      }
+
+      // 完了日の決定: completed_at が null の場合は現在の日付を使用
+      const completionDate = project.completed_at
+        ? new Date(project.completed_at).toISOString().split('T')[0]
+        : new Date().toISOString().split('T')[0]
+
       const response = await fetch('/api/completion-reports', {
         method: 'POST',
         headers: {
@@ -539,7 +551,7 @@ function ContractsPageContent() {
         body: JSON.stringify({
           project_id: projectId,
           contract_id: projectContract.id,
-          actual_completion_date: new Date().toISOString().split('T')[0],
+          actual_completion_date: completionDate,
           status: 'submitted'
         })
       })
@@ -674,10 +686,10 @@ function ContractsPageContent() {
                         : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                     }`}
                   >
-                    {userRole === 'OrgAdmin' ? '業務完了届発行' : '請求書'}
-                    {(userRole === 'OrgAdmin' && completedProjects.filter(project => !invoicedProjects.has(project.id)).length > 0) && (
+                    {userRole === 'OrgAdmin' ? '業務完了届発行' : '契約別請求書'}
+                    {(userRole === 'OrgAdmin' && completedProjects.filter(project => !completionReportProjects.has(project.id)).length > 0) && (
                       <span className="ml-2 bg-green-500 text-white text-xs px-2 py-1 rounded-full">
-                        {completedProjects.filter(project => !invoicedProjects.has(project.id)).length}
+                        {completedProjects.filter(project => !completionReportProjects.has(project.id)).length}
                       </span>
                     )}
                     {(userRole === 'Contractor' && invoices.length > 0) && (
@@ -696,9 +708,9 @@ function ContractsPageContent() {
                       }`}
                     >
                       業務完了届
-                      {completionReportProjects.size > 0 && (
+                      {completionReports.filter(report => !report.contractor_signed_at).length > 0 && (
                         <span className="ml-2 bg-purple-500 text-white text-xs px-2 py-1 rounded-full">
-                          {completionReportProjects.size}
+                          {completionReports.filter(report => !report.contractor_signed_at).length}
                         </span>
                       )}
                     </button>
@@ -1036,7 +1048,7 @@ function ContractsPageContent() {
             {selectedTab === 'invoice' && (
               userRole === 'OrgAdmin' ? (
                 // 業務完了届発行タブ（発注者用）
-                completedProjects.filter(project => !invoicedProjects.has(project.id)).length === 0 ? (
+                completedProjects.filter(project => !completionReportProjects.has(project.id)).length === 0 ? (
                   <Card className="p-8 text-center">
                     <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                     <h3 className="text-xl font-semibold text-gray-900 mb-2">完了案件がありません</h3>
@@ -1054,7 +1066,7 @@ function ContractsPageContent() {
                     </div>
 
                     <div className="grid gap-4">
-                      {completedProjects.filter(project => !invoicedProjects.has(project.id)).map((project: any) => (
+                      {completedProjects.filter(project => !completionReportProjects.has(project.id)).map((project: any) => (
                         <Card key={project.id} className="p-6">
                           <div className="flex justify-between items-start">
                             <div className="flex-1">
@@ -1153,13 +1165,13 @@ function ContractsPageContent() {
                   </div>
                 )
               ) : (
-                // 請求書タブ（受注者用）
+                // 契約別請求書タブ（受注者用）
                 invoices.length === 0 ? (
                   <Card className="p-8 text-center">
                     <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                    <h3 className="text-xl font-semibold text-gray-900 mb-2">請求書がありません</h3>
+                    <h3 className="text-xl font-semibold text-gray-900 mb-2">契約別請求書がありません</h3>
                     <p className="text-gray-600">
-                      発行された請求書がありません。
+                      発行された契約別請求書がありません。
                     </p>
                   </Card>
                 ) : (
@@ -1304,7 +1316,7 @@ function ContractsPageContent() {
                                     <span className="text-gray-600">受注者署名:</span>
                                     <span className={`ml-2 ${report.contractor_signed_at ? 'text-green-600' : 'text-gray-400'}`}>
                                       {report.contractor_signed_at
-                                        ? new Date(report.contractor_signed_at).toLocaleString('ja-JP')
+                                        ? `${report.contractor?.display_name || userProfile?.display_name || '受注者'} (${new Date(report.contractor_signed_at).toLocaleString('ja-JP')})`
                                         : '未署名'
                                       }
                                     </span>
@@ -1323,6 +1335,44 @@ function ContractsPageContent() {
                             </div>
 
                             <div className="flex gap-2 ml-4">
+                              {!report.contractor_signed_at && (
+                                <Button
+                                  variant="engineering"
+                                  size="sm"
+                                  onClick={async () => {
+                                    try {
+                                      const { data: { session } } = await supabase.auth.getSession()
+                                      if (!session) {
+                                        alert('認証が必要です')
+                                        return
+                                      }
+
+                                      const response = await fetch(`/api/completion-reports/${report.id}/sign`, {
+                                        method: 'POST',
+                                        headers: {
+                                          'Authorization': `Bearer ${session.access_token}`,
+                                          'Content-Type': 'application/json'
+                                        }
+                                      })
+
+                                      const result = await response.json()
+
+                                      if (response.ok) {
+                                        alert('署名が完了しました')
+                                        fetchCompletionReports() // 完了届を再取得
+                                      } else {
+                                        alert(result.message || '署名に失敗しました')
+                                      }
+                                    } catch (error) {
+                                      console.error('署名エラー:', error)
+                                      alert('署名に失敗しました')
+                                    }
+                                  }}
+                                >
+                                  <CheckCircle className="w-4 h-4 mr-2" />
+                                  署名する
+                                </Button>
+                              )}
                               <Button
                                 variant="outline"
                                 size="sm"

@@ -14,8 +14,12 @@ export interface DocumentData {
   contractorEmail?: string
   contractorAddress?: string
   contractorPhone?: string
+  contractorPostalCode?: string
   clientName?: string
   clientEmail?: string
+  clientAddress?: string
+  clientBuilding?: string
+  clientRepresentative?: string
 
   // プロジェクト関連
   projectTitle?: string
@@ -30,6 +34,8 @@ export interface DocumentData {
   orderNumber?: string
   orderDate?: string
   acceptanceDate?: string
+  supportEnabled?: boolean
+  supportFeePercent?: number
 
   // 月次請求書関連
   billingPeriod?: string
@@ -1066,150 +1072,197 @@ export class DocumentGenerator {
     const contentWidth = pageWidth - (margin * 2)
 
     // ============================================
-    // ヘッダー部分
+    // 左側: 発注者住所（請求書と同じ位置）
     // ============================================
-    doc.fontSize(24).text('注文請書', margin, 40, {
+    let leftY = 40
+    doc.fontSize(9).fillColor('#000000')
+
+    // 発注者の会社情報
+    const clientAddress = data.clientAddress || '福岡県福岡市早良区西新1丁目10-13'
+    const clientBuilding = data.clientBuilding || '西新新田ビル403'
+    const clientCompany = data.clientName || 'イースタイルラボ株式会社'
+    const clientRepresentative = data.clientRepresentative || '代表取締役　井上直樹'
+
+    doc.text(clientAddress, margin, leftY)
+    leftY += 15
+    doc.text(clientBuilding, margin, leftY)
+    leftY += 15
+    doc.text(clientCompany, margin, leftY)
+    leftY += 15
+    doc.text(clientRepresentative, margin, leftY)
+
+    // ============================================
+    // 右側: 請負者情報（請求書の(請負者)と同じ位置）
+    // ============================================
+    let rightY = 40
+    const rightX = pageWidth - margin - 200
+
+    doc.fontSize(9).fillColor('#000000')
+
+    // 請負者ラベル
+    doc.text('（請負者）', rightX + 140, rightY)
+    rightY += 15
+
+    // 請負者の会社情報
+    const contractorAddress = data.contractorAddress || (data.contractorPostalCode ? `〒${data.contractorPostalCode}` : '福岡県福岡市早良区西新1丁目')
+    const contractorAddressLine2 = '10-13-403'
+    const contractorCompany = data.contractorName || '伊藤 昌徳'
+
+    doc.text(contractorAddress, rightX, rightY)
+    rightY += 15
+    doc.text(contractorAddressLine2, rightX, rightY)
+    rightY += 15
+    doc.text(contractorCompany, rightX, rightY)
+
+    // ============================================
+    // ヘッダー部分（中央配置）
+    // ============================================
+    let centerY = 140
+    doc.fontSize(24).text('注文請書', margin, centerY, {
       align: 'center',
       width: contentWidth
     })
 
-    // 作成日（右上）
-    doc.fontSize(9).text(
-      `作成日: ${data.createdAt || new Date().toLocaleDateString('ja-JP')}`,
-      pageWidth - 150, 40
-    )
-
-    // ヘッダー下の線
-    doc.moveTo(margin, 70).lineTo(pageWidth - margin, 70).stroke()
-
-    let y = 90
-
     // ============================================
-    // 注文書情報セクション
+    // 注文書情報テーブル
     // ============================================
-    doc.fontSize(12).fillColor('#333333').text('【注文書情報】', margin, y)
-    y += 20
+    let tableY = centerY + 50
+    const tableStartX = margin
+    const col1Width = 150
+    const col2Width = contentWidth - col1Width
 
+    // 注文番号
+    doc.rect(tableStartX, tableY, col1Width, 25).stroke()
+    doc.rect(tableStartX + col1Width, tableY, col2Width, 25).stroke()
     doc.fontSize(10).fillColor('#000000')
-    doc.text(`注文書番号: ${data.orderNumber || '未設定'}`, margin + 20, y)
-    y += 18
-    doc.text(`注文日: ${data.orderDate || '未設定'}`, margin + 20, y)
-    y += 30
+    doc.text('注文番号', tableStartX + 10, tableY + 8, { width: col1Width - 20 })
+    doc.text(data.orderNumber || 'b84b9400-760b-425a-a05b-316c9dfb5433',
+             tableStartX + col1Width + 10, tableY + 8, { width: col2Width - 20 })
+    tableY += 25
 
-    // ============================================
-    // 受注者情報セクション（請書作成者）
-    // ============================================
-    doc.fontSize(12).fillColor('#333333').text('【受注者情報】', margin, y)
-    doc.fontSize(9).fillColor('#666666').text('（本注文請書作成者）', margin + 90, y)
-    y += 20
+    // 担当者
+    doc.rect(tableStartX, tableY, col1Width, 25).stroke()
+    doc.rect(tableStartX + col1Width, tableY, col2Width, 25).stroke()
+    doc.text('担当者', tableStartX + 10, tableY + 8, { width: col1Width - 20 })
+    doc.text(data.contractorName || '小林 育英',
+             tableStartX + col1Width + 10, tableY + 8, { width: col2Width - 20 })
+    tableY += 25
 
-    doc.fontSize(10).fillColor('#000000')
-    doc.text(`会社名: ${data.contractorName || '受注者名'}`, margin + 20, y)
-    y += 18
-    doc.text(`住所: ${data.contractorAddress || '住所未登録'}`, margin + 20, y)
-    y += 18
-    doc.text(`電話番号: ${data.contractorPhone || '電話番号未登録'}`, margin + 20, y)
-    y += 18
-    doc.text(`メールアドレス: ${data.contractorEmail || 'メール未登録'}`, margin + 20, y)
-    y += 30
+    // 業務名
+    doc.rect(tableStartX, tableY, col1Width, 25).stroke()
+    doc.rect(tableStartX + col1Width, tableY, col2Width, 25).stroke()
+    doc.text('業務名', tableStartX + 10, tableY + 8, { width: col1Width - 20 })
+    doc.text(data.projectTitle || '災害査定その２',
+             tableStartX + col1Width + 10, tableY + 8, { width: col2Width - 20 })
+    tableY += 25
 
-    // ============================================
-    // 発注者情報セクション
-    // ============================================
-    doc.fontSize(12).fillColor('#333333').text('【発注者情報】', margin, y)
-    y += 20
+    // 工期
+    doc.rect(tableStartX, tableY, col1Width, 25).stroke()
+    doc.rect(tableStartX + col1Width, tableY, col2Width, 25).stroke()
+    doc.text('工期', tableStartX + 10, tableY + 8, { width: col1Width - 20 })
+    const startDate = data.startDate || '2025-10-22'
+    const endDate = data.deadline || '2025-10-29'
+    doc.text(`${startDate} 〜 ${endDate}`,
+             tableStartX + col1Width + 10, tableY + 8, { width: col2Width - 20 })
+    tableY += 25
 
-    doc.fontSize(10).fillColor('#000000')
-    doc.text(`会社名: ${data.clientName || '発注者名'}`, margin + 20, y)
-    y += 18
-    doc.text(`メールアドレス: ${data.clientEmail || 'メール未登録'}`, margin + 20, y)
-    y += 30
+    // 契約金額（税込）
+    doc.rect(tableStartX, tableY, col1Width, 25).stroke()
+    doc.rect(tableStartX + col1Width, tableY, col2Width, 25).stroke()
+    doc.text('契約金額（税込）', tableStartX + 10, tableY + 8, { width: col1Width - 20 })
+    doc.fontSize(12).fillColor('#000000')
+    doc.text(`¥${(data.projectAmount || 0).toLocaleString()}`,
+             tableStartX + col1Width + 10, tableY + 6, { width: col2Width - 20 })
+    doc.fontSize(10)
+    tableY += 25
 
-    // ============================================
-    // 請負内容セクション
-    // ============================================
-    doc.fontSize(12).fillColor('#333333').text('【請負内容】', margin, y)
-    y += 20
+    // 小計
+    doc.rect(tableStartX, tableY, col1Width, 25).stroke()
+    doc.rect(tableStartX + col1Width, tableY, col2Width, 25).stroke()
+    doc.text('小計', tableStartX + 10, tableY + 8, { width: col1Width - 20 })
+    doc.text(`¥${(data.projectAmount || 0).toLocaleString()}`,
+             tableStartX + col1Width + 10, tableY + 8, { width: col2Width - 20 })
+    tableY += 25
 
-    doc.fontSize(10).fillColor('#000000')
-    doc.text(`工事名・業務名: ${data.projectTitle || 'プロジェクト名'}`, margin + 20, y)
-    y += 18
-    doc.fontSize(11).fillColor('#CC0000').text(
-      `請負金額: ¥${(data.projectAmount || 0).toLocaleString()} 円（税込）`,
-      margin + 20, y
-    )
-    y += 20
-    doc.fontSize(10).fillColor('#000000')
-    doc.text(`完成期日: ${data.deadline || '未設定'}`, margin + 20, y)
-    y += 18
-    doc.text(`工事場所: ${data.workLocation || '場所未設定'}`, margin + 20, y)
-    y += 30
+    // 源泉徴収税 (10.21%)
+    const baseAmount = data.projectAmount || 0
+    const withholdingTax = Math.floor(baseAmount * 0.1021)
+    doc.rect(tableStartX, tableY, col1Width, 25).stroke()
+    doc.rect(tableStartX + col1Width, tableY, col2Width, 25).stroke()
+    doc.text('源泉徴収税 (10.21%)', tableStartX + 10, tableY + 8, { width: col1Width - 20 })
+    doc.text(`-¥${withholdingTax.toLocaleString()}`,
+             tableStartX + col1Width + 10, tableY + 8, { width: col2Width - 20 })
+    tableY += 25
 
-    // ============================================
-    // 受諾内容セクション
-    // ============================================
-    doc.fontSize(12).fillColor('#333333').text('【受諾内容】', margin, y)
-    y += 20
+    // お振込金額
+    const transferAmount = baseAmount - withholdingTax
+    doc.rect(tableStartX, tableY, col1Width, 25).stroke()
+    doc.rect(tableStartX + col1Width, tableY, col2Width, 25).stroke()
+    doc.fontSize(11).fillColor('#000000')
+    doc.text('お振込金額', tableStartX + 10, tableY + 8, { width: col1Width - 20 })
+    doc.fontSize(12)
+    doc.text(`¥${transferAmount.toLocaleString()}`,
+             tableStartX + col1Width + 10, tableY + 6, { width: col2Width - 20 })
+    doc.fontSize(10)
+    tableY += 25
 
-    // 背景色付きのボックス
-    doc.rect(margin + 10, y - 5, contentWidth - 20, 50).fillAndStroke('#F5F5F5', '#CCCCCC')
+    // 支払日
+    doc.rect(tableStartX, tableY, col1Width, 25).stroke()
+    doc.rect(tableStartX + col1Width, tableY, col2Width, 25).stroke()
+    doc.text('支払日', tableStartX + 10, tableY + 8, { width: col1Width - 20 })
+    // 支払日は工期終了日の当月末または翌月末
+    const endDateObj = new Date(endDate)
+    const day = endDateObj.getDate()
+    let paymentDate: Date
+    if (day <= 20) {
+      // 当月末
+      paymentDate = new Date(endDateObj.getFullYear(), endDateObj.getMonth() + 1, 0)
+    } else {
+      // 翌月末
+      paymentDate = new Date(endDateObj.getFullYear(), endDateObj.getMonth() + 2, 0)
+    }
+    const paymentDateStr = paymentDate.toLocaleDateString('ja-JP', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).replace(/\//g, '-')
+    doc.text(paymentDateStr, tableStartX + col1Width + 10, tableY + 8, { width: col2Width - 20 })
+    tableY += 25
 
-    doc.fontSize(10).fillColor('#000000').text(
-      '上記注文書の内容を承諾し、記載された条件に従って誠実に業務を履行することをお約束いたします。',
-      margin + 20, y + 10, { width: contentWidth - 40, align: 'left' }
-    )
-    y += 65
+    // 支払方法
+    doc.rect(tableStartX, tableY, col1Width, 25).stroke()
+    doc.rect(tableStartX + col1Width, tableY, col2Width, 25).stroke()
+    doc.text('支払方法', tableStartX + 10, tableY + 8, { width: col1Width - 20 })
+    doc.text('口座振込', tableStartX + col1Width + 10, tableY + 8, { width: col2Width - 20 })
+    tableY += 25
 
-    // ============================================
-    // 受諾日
-    // ============================================
-    doc.fontSize(10).text(
-      `受諾日: ${data.acceptanceDate || new Date().toLocaleDateString('ja-JP')}`,
-      margin + 20, y
-    )
-    y += 35
+    // 備考（サポート手数料に関するコメント）
+    const supportFeeComment = (data as any).supportEnabled
+      ? `※支払金額は振込手数料等、源泉徴収を控除した金額とする\n※本プロジェクトはサポート利用有りのため、契約金額の${(data as any).supportFeePercent || 8}%のサポート手数料が別途運営者に支払われます`
+      : '※支払金額は振込手数料等、源泉徴収を控除した金額とする'
 
-    // ============================================
-    // 署名欄
-    // ============================================
-    const signatureY = y
-    const signatureBoxWidth = 180
-    const signatureBoxHeight = 50
-
-    // 受注者署名欄（左側）
-    doc.fontSize(11).fillColor('#000000').text('受注者署名:', margin, signatureY)
-    doc.rect(margin, signatureY + 20, signatureBoxWidth, signatureBoxHeight).stroke()
-    doc.fontSize(8).fillColor('#999999').text('※ 電子署名により捺印', margin + 5, signatureY + 25)
-
-    // 発注者確認署名欄（右側）
-    const rightX = pageWidth - margin - signatureBoxWidth
-    doc.fontSize(11).fillColor('#000000').text('発注者確認署名:', rightX, signatureY)
-    doc.rect(rightX, signatureY + 20, signatureBoxWidth, signatureBoxHeight).stroke()
-    doc.fontSize(8).fillColor('#999999').text('※ 電子署名により捺印', rightX + 5, signatureY + 25)
-
-    y = signatureY + signatureBoxHeight + 40
-
-    // ============================================
-    // フッター（注意事項）
-    // ============================================
-    // フッター背景
-    doc.rect(margin, y, contentWidth, 35).fillAndStroke('#EEEEEE', '#CCCCCC')
-
+    const remarkHeight = (data as any).supportEnabled ? 40 : 25
+    doc.rect(tableStartX, tableY, col1Width, remarkHeight).stroke()
+    doc.rect(tableStartX + col1Width, tableY, col2Width, remarkHeight).stroke()
+    doc.text('備考', tableStartX + 10, tableY + 8, { width: col1Width - 20 })
     doc.fontSize(8).fillColor('#666666')
-    doc.text('※ 本注文請書は電子署名により法的効力を有します', margin + 10, y + 8, {
-      width: contentWidth - 20
+    doc.text(supportFeeComment, tableStartX + col1Width + 10, tableY + 8, {
+      width: col2Width - 20,
+      lineGap: 2
     })
-    doc.text('※ 契約条件の詳細は別途契約書に記載されます', margin + 10, y + 20, {
-      width: contentWidth - 20
-    })
+    tableY += remarkHeight
 
-    // ページ番号（オプション）
-    doc.fontSize(8).fillColor('#999999').text(
-      '1 / 1',
-      pageWidth / 2 - 20,
-      doc.page.height - 30,
-      { width: 40, align: 'center' }
-    )
+    // ============================================
+    // 下部の署名欄
+    // ============================================
+    tableY += 30
+
+    doc.fontSize(10).fillColor('#000000')
+    doc.text('受注者署名:', margin, tableY)
+    doc.rect(margin + 100, tableY - 5, 180, 40).stroke()
+
+    doc.text('発注者署名:', pageWidth - margin - 280, tableY)
+    doc.rect(pageWidth - margin - 180, tableY - 5, 180, 40).stroke()
   }
 
   private generateCompletionDocument(doc: PDFKit.PDFDocument, data: DocumentData): void {
@@ -1388,15 +1441,24 @@ export function createOrderAcceptanceDocumentData(
     projectAmount: project.amount,
     deadline: project.deadline,
     startDate: project.start_date || project.startDate,
+    workLocation: project.location,
     contractorName: contractor.name,
     contractorEmail: contractor.email,
+    contractorAddress: contractor.address,
+    contractorPhone: contractor.phone_number,
+    contractorPostalCode: contractor.postal_code,
     clientName: client.name,
     clientEmail: client.email,
+    clientAddress: client.address,
+    clientBuilding: client.building,
+    clientRepresentative: client.representative,
     createdAt: new Date().toLocaleDateString('ja-JP'),
     // 注文請書特有のフィールド
     ...(orderInfo && {
       orderNumber: orderInfo.orderNumber,
-      orderDate: orderInfo.orderDate
+      orderDate: orderInfo.orderDate,
+      supportEnabled: orderInfo.supportEnabled,
+      supportFeePercent: orderInfo.supportFeePercent
     })
   }
 }

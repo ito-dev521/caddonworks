@@ -108,6 +108,22 @@ export async function POST(
     // 請求書番号を生成
     const invoiceNumber = `INV-OP-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`
 
+    // 支払い期限の計算: 20日締めの当月末払い
+    const issueDate = new Date().toISOString().split('T')[0]
+    const compDate = new Date(issueDate)
+    const day = compDate.getDate()
+
+    let dueDate: string
+    if (day <= 20) {
+      // 当月末
+      const lastDay = new Date(compDate.getFullYear(), compDate.getMonth() + 1, 0)
+      dueDate = lastDay.toISOString().split('T')[0]
+    } else {
+      // 翌月末
+      const lastDay = new Date(compDate.getFullYear(), compDate.getMonth() + 2, 0)
+      dueDate = lastDay.toISOString().split('T')[0]
+    }
+
     // 運営者向け請求書を作成
     const { data: invoice, error: invoiceError } = await supabase
       .from('invoices')
@@ -122,8 +138,8 @@ export async function POST(
         system_fee: supportFee,
         total_amount: totalAmount,
         status: 'issued',
-        issue_date: new Date().toISOString().split('T')[0],
-        due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30日後
+        issue_date: issueDate,
+        due_date: dueDate,
         memo: supportEnabled ? `サポート手数料 ${supportPercent}% を含む` : null
       })
       .select()

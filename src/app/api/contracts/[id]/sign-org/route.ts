@@ -497,9 +497,87 @@ export async function POST(
       })
     }
 
+    // 注文請書を自動生成（発注者署名完了後）
+    let orderAcceptanceInfo = null
+    try {
+      console.log('📋 注文請書を自動生成します')
+
+      // 注文請書生成APIを内部呼び出し
+      const orderAcceptanceResponse = await fetch(
+        `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/api/contracts/${contractId}/order-acceptance`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      )
+
+      if (orderAcceptanceResponse.ok) {
+        const orderAcceptanceResult = await orderAcceptanceResponse.json()
+        orderAcceptanceInfo = {
+          orderAcceptanceNumber: orderAcceptanceResult.orderAcceptanceNumber,
+          fileName: orderAcceptanceResult.fileName,
+          boxFileId: orderAcceptanceResult.boxFileId
+        }
+        console.log('✅ 注文請書の自動生成が完了しました:', orderAcceptanceInfo)
+
+        // 注文請書生成後、自動的にBox Sign署名リクエストを送信
+        try {
+          console.log('📝 注文請書のBox Sign署名リクエストを送信します')
+
+          const signRequestResponse = await fetch(
+            `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/api/contracts/${contractId}/order-acceptance/sign`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              }
+            }
+          )
+
+          if (signRequestResponse.ok) {
+            const signRequestResult = await signRequestResponse.json()
+            console.log('✅ Box Sign署名リクエストの送信が完了しました:', signRequestResult.signRequestId)
+
+            // orderAcceptanceInfoに署名リクエスト情報を追加
+            orderAcceptanceInfo.signRequestId = signRequestResult.signRequestId
+            orderAcceptanceInfo.prepareUrl = signRequestResult.prepareUrl
+          } else {
+            const errorResult = await signRequestResponse.json()
+            console.error('⚠️ Box Sign署名リクエストの送信に失敗しました:', errorResult.message)
+            // Box Sign失敗は警告のみで、注文請書生成は成功とする
+          }
+        } catch (signRequestError: any) {
+          console.error('⚠️ Box Sign署名リクエスト送信エラー（注文請書生成は成功）:', signRequestError)
+          // Box Sign失敗は警告のみで、注文請書生成は成功とする
+        }
+      } else {
+        const errorResult = await orderAcceptanceResponse.json()
+        console.error('⚠️ 注文請書の自動生成に失敗しました:', errorResult.message)
+        // 注文請書生成失敗は警告のみで、契約署名は成功とする
+      }
+    } catch (orderAcceptanceError: any) {
+      console.error('⚠️ 注文請書生成エラー（契約署名は成功）:', orderAcceptanceError)
+      // 注文請書生成失敗は警告のみで、契約署名は成功とする
+    }
+
+    // 完了メッセージを作成
+    let successMessage = '契約に署名しました'
+    if (orderAcceptanceInfo) {
+      if (orderAcceptanceInfo.signRequestId) {
+        successMessage += '。注文請書を生成し、受注者にBox Sign署名リクエストを送信しました。'
+      } else {
+        successMessage += '。注文請書も生成されました。'
+      }
+    }
+
     return NextResponse.json({
-      message: '契約に署名しました',
-      contract: updatedContract
+      message: successMessage,
+      contract: updatedContract,
+      orderAcceptanceInfo
     }, { status: 200 })
 
   } catch (error) {

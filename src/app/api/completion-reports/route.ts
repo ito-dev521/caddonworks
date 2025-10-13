@@ -67,6 +67,11 @@ export async function GET(request: NextRequest) {
           signed_at,
           contractor_id,
           support_enabled
+        ),
+        contractor:users!contractor_id(
+          id,
+          display_name,
+          email
         )
       `)
 
@@ -208,7 +213,8 @@ export async function POST(request: NextRequest) {
       org_id: project.org_id,
       actual_completion_date,
       status,
-      submission_date: status === 'submitted' ? new Date().toISOString().split('T')[0] : null
+      submission_date: status === 'submitted' ? new Date().toISOString().split('T')[0] : null,
+      org_signed_at: status === 'submitted' ? new Date().toISOString() : null // 発注者が作成時に自動署名
     }
 
     // 完了届を作成
@@ -321,6 +327,22 @@ export async function POST(request: NextRequest) {
           const totalAmount = baseAmount + systemFee
           const invoiceNumber = `INV-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`
 
+          // 支払い期限の計算: 20日締めの当月末払い
+          const issueDate = new Date().toISOString().split('T')[0]
+          const compDate = new Date(issueDate)
+          const day = compDate.getDate()
+
+          let dueDate: string
+          if (day <= 20) {
+            // 当月末
+            const lastDay = new Date(compDate.getFullYear(), compDate.getMonth() + 1, 0)
+            dueDate = lastDay.toISOString().split('T')[0]
+          } else {
+            // 翌月末
+            const lastDay = new Date(compDate.getFullYear(), compDate.getMonth() + 2, 0)
+            dueDate = lastDay.toISOString().split('T')[0]
+          }
+
           const invoiceData: Record<string, any> = {
             project_id: project.id,
             client_org_id: project.org_id,
@@ -329,8 +351,8 @@ export async function POST(request: NextRequest) {
             system_fee: systemFee,
             total_amount: totalAmount,
             status: 'issued',
-            issue_date: new Date().toISOString().split('T')[0],
-            due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            issue_date: issueDate,
+            due_date: dueDate,
             org_id: project.org_id,
             contractor_id: contract.contractor_id,
             contract_id: contract.id,

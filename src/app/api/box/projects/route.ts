@@ -194,6 +194,7 @@ export async function GET(request: NextRequest) {
     // 受注者の場合は、自分が契約したプロジェクトのみを取得
     let projects: any[] | null = []
     let projectsError: any = null
+    let skipDetailedBoxFetch = false // 受注者の場合、既にBox詳細情報を取得済みかのフラグ
 
     if (orgAdminMembership.role === 'Contractor') {
       // 受注者：自分が契約済み（signed）のプロジェクトのみ取得
@@ -215,49 +216,8 @@ export async function GET(request: NextRequest) {
             .in('id', projectIds)
             .order('created_at', { ascending: false })
 
-          // 00_作業内容フォルダにファイルがある案件のみフィルタリング
-          if (contractedProjects && contractedProjects.length > 0) {
-            const projectsWithFiles = await Promise.all(
-              contractedProjects.map(async (project) => {
-                try {
-                  // Boxフォルダが設定されていない場合は非表示
-                  if (!project.box_folder_id) {
-                    return null
-                  }
-
-                  // Boxフォルダ内のアイテムを取得
-                  const items = await getBoxFolderItems(project.box_folder_id)
-
-                  // 00_作業内容フォルダを検索
-                  const workContentFolder = items.find(
-                    (item: any) =>
-                      item.type === 'folder' &&
-                      (item.name.includes('00_作業内容') || item.name === '作業内容')
-                  )
-
-                  // 00_作業内容フォルダが見つからない場合は非表示
-                  if (!workContentFolder) {
-                    return null
-                  }
-
-                  // 00_作業内容フォルダ内のファイルをチェック
-                  const workContentItems = await getBoxFolderItems(workContentFolder.id)
-                  const hasFiles = workContentItems.some((item: any) => item.type === 'file')
-
-                  // ファイルが1つ以上ある場合のみ返す
-                  return hasFiles ? project : null
-                } catch (error) {
-                  console.error(`Error checking Box folder for project ${project.id}:`, error)
-                  return null
-                }
-              })
-            )
-
-            // nullを除外
-            projects = projectsWithFiles.filter(p => p !== null)
-          } else {
-            projects = []
-          }
+          // 契約済みプロジェクトをそのまま使用
+          projects = contractedProjects || []
 
           projectsError = contractedProjectsError
         } else {

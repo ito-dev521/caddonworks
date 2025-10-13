@@ -142,14 +142,27 @@ export function InvoiceCard({
 
 // デフォルトの請求書データを生成する関数
 export function createSampleInvoice(): Invoice {
+  // 20日締めの当月末払い/翌月末払いロジックを適用
+  const issueDate = new Date()
+  const day = issueDate.getDate()
+
+  let dueDate: Date
+  if (day <= 20) {
+    // 当月末
+    dueDate = new Date(issueDate.getFullYear(), issueDate.getMonth() + 1, 0)
+  } else {
+    // 翌月末
+    dueDate = new Date(issueDate.getFullYear(), issueDate.getMonth() + 2, 0)
+  }
+
   return {
     id: 'inv_' + Math.random().toString(36).substr(2, 9),
     number: 'INV-' + Math.floor(Math.random() * 10000).toString().padStart(4, '0'),
     client_name: '株式会社サンプル',
     amount: Math.floor(Math.random() * 5000000) + 1000000,
     status: ['draft', 'sent', 'paid', 'overdue'][Math.floor(Math.random() * 4)] as any,
-    issue_date: new Date().toISOString(),
-    due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    issue_date: issueDate.toISOString(),
+    due_date: dueDate.toISOString(),
     project_title: '道路設計業務'
   }
 }

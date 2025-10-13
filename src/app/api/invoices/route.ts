@@ -209,28 +209,23 @@ export async function POST(request: NextRequest) {
     const totalAmount = baseAmount + systemFee
 
     // 発行日を設定
-    const issueDate = type === 'completion' ? new Date().toISOString().split('T')[0] : null
+    const issueDate = type === 'completion' ? new Date().toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
 
     // 支払日を完了日(業務完了届の発行日)から計算（20日までなら当月末、21日以降なら翌月末）
     let dueDate: string
-    if (issueDate) {
-      const compDate = new Date(issueDate)
-      const day = compDate.getDate()
+    const compDate = new Date(issueDate)
+    const day = compDate.getDate()
 
-      if (day <= 20) {
-        // 当月末
-        const lastDay = new Date(compDate.getFullYear(), compDate.getMonth() + 1, 0)
-        dueDate = lastDay.toISOString().split('T')[0]
-        console.log(`完了日(業務完了届発行日) ${issueDate} (${day}日) → 当月末支払い: ${dueDate}`)
-      } else {
-        // 翌月末
-        const lastDay = new Date(compDate.getFullYear(), compDate.getMonth() + 2, 0)
-        dueDate = lastDay.toISOString().split('T')[0]
-        console.log(`完了日(業務完了届発行日) ${issueDate} (${day}日) → 翌月末支払い: ${dueDate}`)
-      }
+    if (day <= 20) {
+      // 当月末
+      const lastDay = new Date(compDate.getFullYear(), compDate.getMonth() + 1, 0)
+      dueDate = lastDay.toISOString().split('T')[0]
+      console.log(`完了日(業務完了届発行日) ${issueDate} (${day}日) → 当月末支払い: ${dueDate}`)
     } else {
-      // デフォルト: 30日後
-      dueDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+      // 翌月末
+      const lastDay = new Date(compDate.getFullYear(), compDate.getMonth() + 2, 0)
+      dueDate = lastDay.toISOString().split('T')[0]
+      console.log(`完了日(業務完了届発行日) ${issueDate} (${day}日) → 翌月末支払い: ${dueDate}`)
     }
 
     const invoiceData: any = {

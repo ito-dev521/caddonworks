@@ -17,7 +17,19 @@ export async function POST(
 ) {
   try {
     const contractId = params.id
-    const { orderNumber, orderDate } = await request.json()
+
+    // リクエストボディはオプション（空の場合は自動生成される）
+    let orderNumber: string | undefined
+    let orderDate: string | undefined
+
+    try {
+      const body = await request.json()
+      orderNumber = body.orderNumber
+      orderDate = body.orderDate
+    } catch (e) {
+      // リクエストボディが空の場合は自動生成される
+      console.log('📋 リクエストボディが空 - 注文番号と日付を自動生成します')
+    }
 
     console.log('📋 注文請書生成開始:', { contractId, orderNumber, orderDate })
 
@@ -50,7 +62,7 @@ export async function POST(
       .from('contracts')
       .select(`
         *,
-        projects!inner(
+        projects(
           id,
           title,
           location,
@@ -58,7 +70,9 @@ export async function POST(
           start_date,
           end_date,
           created_by,
-          organizations!inner(
+          org_id,
+          box_folder_id,
+          organizations(
             id,
             name,
             billing_email
@@ -67,10 +81,6 @@ export async function POST(
             id,
             name,
             email
-          ),
-          memberships!inner(
-            user_id,
-            role
           )
         )
       `)
@@ -78,16 +88,34 @@ export async function POST(
       .single()
 
     if (contractError || !contract) {
+      console.error('契約取得エラー:', contractError)
       return NextResponse.json({ message: '契約が見つかりません' }, { status: 404 })
     }
 
     const project = contract.projects
 
+    if (!project) {
+      console.error('プロジェクト情報が見つかりません:', contractId)
+      return NextResponse.json({ message: 'プロジェクト情報が見つかりません' }, { status: 404 })
+    }
+
+    if (!project.organizations) {
+      console.error('組織情報が見つかりません:', project.id)
+      return NextResponse.json({ message: '組織情報が見つかりません' }, { status: 404 })
+    }
+
     // 権限チェック：発注者（プロジェクト作成者または組織メンバー）のみが注文請書を作成可能
     const isProjectCreator = project.created_by_user?.id === userProfile.id
-    const isOrgMember = project.memberships?.some(
-      (m: any) => m.user_id === userProfile.id && ['OrgAdmin', 'Staff'].includes(m.role)
-    )
+
+    // 組織メンバーシップを別途クエリ
+    const { data: memberships } = await supabaseAdmin
+      .from('memberships')
+      .select('user_id, role')
+      .eq('org_id', project.org_id)
+      .eq('user_id', userProfile.id)
+      .in('role', ['OrgAdmin', 'Staff'])
+
+    const isOrgMember = memberships && memberships.length > 0
 
     if (!isProjectCreator && !isOrgMember) {
       return NextResponse.json({ message: 'この契約の注文請書を作成する権限がありません' }, { status: 403 })
@@ -118,12 +146,21 @@ export async function POST(
       email: project.organizations.billing_email || project.created_by_user?.email
     }
 
+    // システム設定（サポート手数料％）を取得
+    const { data: sysSettings } = await supabaseAdmin
+      .from('system_settings')
+      .select('support_fee_percent')
+      .eq('id', 'global')
+      .maybeSingle()
+    const supportFeePercent = Number(sysSettings?.support_fee_percent ?? 8)
+
     // 注文請書データを準備（受注者情報を使用）
     const orderAcceptanceData = createOrderAcceptanceDocumentData(
       {
         title: project.title,
         amount: contract.bid_amount || project.amount,
         deadline: contract.end_date || project.end_date,
+        start_date: contract.start_date || project.start_date,
         location: project.location
       },
       {
@@ -133,10 +170,18 @@ export async function POST(
         postal_code: contractorProfile.postal_code,
         phone_number: contractorProfile.phone_number
       },
-      client,
+      {
+        name: project.organizations.name,
+        email: project.organizations.billing_email || project.created_by_user?.email,
+        address: project.organizations.address || '福岡県福岡市早良区西新1丁目10-13',
+        building: project.organizations.building || '西新新田ビル403',
+        representative: project.organizations.representative || '代表取締役　井上直樹'
+      },
       {
         orderNumber: orderNumber || `ORD-${contractId.slice(0, 8)}`,
-        orderDate: orderDate || contract.created_at?.split('T')[0]
+        orderDate: orderDate || contract.created_at?.split('T')[0],
+        supportEnabled: contract.support_enabled || false,
+        supportFeePercent: supportFeePercent
       }
     )
 

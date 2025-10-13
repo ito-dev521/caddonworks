@@ -180,7 +180,19 @@ function ContractDetailPageContent() {
       if (response.ok) {
         // 契約情報を再取得
         await fetchContract()
-        alert('契約に署名しました。チャットルームでやりとりを開始できます。')
+
+        // 注文請書が自動生成され、Box Sign署名リクエストも送信された場合はメッセージに含める
+        let successMessage = '契約に署名しました。'
+        if (result.orderAcceptanceInfo) {
+          if (result.orderAcceptanceInfo.signRequestId) {
+            successMessage += '注文請書を生成し、受注者にBox Sign署名リクエストを送信しました。'
+          } else {
+            successMessage += '注文請書も自動生成されました。'
+          }
+        }
+        successMessage += 'チャットルームでやりとりを開始できます。'
+
+        alert(successMessage)
       } else {
         setError(result.message || '署名に失敗しました')
       }
@@ -306,7 +318,8 @@ function ContractDetailPageContent() {
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json'
-        }
+        },
+        body: JSON.stringify({})
       })
 
       const result = await response.json()
@@ -708,6 +721,9 @@ function ContractDetailPageContent() {
                     <p className="text-sm text-blue-800">
                       受注者が契約に署名しました。発注者として署名を完了してください。
                     </p>
+                    <p className="text-sm text-blue-700 mt-2">
+                      ※ 署名すると自動的に注文請書が生成されます
+                    </p>
                   </div>
                   <div className="flex justify-end">
                     <Button
@@ -772,7 +788,7 @@ function ContractDetailPageContent() {
             )}
 
             {/* 注文請書セクション */}
-            {(contract.status === 'pending_org' || contract.status === 'signed') && (
+            {contract.status === 'signed' && (
               <Card className="p-6">
                 <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
                   <FileText className="w-5 h-5 mr-2" />

@@ -476,7 +476,10 @@ export async function GET(request: NextRequest) {
       projectsError = error
 
     } else if (contractorMembership) {
-      // 受注者の場合：自分が契約したプロジェクトのみを取得
+      // 受注者の場合：
+      // 1. 自分が契約したプロジェクト（落札案件）
+      // 2. 入札可能なプロジェクト（biddingステータス）
+
       const { data: contracts, error: contractsError } = await supabaseAdmin
         .from('contracts')
         .select('project_id')
@@ -486,26 +489,41 @@ export async function GET(request: NextRequest) {
       if (contractsError) {
         projectsError = contractsError
       } else {
-        const projectIds = contracts?.map(c => c.project_id) || []
+        const contractedProjectIds = contracts?.map(c => c.project_id) || []
 
-        if (projectIds.length > 0) {
-          let query = supabaseAdmin
+        // 契約済みプロジェクトを取得
+        let contractedProjects: any[] = []
+        if (contractedProjectIds.length > 0) {
+          let contractedQuery = supabaseAdmin
             .from('projects')
             .select('*')
-            .in('id', projectIds)
+            .in('id', contractedProjectIds)
 
-          // ステータスフィルタを適用
           if (statusFilter) {
-            query = query.eq('status', statusFilter)
+            contractedQuery = contractedQuery.eq('status', statusFilter)
           }
 
-          const { data, error } = await query.order('created_at', { ascending: false })
-          projectsData = data
-          projectsError = error
-        } else {
-          // 契約がない場合は空の配列を返す
-          projectsData = []
+          const { data: contractedData } = await contractedQuery
+          contractedProjects = contractedData || []
         }
+
+        // 入札可能なプロジェクトを取得（biddingステータスのみ）
+        let biddableProjects: any[] = []
+        if (!statusFilter || statusFilter === 'bidding') {
+          const { data: biddingData, error: biddingError } = await supabaseAdmin
+            .from('projects')
+            .select('*')
+            .eq('status', 'bidding')
+            .order('created_at', { ascending: false })
+
+          if (!biddingError && biddingData) {
+            biddableProjects = biddingData
+          }
+        }
+
+        // 契約済みと入札可能なプロジェクトを結合
+        projectsData = [...contractedProjects, ...biddableProjects]
+        projectsData.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       }
     } else {
       // どちらの権限もない場合は空の配列を返す
