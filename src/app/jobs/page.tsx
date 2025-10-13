@@ -27,6 +27,7 @@ import { useAuth } from "@/contexts/auth-context"
 import { supabase } from "@/lib/supabase"
 import { AuthGuard } from "@/components/auth/auth-guard"
 import { MEMBER_LEVELS, type MemberLevel } from "@/lib/member-level"
+import { FilePreviewModal } from "@/components/FilePreviewModal"
 
 interface JobData {
   id: string
@@ -84,6 +85,8 @@ function JobsPageContent() {
   const [showJobDetail, setShowJobDetail] = useState<string | null>(null)
   const [attachments, setAttachments] = useState<any[]>([])
   const [loadingAttachments, setLoadingAttachments] = useState(false)
+  const [previewFile, setPreviewFile] = useState<{ fileId: string; fileName: string } | null>(null)
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const lastFetchKeyRef = useRef<string | null>(null)
 
   // 予算のフォーマット処理
@@ -1237,10 +1240,16 @@ function JobsPageContent() {
                                     <Button
                                       variant="outline"
                                       size="sm"
-                                      onClick={() => handleDownload(attachment.download_url, attachment.file_name)}
+                                      onClick={() => {
+                                        setPreviewFile({
+                                          fileId: attachment.file_path,
+                                          fileName: attachment.file_name
+                                        })
+                                        setIsPreviewOpen(true)
+                                      }}
                                     >
-                                      <FileText className="w-4 h-4 mr-1" />
-                                      ダウンロード
+                                      <Eye className="w-4 h-4 mr-1" />
+                                      プレビュー
                                     </Button>
                                   </div>
                                 </div>
@@ -1290,6 +1299,19 @@ function JobsPageContent() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ファイルプレビューモーダル */}
+      {previewFile && (
+        <FilePreviewModal
+          fileId={previewFile.fileId}
+          fileName={previewFile.fileName}
+          isOpen={isPreviewOpen}
+          onClose={() => {
+            setIsPreviewOpen(false)
+            setPreviewFile(null)
+          }}
+        />
+      )}
     </div>
   )
 }

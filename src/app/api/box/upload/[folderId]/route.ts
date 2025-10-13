@@ -7,6 +7,10 @@ import { boxUploadRateLimit } from '@/lib/rate-limiter'
 
 export const dynamic = 'force-dynamic'
 
+// App Routerでは大きなファイルのアップロードをサポート
+// デフォルトではボディサイズ制限なし（メモリ制限まで）
+export const maxDuration = 300 // 最大5分のタイムアウト
+
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -54,11 +58,11 @@ export async function POST(
       return NextResponse.json({ message: 'ファイルが指定されていません' }, { status: 400 })
     }
 
-    // ファイルサイズ制限（100MB）
-    const maxSize = 100 * 1024 * 1024
+    // ファイルサイズ制限（500MB）
+    const maxSize = 500 * 1024 * 1024
     if (file.size > maxSize) {
       return NextResponse.json({
-        message: 'ファイルサイズが大きすぎます（最大100MB）'
+        message: 'ファイルサイズが大きすぎます（最大500MB）'
       }, { status: 400 })
     }
 

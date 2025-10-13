@@ -468,14 +468,17 @@ export async function POST(
         user_id: contract.contractor_id,
         type: 'error',
         title: 'BOX招待エラー',
-        message: `案件「${contract.contract_title}」のBOXフォルダへの招待に失敗しました。管理者にお問い合わせください。エラー: ${boxError.message}`,
+        message: `案件「${contract.contract_title}」のBOXフォルダへの招待に失敗しました。契約詳細画面から「BOX招待を再送信」ボタンを押して再度お試しください。エラー: ${boxError.message}`,
         data: {
           project_id: contract.project_id,
           contract_id: contract.id,
           error: boxError.message
         }
       })
-      // BOXエラーでも契約署名は成功とする（後で手動で招待可能）
+
+      // BOXフォルダ作成失敗時は警告を返すが、契約署名自体は成功とする
+      console.warn('⚠️ BOXフォルダの作成または権限付与に失敗しましたが、契約署名は成功しました')
+      console.warn('⚠️ ユーザーは「BOX招待を再送信」ボタンから再度試行できます')
     }
 
     // 受注者に署名完了通知を送信

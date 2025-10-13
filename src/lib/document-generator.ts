@@ -1071,7 +1071,7 @@ export class DocumentGenerator {
 
   private generateOrderAcceptanceDocument(doc: PDFKit.PDFDocument, data: DocumentData): void {
     const pageWidth = doc.page.width
-    const margin = 20  // 30 → 20に変更（左右でさらに20pt広くなる）
+    const margin = 50  // 請求書と同じマージンに変更
     const contentWidth = pageWidth - (margin * 2)
 
     // ============================================

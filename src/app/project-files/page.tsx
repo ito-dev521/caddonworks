@@ -37,6 +37,7 @@ import {
   type ArchiveSettings,
   type ProjectArchiveStatus
 } from "@/lib/archive-manager"
+import { FilePreviewModal } from "@/components/FilePreviewModal"
 
 interface BoxItem {
   id: string
@@ -78,6 +79,8 @@ export default function ProjectFilesPage() {
   const [archiveSettings] = useState<ArchiveSettings>(DEFAULT_ARCHIVE_SETTINGS)
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({})
   const [folderHierarchy, setFolderHierarchy] = useState<Record<string, BoxItem[]>>({})
+  const [previewFile, setPreviewFile] = useState<{ fileId: string; fileName: string } | null>(null)
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
 
   useEffect(() => {
     if (authLoading) {
@@ -408,8 +411,19 @@ export default function ProjectFilesPage() {
                   </p>
                 </div>
                 <button
+                  onClick={() => {
+                    setPreviewFile({ fileId: `box://${item.id}`, fileName: item.name })
+                    setIsPreviewOpen(true)
+                  }}
+                  className="p-1.5 rounded hover:bg-gray-100 text-gray-500 hover:text-engineering-blue"
+                  title="プレビュー"
+                >
+                  <Eye className="w-4 h-4" />
+                </button>
+                <button
                   onClick={() => handleDownload(item.id, item.name)}
-                  className="ml-auto p-1.5 rounded hover:bg-gray-100 text-gray-500 hover:text-engineering-blue"
+                  className="p-1.5 rounded hover:bg-gray-100 text-gray-500 hover:text-engineering-blue"
+                  title="ダウンロード"
                 >
                   <Download className="w-4 h-4" />
                 </button>
@@ -1107,7 +1121,19 @@ export default function ProjectFilesPage() {
                                 </div>
                               )}
                               {item.type === 'file' && (
-                                <div className="mt-3">
+                                <div className="mt-3 space-y-2">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="w-full"
+                                    onClick={() => {
+                                      setPreviewFile({ fileId: `box://${item.id}`, fileName: item.name })
+                                      setIsPreviewOpen(true)
+                                    }}
+                                  >
+                                    <Eye className="w-3 h-3 mr-2" />
+                                    プレビュー
+                                  </Button>
                                   <Button
                                     variant="outline"
                                     size="sm"
@@ -1156,6 +1182,19 @@ export default function ProjectFilesPage() {
               </motion.div>
             )}
           </AnimatePresence>
+
+          {/* ファイルプレビューモーダル */}
+          {previewFile && (
+            <FilePreviewModal
+              fileId={previewFile.fileId}
+              fileName={previewFile.fileName}
+              isOpen={isPreviewOpen}
+              onClose={() => {
+                setIsPreviewOpen(false)
+                setPreviewFile(null)
+              }}
+            />
+          )}
         </main>
       </div>
     </div>

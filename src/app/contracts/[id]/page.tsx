@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react"
 import { motion } from "framer-motion"
-import { FileText, ArrowLeft, CheckCircle, AlertCircle, User, DollarSign, Calendar, PenTool, Mail } from "lucide-react"
+import { FileText, ArrowLeft, CheckCircle, AlertCircle, User, DollarSign, Calendar, PenTool, Mail, Eye } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -10,6 +10,7 @@ import { useAuth } from "@/contexts/auth-context"
 import { AuthGuard } from "@/components/auth/auth-guard"
 import { useRouter, useParams } from "next/navigation"
 import { supabase } from "@/lib/supabase"
+import { FilePreviewModal } from "@/components/FilePreviewModal"
 
 interface Contract {
   id: string
@@ -43,6 +44,7 @@ interface Contract {
   order_acceptance_sign_started_at?: string
   order_acceptance_signed_at?: string
   order_acceptance_signed_box_id?: string
+  box_invitation_sent_at?: string
 }
 
 function ContractDetailPageContent() {
@@ -63,6 +65,8 @@ function ContractDetailPageContent() {
   const [isStartingOrderAcceptanceSign, setIsStartingOrderAcceptanceSign] = useState(false)
   const [isResendingSignRequest, setIsResendingSignRequest] = useState(false)
   const [isCheckingSignature, setIsCheckingSignature] = useState(false)
+  const [previewFile, setPreviewFile] = useState<{ fileId: string; fileName: string } | null>(null)
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
 
   // 契約情報を取得
   const fetchContract = async () => {
@@ -865,7 +869,7 @@ function ContractDetailPageContent() {
                         ) : (
                           <>
                             <Mail className="w-4 h-4 mr-2" />
-                            Box招待を再送信
+                            {contract.box_invitation_sent_at ? 'Box招待を再送信' : 'Box招待を送信'}
                           </>
                         )}
                       </Button>
@@ -1082,6 +1086,25 @@ function ContractDetailPageContent() {
                         受注者が注文請書に署名しました。署名済みの注文請書はBoxに保存されています。
                       </p>
                     </div>
+                    {(contract.order_acceptance_signed_box_id || contract.order_acceptance_box_id) && (
+                      <div className="flex justify-end">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const boxId = contract.order_acceptance_signed_box_id || contract.order_acceptance_box_id
+                            setPreviewFile({
+                              fileId: `box://${boxId}`,
+                              fileName: `注文請書_${contract.order_acceptance_number || 'N/A'}.pdf`
+                            })
+                            setIsPreviewOpen(true)
+                          }}
+                        >
+                          <Eye className="w-4 h-4 mr-2" />
+                          注文請書をプレビュー
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1143,6 +1166,19 @@ function ContractDetailPageContent() {
                   </div>
                 </div>
               </div>
+            )}
+
+            {/* ファイルプレビューモーダル */}
+            {previewFile && (
+              <FilePreviewModal
+                fileId={previewFile.fileId}
+                fileName={previewFile.fileName}
+                isOpen={isPreviewOpen}
+                onClose={() => {
+                  setIsPreviewOpen(false)
+                  setPreviewFile(null)
+                }}
+              />
             )}
           </div>
         </motion.div>

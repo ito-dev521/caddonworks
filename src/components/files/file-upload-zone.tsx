@@ -54,7 +54,7 @@ export function FileUploadZone({ isOpen, onClose }: FileUploadZoneProps) {
     "地下構造物設計"
   ]
 
-  // 実際のBoxへのアップロード関数
+  // Box Direct Upload: ブラウザから直接Boxにアップロード（最大15GB対応）
   const uploadFileToBox = async (uploadFile: UploadFile) => {
     try {
       // フォルダIDが選択されていない場合はエラー
@@ -68,48 +68,71 @@ export function FileUploadZone({ isOpen, onClose }: FileUploadZoneProps) {
         return
       }
 
-      // FormData作成
-      const formData = new FormData()
-      formData.append('file', uploadFile.file)
-
-      // セッショントークン取得
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) {
-        throw new Error('認証が必要です')
-      }
-
-      // アップロード進捗をシミュレート
-      const progressInterval = setInterval(() => {
-        setUploadFiles(prev => prev.map(f => {
-          if (f.id === uploadFile.id && f.status === 'uploading') {
-            return { ...f, progress: Math.min(f.progress + 10, 90) }
-          }
-          return f
-        }))
-      }, 300)
-
-      // 実際のAPIコール
-      const response = await fetch(`/api/box/upload/${selectedFolderId}`, {
+      // 1. プリフライト: アップロード準備（アクセストークンを取得）
+      const preflightResponse = await fetch('/api/box/upload-preflight', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${session.access_token}`
+          'Content-Type': 'application/json'
         },
-        body: formData
+        body: JSON.stringify({
+          folderId: selectedFolderId,
+          fileName: uploadFile.file.name,
+          fileSize: uploadFile.file.size
+        })
       })
 
-      clearInterval(progressInterval)
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.message || 'アップロードに失敗しました')
+      if (!preflightResponse.ok) {
+        const error = await preflightResponse.json()
+        throw new Error(error.message || 'プリフライトチェックに失敗しました')
       }
 
-      // アップロード成功
-      setUploadFiles(prev => prev.map(f =>
-        f.id === uploadFile.id
-          ? { ...f, status: 'success' as const, progress: 100, scanResult: 'clean' as const }
-          : f
-      ))
+      const { uploadUrl, accessToken, folderId } = await preflightResponse.json()
+
+      // 2. XMLHttpRequestを使って直接Boxにアップロード（進捗表示付き）
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest()
+
+        // 進捗イベント
+        xhr.upload.addEventListener('progress', (e) => {
+          if (e.lengthComputable) {
+            const percentComplete = Math.round((e.loaded / e.total) * 100)
+            setUploadFiles(prev => prev.map(f =>
+              f.id === uploadFile.id
+                ? { ...f, progress: percentComplete }
+                : f
+            ))
+          }
+        })
+
+        // 完了イベント
+        xhr.addEventListener('load', () => {
+          if (xhr.status === 200 || xhr.status === 201) {
+            setUploadFiles(prev => prev.map(f =>
+              f.id === uploadFile.id
+                ? { ...f, status: 'success' as const, progress: 100, scanResult: 'clean' as const }
+                : f
+            ))
+            resolve()
+          } else {
+            reject(new Error(`アップロード失敗: ${xhr.statusText}`))
+          }
+        })
+
+        // エラーイベント
+        xhr.addEventListener('error', () => {
+          reject(new Error('ネットワークエラーが発生しました'))
+        })
+
+        // FormData作成
+        const formData = new FormData()
+        formData.append('file', uploadFile.file)
+        formData.append('parent_id', folderId)
+
+        // Box APIにPOST
+        xhr.open('POST', uploadUrl)
+        xhr.setRequestHeader('Authorization', `Bearer ${accessToken}`)
+        xhr.send(formData)
+      })
 
     } catch (error: any) {
       console.error('Upload error:', error)
@@ -484,7 +507,7 @@ export function FileUploadZone({ isOpen, onClose }: FileUploadZoneProps) {
           {/* Footer */}
           <div className="flex items-center justify-between p-6 border-t border-gray-200">
             <div className="text-sm text-gray-600">
-              最大ファイルサイズ: 500MB | 対応形式: DWG, PDF, Excel, Word, 画像
+              最大ファイルサイズ: 15GB | 対応形式: DWG, PDF, Excel, Word, 画像、動画
             </div>
             <div className="flex gap-2">
               <Button variant="ghost" onClick={onClose}>

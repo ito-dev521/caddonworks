@@ -37,6 +37,7 @@ import { authenticatedFetch } from "@/lib/api-client"
 import { AuthGuard } from "@/components/auth/auth-guard"
 import { MEMBER_LEVELS, type MemberLevel } from "@/lib/member-level"
 import { FavoriteMemberSelector } from "@/components/projects/favorite-member-selector"
+import { FilePreviewModal } from "@/components/FilePreviewModal"
 
 interface ProjectData {
   id: string
@@ -122,6 +123,8 @@ function ProjectsPageContent() {
   const [attachments, setAttachments] = useState<any[]>([])
   const [isLoadingAttachments, setIsLoadingAttachments] = useState(false)
   const [isUploadingFile, setIsUploadingFile] = useState(false)
+  const [previewFile, setPreviewFile] = useState<{ fileId: string; fileName: string } | null>(null)
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [showExpiredNotification, setShowExpiredNotification] = useState(false)
   const [expiredProjectsCount, setExpiredProjectsCount] = useState(0)
   const [favoriteMembers, setFavoriteMembers] = useState<any[]>([])
@@ -1820,7 +1823,7 @@ function ProjectsPageContent() {
                           uploadFile(showAttachmentsModal, file)
                         }
                       }}
-                      accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.gif,.webp,.txt,.zip,.rar,.dwg,.p21,.sfc,.bfo"
+                      accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.gif,.webp,.txt,.zip,.rar,.dwg,.p21,.sfc,.bfo,.mp4,.mov,.avi,.wmv,.flv,.mkv,.webm"
                       disabled={isUploadingFile}
                     />
                     <Button
@@ -1831,7 +1834,7 @@ function ProjectsPageContent() {
                       {isUploadingFile ? 'アップロード中...' : 'ファイルを選択'}
                     </Button>
                     <p className="text-xs text-gray-500 mt-2">
-                      対応形式: PDF, Word, Excel, PowerPoint, 画像, ZIP, RAR, DWG, P21, SFC, BFO (最大200MB)
+                      対応形式: PDF, Word, Excel, PowerPoint, 画像, 動画, ZIP, RAR, DWG, P21, SFC, BFO (最大15GB)
                     </p>
                   </div>
                 </div>
@@ -1871,6 +1874,20 @@ function ProjectsPageContent() {
                               variant="outline"
                               size="sm"
                               onClick={() => {
+                                setPreviewFile({
+                                  fileId: attachment.file_path,
+                                  fileName: attachment.file_name
+                                })
+                                setIsPreviewOpen(true)
+                              }}
+                            >
+                              <Eye className="w-4 h-4 mr-1" />
+                              プレビュー
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
                                 // ファイルダウンロード機能（実装は後で追加）
                                 alert('ダウンロード機能は準備中です')
                               }}
@@ -1896,6 +1913,19 @@ function ProjectsPageContent() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ファイルプレビューモーダル */}
+      {previewFile && (
+        <FilePreviewModal
+          fileId={previewFile.fileId}
+          fileName={previewFile.fileName}
+          isOpen={isPreviewOpen}
+          onClose={() => {
+            setIsPreviewOpen(false)
+            setPreviewFile(null)
+          }}
+        />
+      )}
 
       {/* 編集モーダル */}
       <AnimatePresence>

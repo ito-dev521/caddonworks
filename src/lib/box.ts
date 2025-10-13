@@ -7,7 +7,7 @@ function getEnv(name: string): string {
   return v
 }
 
-function validateFileSize(size: number, maxSizeMB: number = 100): void {
+function validateFileSize(size: number, maxSizeMB: number = 15360): void {
   const maxSizeBytes = maxSizeMB * 1024 * 1024
   if (size > maxSizeBytes) {
     throw new Error(`ファイルサイズが大きすぎます（最大${maxSizeMB}MB）`)

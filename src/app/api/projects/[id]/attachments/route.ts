@@ -305,9 +305,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return NextResponse.json({ message: 'ファイルが選択されていません' }, { status: 400 })
     }
 
-    // ファイルサイズチェック（200MB制限）
-    if (file.size > 200 * 1024 * 1024) {
-      return NextResponse.json({ message: 'ファイルサイズが大きすぎます（最大200MB）' }, { status: 400 })
+    // ファイルサイズチェック（15GB制限 - Box Business Plusプラン）
+    if (file.size > 15 * 1024 * 1024 * 1024) {
+      return NextResponse.json({ message: 'ファイルサイズが大きすぎます（最大15GB）' }, { status: 400 })
     }
 
     // ファイルタイプチェック
@@ -335,17 +335,25 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       'application/octet-stream', // p21, sfc, bfoなどのバイナリファイル
       'application/x-step',
       'application/x-sfc',
-      'application/x-bfo'
+      'application/x-bfo',
+      // 動画形式
+      'video/mp4',
+      'video/quicktime',
+      'video/x-msvideo',
+      'video/x-ms-wmv',
+      'video/x-flv',
+      'video/x-matroska',
+      'video/webm'
     ]
 
     // ファイル拡張子もチェック（MIMEタイプが正しく設定されていない場合の対応）
-    const allowedExtensions = ['.pdf', '.jpg', '.jpeg', '.png', '.gif', '.webp', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.zip', '.rar', '.dwg', '.p21', '.sfc', '.bfo']
+    const allowedExtensions = ['.pdf', '.jpg', '.jpeg', '.png', '.gif', '.webp', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.zip', '.rar', '.dwg', '.p21', '.sfc', '.bfo', '.mp4', '.mov', '.avi', '.wmv', '.flv', '.mkv', '.webm']
     const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase()
 
     if (!allowedTypes.includes(file.type) && !allowedExtensions.includes(fileExtension)) {
       return NextResponse.json({
         message: 'サポートされていないファイル形式です',
-        details: `対応形式: PDF, Word, Excel, PowerPoint, 画像, ZIP, RAR, DWG, P21, SFC, BFO。現在のファイル: ${file.name} (${file.type})`
+        details: `対応形式: PDF, Word, Excel, PowerPoint, 画像, 動画, ZIP, RAR, DWG, P21, SFC, BFO。現在のファイル: ${file.name} (${file.type})`
       }, { status: 400 })
     }
 

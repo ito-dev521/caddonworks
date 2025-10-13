@@ -261,6 +261,15 @@ export async function POST(
       }
     })
 
+    // Box招待送信日時を記録（初回のみ）
+    if (!contract.box_invitation_sent_at) {
+      await supabaseAdmin
+        .from('contracts')
+        .update({ box_invitation_sent_at: new Date().toISOString() })
+        .eq('id', contractId)
+      console.log('✅ Box招待送信日時を記録しました')
+    }
+
     console.log('✅ Box招待メール送信完了')
 
     return NextResponse.json({
