@@ -66,7 +66,6 @@ export async function POST(
           id,
           title,
           location,
-          amount,
           start_date,
           end_date,
           created_by,
@@ -79,7 +78,7 @@ export async function POST(
           ),
           created_by_user:users!projects_created_by_fkey(
             id,
-            name,
+            display_name,
             email
           )
         )
@@ -158,7 +157,7 @@ export async function POST(
     const orderAcceptanceData = createOrderAcceptanceDocumentData(
       {
         title: project.title,
-        amount: contract.bid_amount || project.amount,
+        amount: contract.bid_amount,
         deadline: contract.end_date || project.end_date,
         start_date: contract.start_date || project.start_date,
         location: project.location

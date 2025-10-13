@@ -119,17 +119,17 @@ export async function POST(
       )
     }
 
-    // 案件のステータスを進行中に更新
+    // 案件のステータスは注文請書署名完了後に進行中に更新
+    // （契約署名完了だけではまだ進行中にしない）
     const { data: project } = await supabaseAdmin
       .from('projects')
-      .update({
-        status: 'in_progress'
-      })
-      .eq('id', contract.project_id)
       .select('id, title, assignee_name')
+      .eq('id', contract.project_id)
       .single()
 
-    // チャットルーム作成と担当者自動招待
+    // チャットルーム作成は注文請書署名完了後に実施
+    // （この時点ではまだチャットルームを作成しない）
+    /*
     if (project) {
       console.log('チャットルーム作成開始 - プロジェクトID:', project.id, 'プロジェクト名:', project.title)
 
@@ -323,6 +323,7 @@ export async function POST(
         }
       }
     }
+    */
 
     // BOXフォルダへのアクセス権限を付与
     try {

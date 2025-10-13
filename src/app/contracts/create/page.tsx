@@ -142,9 +142,9 @@ function CreateContractPageContent() {
       return
     }
 
-    // 金額調整時のコメント必須チェック
+    // 金額打診時のコメント必須チェック
     if (isAmountAdjusted && !adjustmentComment.trim()) {
-      setError('金額を調整した場合は、調整理由・コメントの入力が必須です')
+      setError('金額を打診する場合は、変更理由・コメントの入力が必須です')
       return
     }
 
@@ -407,10 +407,10 @@ function CreateContractPageContent() {
                   </div>
                 </div>
 
-                {/* 金額調整セクション - 金額を変更した場合のみ表示 */}
+                {/* 金額打診セクション - 金額を変更した場合のみ表示 */}
                 {isAmountAdjusted && (
                   <div className="bg-green-50 p-4 rounded-lg">
-                    <h3 className="font-semibold text-green-900 mb-3">契約金額の調整</h3>
+                    <h3 className="font-semibold text-green-900 mb-3">契約金額の打診</h3>
                     <div className="space-y-3">
                       <div>
                         <label className="block text-sm font-medium text-green-700 mb-2">
@@ -428,20 +428,20 @@ function CreateContractPageContent() {
                           placeholder="契約金額を入力（例：100,000）"
                         />
                         <p className="mt-1 text-sm text-green-600">
-                          入札金額から {adjustedAmount > bid.bid_amount ? '+' : ''}{formatAmount(adjustedAmount - bid.bid_amount)}円 調整されています
+                          入札金額から {adjustedAmount > bid.bid_amount ? '+' : ''}{formatAmount(adjustedAmount - bid.bid_amount)}円 変更しています
                         </p>
                       </div>
-                      
-                      {/* 金額調整時のコメント入力 */}
+
+                      {/* 金額打診時のコメント入力 */}
                       <div>
                         <label className="block text-sm font-medium text-green-700 mb-2">
-                          金額調整の理由・コメント <span className="text-red-500">*</span>
+                          金額変更の理由・コメント <span className="text-red-500">*</span>
                         </label>
                         <textarea
                           value={adjustmentComment}
                           onChange={(e) => setAdjustmentComment(e.target.value)}
                           className="w-full px-3 py-2 border border-green-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                          placeholder="金額を調整した理由やコメントを入力してください"
+                          placeholder="中間とってこの金額でどうですか？"
                           rows={3}
                           required
                         />
@@ -501,7 +501,7 @@ function CreateContractPageContent() {
                           }}
                           className="text-gray-700 border-gray-300 hover:bg-gray-100"
                         >
-                          金額を調整する
+                          金額を打診する
                         </Button>
                       </div>
                     </div>
@@ -514,7 +514,7 @@ function CreateContractPageContent() {
                     <li>• 契約書を作成すると、受注者に通知が送信されます</li>
                     <li>• 受注者が署名すると契約が有効になります</li>
                     <li>• 契約金額は上記で設定した金額になります</li>
-                    <li>• 金額を調整した場合は、受注者に変更内容が通知されます</li>
+                    <li>• 金額を打診した場合は、受注者に変更内容が通知されます</li>
                   </ul>
                 </div>
               </div>
@@ -543,7 +543,7 @@ function CreateContractPageContent() {
                 ) : (
                   <>
                     <FileText className="w-4 h-4 mr-2" />
-                    契約書を作成
+                    {isAmountAdjusted ? '金額打診して契約を作成' : '契約書を作成'}
                   </>
                 )}
               </Button>

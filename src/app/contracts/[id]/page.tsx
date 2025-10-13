@@ -42,6 +42,7 @@ interface Contract {
   order_acceptance_sign_request_id?: string
   order_acceptance_sign_started_at?: string
   order_acceptance_signed_at?: string
+  order_acceptance_signed_box_id?: string
 }
 
 function ContractDetailPageContent() {
@@ -60,6 +61,8 @@ function ContractDetailPageContent() {
   const [isResendingBoxInvitation, setIsResendingBoxInvitation] = useState(false)
   const [isGeneratingOrderAcceptance, setIsGeneratingOrderAcceptance] = useState(false)
   const [isStartingOrderAcceptanceSign, setIsStartingOrderAcceptanceSign] = useState(false)
+  const [isResendingSignRequest, setIsResendingSignRequest] = useState(false)
+  const [isCheckingSignature, setIsCheckingSignature] = useState(false)
 
   // 契約情報を取得
   const fetchContract = async () => {
@@ -138,7 +141,7 @@ function ContractDetailPageContent() {
       if (response.ok) {
         // 契約情報を再取得
         await fetchContract()
-        alert('契約に署名しました。発注者の署名待ちです。')
+        alert('契約に署名しました。発注者の署名と注文請書の署名が完了後にチャットルームでやりとりを開始できます。')
       } else {
         setError(result.message || '署名に失敗しました')
       }
@@ -190,7 +193,7 @@ function ContractDetailPageContent() {
             successMessage += '注文請書も自動生成されました。'
           }
         }
-        successMessage += 'チャットルームでやりとりを開始できます。'
+        successMessage += '注文請書の署名が完了後にチャットルームでやりとりを開始できます。'
 
         alert(successMessage)
       } else {
@@ -370,12 +373,7 @@ function ContractDetailPageContent() {
         // 契約情報を再取得
         await fetchContract()
 
-        // Box Sign署名準備画面を開く（発注者が署名位置を設定）
-        if (result.prepareUrl) {
-          window.open(result.prepareUrl, '_blank')
-        }
-
-        alert('注文請書の署名リクエストを送信しました。受注者にメールで通知されます。')
+        alert('注文請書の署名リクエストを送信しました。受注者のメールアドレスにBox Signから署名リクエストが送信されます。')
       } else {
         setError(result.message || '署名リクエストの送信に失敗しました')
       }
@@ -384,6 +382,96 @@ function ContractDetailPageContent() {
       setError('サーバーエラーが発生しました')
     } finally {
       setIsStartingOrderAcceptanceSign(false)
+    }
+  }
+
+  // 注文請書署名リクエストを再送信
+  const handleResendSignRequest = async () => {
+    if (!contract) {
+      setError('契約情報が見つかりません')
+      return
+    }
+
+    try {
+      setIsResendingSignRequest(true)
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+
+      if (sessionError || !session) {
+        console.error('セッション取得エラー:', sessionError)
+        setError('認証が必要です')
+        return
+      }
+
+      const response = await fetch(`/api/contracts/${contractId}/order-acceptance/sign`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        alert(`署名リクエストを再送信しました。\n受注者: ${contract.contractor_email}\n\nメールが届かない場合は以下を確認してください:\n・ SPAMフォルダ\n・ メールアドレスが正しいか\n・ 数分待ってから再度確認`)
+      } else {
+        setError(result.message || '署名リクエストの再送信に失敗しました')
+      }
+    } catch (err: any) {
+      console.error('署名リクエスト再送信エラー:', err)
+      setError('サーバーエラーが発生しました')
+    } finally {
+      setIsResendingSignRequest(false)
+    }
+  }
+
+  // 注文請書署名完了を確認し、署名済みドキュメントをプロジェクトフォルダに移動
+  const handleCheckSignature = async () => {
+    if (!contract) {
+      setError('契約情報が見つかりません')
+      return
+    }
+
+    try {
+      setIsCheckingSignature(true)
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+
+      if (sessionError || !session) {
+        console.error('セッション取得エラー:', sessionError)
+        setError('認証が必要です')
+        return
+      }
+
+      const response = await fetch(`/api/contracts/${contractId}/order-acceptance/sign/check`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        if (result.signedAt) {
+          // 署名が完了している場合
+          alert(`署名が完了しました！\n\n署名済みドキュメントはプロジェクトの「04_契約資料」フォルダに保存されています。\n\n署名完了日時: ${new Date(result.signedAt).toLocaleString('ja-JP')}`)
+          // 契約情報を再取得して最新の状態を表示
+          await fetchContract()
+        } else if (result.status) {
+          // 署名がまだ完了していない場合
+          alert(`署名はまだ完了していません。\n\n現在のステータス: ${result.status}\n\n受注者が署名を完了するまでお待ちください。`)
+        } else {
+          alert(result.message || '署名ステータスを確認しました')
+        }
+      } else {
+        setError(result.message || '署名完了確認に失敗しました')
+      }
+    } catch (err: any) {
+      console.error('署名完了確認エラー:', err)
+      setError('サーバーエラーが発生しました')
+    } finally {
+      setIsCheckingSignature(false)
     }
   }
 
@@ -749,11 +837,11 @@ function ContractDetailPageContent() {
               </Card>
             )}
 
-            {contract.status === 'signed' && (
+            {contract.status === 'signed' && contract.order_acceptance_signed_at && (
               <Card className="p-6">
                 <div className="text-center">
                   <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
-                  <h2 className="text-xl font-semibold text-gray-900 mb-2">契約が署名済みです</h2>
+                  <h2 className="text-xl font-semibold text-gray-900 mb-2">契約と注文請書の署名が完了しました</h2>
                   <p className="text-gray-600 mb-4">この契約は有効です。チャットルームでやりとりを開始できます。</p>
                   <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
                     <Button
@@ -783,6 +871,16 @@ function ContractDetailPageContent() {
                       </Button>
                     )}
                   </div>
+                </div>
+              </Card>
+            )}
+
+            {contract.status === 'signed' && !contract.order_acceptance_signed_at && (
+              <Card className="p-6">
+                <div className="text-center">
+                  <AlertCircle className="w-16 h-16 text-yellow-500 mx-auto mb-4" />
+                  <h2 className="text-xl font-semibold text-gray-900 mb-2">注文請書の署名待ちです</h2>
+                  <p className="text-gray-600 mb-4">契約書の署名は完了しました。注文請書の署名が完了するとチャットルームでやりとりを開始できます。</p>
                 </div>
               </Card>
             )}
@@ -872,12 +970,98 @@ function ContractDetailPageContent() {
                         注文請書番号: {contract.order_acceptance_number}
                       </p>
                       <p className="text-sm text-yellow-800">
+                        送信先: {contract.contractor_email}
+                      </p>
+                      <p className="text-sm text-yellow-800">
                         署名リクエスト送信日時: {contract.order_acceptance_sign_started_at && new Date(contract.order_acceptance_sign_started_at).toLocaleString('ja-JP')}
                       </p>
                       <p className="text-sm text-yellow-800 mt-2">
-                        受注者に電子署名リクエストを送信しました。受注者が署名を完了するまでお待ちください。
+                        {userRole === 'Contractor'
+                          ? 'Box Signから届いた署名リクエストメールを確認してください。署名完了後、下のボタンをクリックしてください。'
+                          : '受注者に電子署名リクエストを送信しました。受注者が署名を完了するまでお待ちください。'}
                       </p>
                     </div>
+
+                    {userRole === 'Contractor' && (
+                      <div className="bg-green-50 p-4 rounded-lg">
+                        <h3 className="font-semibold text-green-900 mb-2 flex items-center">
+                          <CheckCircle className="w-5 h-5 mr-2" />
+                          署名が完了しましたか？
+                        </h3>
+                        <p className="text-sm text-green-800 mb-3">
+                          Box Signで注文請書への署名が完了したら、下のボタンをクリックしてください。
+                          署名完了を確認し、チャットルームが作成されます。
+                        </p>
+                        <Button
+                          onClick={handleCheckSignature}
+                          disabled={isCheckingSignature}
+                          variant="engineering"
+                          size="sm"
+                        >
+                          {isCheckingSignature ? (
+                            <>
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                              確認中...
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle className="w-4 h-4 mr-2" />
+                              署名完了を確認
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    )}
+
+                    {userRole === 'OrgAdmin' && (
+                      <div className="bg-blue-50 p-4 rounded-lg">
+                        <h3 className="font-semibold text-blue-900 mb-2">メールが届かない場合</h3>
+                        <ul className="text-sm text-blue-800 space-y-1 mb-3">
+                          <li>• SPAMフォルダを確認してください</li>
+                          <li>• メールの到着に数分かかる場合があります</li>
+                          <li>• 受注者のメールアドレスが正しいか確認してください</li>
+                        </ul>
+                        <div className="flex gap-2">
+                          <Button
+                            onClick={handleResendSignRequest}
+                            disabled={isResendingSignRequest}
+                            variant="outline"
+                            className="border-blue-600 text-blue-600 hover:bg-blue-50"
+                            size="sm"
+                          >
+                            {isResendingSignRequest ? (
+                              <>
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                                再送信中...
+                              </>
+                            ) : (
+                              <>
+                                <Mail className="w-4 h-4 mr-2" />
+                                署名リクエストを再送信
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            onClick={handleCheckSignature}
+                            disabled={isCheckingSignature}
+                            variant="engineering"
+                            size="sm"
+                          >
+                            {isCheckingSignature ? (
+                              <>
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                確認中...
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircle className="w-4 h-4 mr-2" />
+                                署名完了を確認
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 

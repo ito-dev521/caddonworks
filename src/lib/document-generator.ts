@@ -484,12 +484,12 @@ export class DocumentGenerator {
         preferCSSPageSize: false,
         displayHeaderFooter: false,
         margin: {
-          top: '15mm',
-          right: '15mm',
-          bottom: '15mm',
-          left: '15mm'
+          top: '8mm',
+          right: '8mm',
+          bottom: '8mm',
+          left: '8mm'
         },
-        scale: 1.0
+        scale: 0.98
       })
 
       console.log(`✅ PDF生成完了: ${pdfBuffer.length} bytes`)
@@ -568,30 +568,33 @@ export class DocumentGenerator {
           <style>
             @page {
               size: A4;
-              margin: 20mm;
+              margin: 10mm 10mm 10mm 10mm;
             }
             body {
               font-family: 'Noto Sans JP', 'Yu Gothic', 'MS PGothic', 'Hiragino Sans', sans-serif;
               font-size: 10pt;
               margin: 0;
-              padding: 20px;
+              padding: 5px;
               background: white;
               color: #000;
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
+              max-width: 100%;
             }
             table {
               width: 100%;
               border-collapse: collapse;
               table-layout: fixed;
+              max-width: 100%;
             }
             td {
               border: 1px solid #333;
-              padding: 6px 8px;
+              padding: 8px 10px;
               vertical-align: middle;
               word-wrap: break-word;
               overflow-wrap: break-word;
-              line-height: 1.6;
+              line-height: 1.5;
+              font-size: 9pt;
             }
             ${colWidths.join('\n            ')}
             .text-left { text-align: left; }
@@ -1068,13 +1071,13 @@ export class DocumentGenerator {
 
   private generateOrderAcceptanceDocument(doc: PDFKit.PDFDocument, data: DocumentData): void {
     const pageWidth = doc.page.width
-    const margin = 50
+    const margin = 20  // 30 → 20に変更（左右でさらに20pt広くなる）
     const contentWidth = pageWidth - (margin * 2)
 
     // ============================================
     // 左側: 発注者住所（請求書と同じ位置）
     // ============================================
-    let leftY = 40
+    let leftY = 30
     doc.fontSize(9).fillColor('#000000')
 
     // 発注者の会社情報
@@ -1094,13 +1097,13 @@ export class DocumentGenerator {
     // ============================================
     // 右側: 請負者情報（請求書の(請負者)と同じ位置）
     // ============================================
-    let rightY = 40
-    const rightX = pageWidth - margin - 200
+    let rightY = 30
+    const rightX = pageWidth - margin - 220  // より広いスペースを確保
 
     doc.fontSize(9).fillColor('#000000')
 
     // 請負者ラベル
-    doc.text('（請負者）', rightX + 140, rightY)
+    doc.text('（請負者）', rightX + 160, rightY)
     rightY += 15
 
     // 請負者の会社情報
@@ -1117,7 +1120,7 @@ export class DocumentGenerator {
     // ============================================
     // ヘッダー部分（中央配置）
     // ============================================
-    let centerY = 140
+    let centerY = 130  // 140 → 130に調整
     doc.fontSize(24).text('注文請書', margin, centerY, {
       align: 'center',
       width: contentWidth
@@ -1126,9 +1129,9 @@ export class DocumentGenerator {
     // ============================================
     // 注文書情報テーブル
     // ============================================
-    let tableY = centerY + 50
+    let tableY = centerY + 45  // 50 → 45に調整
     const tableStartX = margin
-    const col1Width = 150
+    const col1Width = 110  // 130 → 110に変更（ラベル列をさらに狭めてデータ列を広く）
     const col2Width = contentWidth - col1Width
 
     // 注文番号

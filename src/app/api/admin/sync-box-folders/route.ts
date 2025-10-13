@@ -83,15 +83,15 @@ export async function POST(request: NextRequest) {
     for (const project of projects || []) {
       try {
         let projectBoxFolderId = project.box_folder_id
+        const org = Array.isArray(project.organizations) ? project.organizations[0] : project.organizations
+
+        if (!org || !org.box_folder_id) {
+          console.warn(`⚠️ Skipping project ${project.title}: Organization has no Box folder`)
+          continue
+        }
 
         // Project box folder IDが未設定の場合は作成
         if (!projectBoxFolderId) {
-          const org = Array.isArray(project.organizations) ? project.organizations[0] : project.organizations
-          if (!org || !org.box_folder_id) {
-            console.warn(`⚠️ Skipping project ${project.title}: Organization has no Box folder`)
-            continue
-          }
-
           console.log(`📁 Creating Box folder for project: ${project.title}`)
           const folderResult = await createProjectFolderStructure(
             project.title,
@@ -117,15 +117,36 @@ export async function POST(request: NextRequest) {
             status: 'created'
           })
         } else {
-          const org = Array.isArray(project.organizations) ? project.organizations[0] : project.organizations
-          console.log(`📂 Project ${project.title} already has Box folder: ${projectBoxFolderId}`)
-          projectResults.push({
-            project_id: project.id,
-            project_title: project.title,
-            box_folder_id: projectBoxFolderId,
-            organization_name: org?.name || 'Unknown',
-            status: 'existing'
-          })
+          // 既存のフォルダに対しても標準化処理を実行（番号なしフォルダの削除等）
+          console.log(`🔄 Standardizing existing Box folder for project: ${project.title}`)
+          try {
+            // createProjectFolderStructureは既存フォルダがある場合、409エラーで検出して再利用する
+            const folderResult = await createProjectFolderStructure(
+              project.title,
+              project.id,
+              org.box_folder_id
+            )
+
+            console.log(`✅ Standardized Box folder for project ${project.title}: ${projectBoxFolderId}`)
+            projectResults.push({
+              project_id: project.id,
+              project_title: project.title,
+              box_folder_id: projectBoxFolderId,
+              organization_name: org.name,
+              subfolders: folderResult.subfolders,
+              status: 'standardized'
+            })
+          } catch (standardizeError) {
+            console.warn(`⚠️ Failed to standardize project ${project.title}:`, standardizeError)
+            projectResults.push({
+              project_id: project.id,
+              project_title: project.title,
+              box_folder_id: projectBoxFolderId,
+              organization_name: org.name,
+              status: 'existing_standardization_failed',
+              error: standardizeError instanceof Error ? standardizeError.message : 'Unknown error'
+            })
+          }
         }
 
       } catch (error) {
@@ -151,13 +172,14 @@ export async function POST(request: NextRequest) {
     const projectStats = {
       total: projectResults.length,
       created: projectResults.filter(r => r.status === 'created').length,
-      existing: projectResults.filter(r => r.status === 'existing').length,
+      standardized: projectResults.filter(r => r.status === 'standardized').length,
+      existing: projectResults.filter(r => r.status === 'existing_standardization_failed').length,
       failed: projectResults.filter(r => r.status === 'failed').length
     }
 
     console.log('✅ Box folder synchronization completed')
     console.log(`📊 Organizations: ${organizationStats.created} created, ${organizationStats.existing} existing, ${organizationStats.failed} failed`)
-    console.log(`📊 Projects: ${projectStats.created} created, ${projectStats.existing} existing, ${projectStats.failed} failed`)
+    console.log(`📊 Projects: ${projectStats.created} created, ${projectStats.standardized} standardized, ${projectStats.existing} standardization failed, ${projectStats.failed} failed`)
 
     return NextResponse.json({
       message: 'Box folder synchronization completed',
