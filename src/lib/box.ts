@@ -580,6 +580,34 @@ export async function deleteBoxFolder(folderId: string, recursive: boolean = tru
   }
 }
 
+export async function deleteBoxFile(fileId: string): Promise<void> {
+  try {
+    const accessToken = await getAppAuthAccessToken()
+
+    const res = await fetch(`https://api.box.com/2.0/files/${fileId}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`
+      }
+    })
+
+    if (!res.ok) {
+      if (res.status === 404) {
+        console.warn(`📄 File ${fileId} not found, already deleted`)
+        return
+      }
+      const errorText = await res.text()
+      throw new Error(`Box file deletion failed ${res.status}: ${errorText}`)
+    }
+
+    console.log(`📄 Successfully deleted file: ${fileId}`)
+
+  } catch (error) {
+    console.error('❌ Box file deletion failed:', error)
+    throw error
+  }
+}
+
 export async function createProjectFolderStructure(projectTitle: string, projectId: string, companyFolderId: string): Promise<{
   folderId: string;
   subfolders: Record<string, string>;

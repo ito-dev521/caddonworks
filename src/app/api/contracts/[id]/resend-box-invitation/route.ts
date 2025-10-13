@@ -224,15 +224,16 @@ export async function POST(
       const subfolders = items.filter(item => item.type === 'folder')
 
       for (const subfolder of subfolders) {
+        // サブフォルダ（標準5フォルダ）は削除不可のviewer_uploader権限を付与
         const subfolderResult = await addFolderCollaboration(
           subfolder.id,
           contractorInfo.email,
-          'editor',
+          'viewer_uploader', // 削除不可、閲覧・ダウンロード・アップロード可能
           `${projectWithBox.title} - ${subfolder.name}`
         )
 
         if (subfolderResult.success) {
-          console.log(`✅ サブフォルダ「${subfolder.name}」へのアクセス権限を付与しました`)
+          console.log(`✅ サブフォルダ「${subfolder.name}」へのアクセス権限を付与しました（削除不可）`)
           invitedFolders.push(subfolder.name)
         } else {
           console.warn(`⚠️ サブフォルダ「${subfolder.name}」への権限付与失敗:`, subfolderResult.error)

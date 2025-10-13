@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { boxSignAPI } from '@/lib/box-sign'
-import { getAppAuthAccessToken } from '@/lib/box'
+import { getAppAuthAccessToken, deleteBoxFile } from '@/lib/box'
 
 export const dynamic = 'force-dynamic'
 
@@ -194,6 +194,16 @@ export async function POST(
     if (updateError) {
       console.error('契約更新エラー:', updateError)
       return NextResponse.json({ message: '契約の更新に失敗しました' }, { status: 500 })
+    }
+
+    // 元のPDFファイルを削除（署名前のファイルは不要）
+    try {
+      console.log('🗑️ 署名前の元PDFファイルを削除:', contract.order_acceptance_box_id)
+      await deleteBoxFile(contract.order_acceptance_box_id)
+      console.log('✅ 元PDFファイルを削除しました')
+    } catch (deleteError) {
+      // 削除に失敗してもエラーにはしない（署名リクエストは正常に作成されている）
+      console.warn('⚠️ 元PDFファイルの削除に失敗しました（処理は続行）:', deleteError)
     }
 
     // 受注者に通知
