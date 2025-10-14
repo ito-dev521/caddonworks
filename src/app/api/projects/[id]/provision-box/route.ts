@@ -73,7 +73,7 @@ export async function POST(_: NextRequest, { params }: { params: { id: string } 
       body: JSON.stringify({
         name,
         parentId: companyFolderId,
-        subfolders: ['受取', '作業', '納品', '契約']
+        subfolders: ['00_作業内容', '01_受取データ', '02_作業フォルダ', '03_納品データ', '04_契約資料']
       })
     })
 

@@ -313,26 +313,23 @@ export async function GET(request: NextRequest) {
           const subfolders: Record<string, string> = {}
 
           // BOXフォルダ内のアイテムからサブフォルダを特定
-          const folderMapping: Record<string, string[]> = {
-            '作業内容': ['00_作業内容', '作業内容', '00_'],
-            '受取': ['01_受取データ', '受取', '01_受取', '01_'],
-            '作業': ['02_作業フォルダ', '作業', '02_作業', '02_'],
-            '納品': ['03_納品データ', '納品', '03_納品', '03_'],
-            '契約': ['04_契約資料', '契約', '04_契約', '04_']
-          }
-
+          // より正確な判定のため、完全一致と部分一致を分けて処理
           items.forEach(item => {
             if (item.type === 'folder') {
               const itemName = item.name
 
-              // 各カテゴリに対してマッチングを確認
-              Object.entries(folderMapping).forEach(([category, patterns]) => {
-                patterns.forEach(pattern => {
-                  if (itemName.includes(pattern) && !subfolders[category]) {
-                    subfolders[category] = item.id
-                  }
-                })
-              })
+              // 完全一致または番号付きプレフィックスで判定（優先度高）
+              if (!subfolders['作業内容'] && (itemName === '00_作業内容' || itemName === '作業内容')) {
+                subfolders['作業内容'] = item.id
+              } else if (!subfolders['受取'] && (itemName === '01_受取データ' || itemName === '受取データ' || itemName === '受取')) {
+                subfolders['受取'] = item.id
+              } else if (!subfolders['作業'] && (itemName === '02_作業フォルダ' || itemName === '作業フォルダ' || itemName === '作業')) {
+                subfolders['作業'] = item.id
+              } else if (!subfolders['納品'] && (itemName === '03_納品データ' || itemName === '納品データ' || itemName === '納品')) {
+                subfolders['納品'] = item.id
+              } else if (!subfolders['契約'] && (itemName === '04_契約資料' || itemName === '契約資料' || itemName === '契約')) {
+                subfolders['契約'] = item.id
+              }
             }
           })
 

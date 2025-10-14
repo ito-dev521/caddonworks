@@ -7,26 +7,23 @@ import {
   Building,
   Users,
   FileText,
-  TrendingUp,
   Calendar,
   AlertCircle,
   CheckCircle,
   Clock,
   DollarSign,
-  Target,
   Briefcase,
   FileCheck,
   CreditCard,
   Heart,
   BarChart3,
-  Settings,
-  Bell
+  Bell,
+  TrendingUp
 } from "lucide-react"
 import { Navigation } from "@/components/layouts/navigation"
 import { AuthGuard } from "@/components/auth/auth-guard"
 import { MetricCard } from "@/components/ui/metric-card"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { StatusIndicator } from "@/components/ui/status-indicator"
 import { ProjectChart } from "@/components/charts/project-chart"
@@ -34,59 +31,65 @@ import { formatCurrency } from "@/lib/utils"
 import { useAuth } from "@/contexts/auth-context"
 import { supabase } from "@/lib/supabase"
 
-interface CompanyData {
-  id: string
-  name: string
-  description: string
-  billing_email: string
-  system_fee: number
-  active: boolean
-}
-
-interface ProjectData {
-  id: string
-  title: string
-  description: string
-  status: string
-  budget: number
-  start_date: string
-  end_date: string
-  contractor_id: string
-  contractor_name: string
-  progress: number
-}
-
-interface ContractData {
-  id: string
-  project_id: string
-  project_title: string
-  contractor_name: string
-  status: string
-  amount: number
-  signed_date: string
-}
-
-interface BillingData {
-  id: string
-  project_id: string
-  project_title: string
-  amount: number
-  status: string
-  due_date: string
-  paid_date?: string
-}
-
-interface FavoriteContractor {
-  id: string
-  name: string
-  specialties: string[]
-  rating: number
-  completed_projects: number
+interface DashboardStats {
+  organization: {
+    id: string
+    name: string
+    billing_email: string
+    active: boolean
+  }
+  stats: {
+    projects: {
+      total: number
+      pending_approval: number
+      bidding: number
+      in_progress: number
+      completed: number
+      rejected: number
+    }
+    contracts: {
+      total: number
+      signed: number
+      pending: number
+      totalAmount: number
+    }
+  }
+  recentProjects: Array<{
+    id: string
+    title: string
+    status: string
+    budget: number
+    deadline: string
+    created_at: string
+  }>
+  pendingApprovals: Array<{
+    id: string
+    title: string
+    budget: number
+    deadline: string
+    created_at: string
+  }>
+  notifications: Array<{
+    id: string
+    type: string
+    title: string
+    message: string
+    created_at: string
+    read: boolean
+  }>
+  recentActivities: Array<{
+    type: string
+    title: string
+    description: string
+    timestamp: string
+    projectId?: string
+    contractId?: string
+  }>
 }
 
 export default function DashboardPage() {
   return (
-    <AuthGuard allowedRoles={["OrgAdmin", "Admin"]}>
+    <AuthGuard allowedRoles={["OrgAdmin", "Staff", "Admin"]}>
       <DashboardPageContent />
     </AuthGuard>
   )
@@ -94,17 +97,48 @@ export default function DashboardPage() {
 
 function DashboardPageContent() {
   const { userProfile, userRole, loading } = useAuth()
-  const [companyData, setCompanyData] = useState<CompanyData | null>(null)
-  const [projects, setProjects] = useState<ProjectData[]>([])
-  const [contracts, setContracts] = useState<ContractData[]>([])
-  const [billing, setBilling] = useState<BillingData[]>([])
-  const [favoriteContractors, setFavoriteContractors] = useState<FavoriteContractor[]>([])
+  const [dashboardData, setDashboardData] = useState<DashboardStats | null>(null)
   const [dataLoading, setDataLoading] = useState(true)
+  const [errorMessage, setErrorMessage] = useState<string>('')
+  const [debugInfo, setDebugInfo] = useState<any>(null)
   const lastFetchKeyRef = useRef<string | null>(null)
 
-  // 会社間の情報分離を確実にするため、組織IDでデータをフィルタリング
+  // デバッグ診断を実行
+  const runDiagnostics = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        alert('セッションが見つかりません')
+        return
+      }
+
+      const response = await fetch('/api/debug/database', {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`
+        }
+      })
+
+      const data = await response.json()
+      setDebugInfo(data)
+      console.log('🔍 診断結果:', data)
+
+      // コンソールに見やすく表示
+      if (data.checks) {
+        data.checks.forEach((check: any) => {
+          console.log(`${check.status === 'success' ? '✅' : '❌'} ${check.check}:`, check)
+        })
+      }
+
+      alert('診断が完了しました。ブラウザのコンソールを確認してください。')
+    } catch (error) {
+      console.error('診断エラー:', error)
+      alert('診断に失敗しました: ' + error)
+    }
+  }
+
+  // ダッシュボードデータを取得
   useEffect(() => {
-    if (!userProfile || userRole !== 'OrgAdmin') {
+    if (!userProfile || (userRole !== 'OrgAdmin' && userRole !== 'Staff')) {
       setDataLoading(false)
       return
     }
@@ -114,263 +148,85 @@ function DashboardPageContent() {
     if (lastFetchKeyRef.current === fetchKey) return
     lastFetchKeyRef.current = fetchKey
 
-    const fetchCompanyData = async () => {
+    const fetchDashboardData = async () => {
       try {
-        // ユーザーの組織情報を取得
-        const { data: membership, error: membershipError } = await supabase
-          .from('memberships')
-          .select(`
-            org_id,
-            organizations (
-              id,
-              name,
-              description,
-              billing_email,
-              system_fee,
-              active
-            )
-          `)
-          .eq('user_id', userProfile.id)
-          .eq('role', 'OrgAdmin')
-          .single()
-
-        if (membershipError || !membership) {
-          console.error('組織情報の取得に失敗:', membershipError)
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session) {
+          console.error('セッションが見つかりません')
+          setErrorMessage('セッションが見つかりません。再度ログインしてください。')
           setDataLoading(false)
           return
         }
 
-        const company = membership.organizations as any
-        setCompanyData(company)
+        console.log('🔄 ダッシュボードデータを取得中...')
 
-        // 組織のプロジェクトデータを取得（会社間分離）
-        const { data: projectsData, error: projectsError } = await supabase
-          .from('projects')
-          .select(`
-            id,
-            title,
-            description,
-            status,
-            budget,
-            start_date,
-            end_date,
-            contractor_id
-          `)
-          .eq('org_id', company.id) // 組織IDでフィルタリング
+        const response = await fetch('/api/dashboard/stats', {
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`
+          }
+        })
 
-        if (projectsError) {
-          console.error('プロジェクトデータの取得に失敗:', projectsError)
-        } else {
-          // 受注者情報を取得
-          const contractorIds = Array.from(new Set(projectsData?.map(p => p.contractor_id).filter(Boolean) || []))
-          let contractorMap: any = {}
-          
-          if (contractorIds.length > 0) {
-            const { data: contractors } = await supabase
-              .from('users')
-              .select('id, display_name')
-              .in('id', contractorIds)
-            
-            contractorMap = contractors?.reduce((acc: any, contractor: any) => {
-              acc[contractor.id] = contractor
-              return acc
-            }, {}) || {}
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ message: 'エラー情報を取得できませんでした' }))
+          console.error('❌ API Error:', response.status, errorData)
+
+          // 詳細なエラーメッセージを構築
+          let detailedError = errorData.message || 'ダッシュボードデータの取得に失敗しました'
+          if (errorData.details) {
+            detailedError += `\n\n${errorData.details}`
+          }
+          if (errorData.error) {
+            detailedError += `\n\nエラー詳細: ${errorData.error}`
           }
 
-          const formattedProjects = projectsData?.map(project => ({
-            id: project.id,
-            title: project.title,
-            description: project.description,
-            status: project.status,
-            budget: project.budget,
-            start_date: project.start_date,
-            end_date: project.end_date,
-            contractor_id: project.contractor_id,
-            contractor_name: contractorMap[project.contractor_id]?.display_name || '未割当',
-            progress: Math.floor(Math.random() * 100) // 実際の進捗計算ロジックに置き換え
-          })) || []
-          setProjects(formattedProjects)
+          setErrorMessage(detailedError)
+          setDataLoading(false)
+          return
         }
 
-        // 契約データを取得（会社間分離）
-        const { data: contractsData, error: contractsError } = await supabase
-          .from('contracts')
-          .select(`
-            id,
-            project_id,
-            contractor_id,
-            status,
-            contract_amount,
-            org_signed_at,
-            contractor_signed_at
-          `)
-          .eq('org_id', company.id) // 組織IDでフィルタリング
+        const data = await response.json()
+        console.log('✅ ダッシュボードデータ取得成功')
+        setDashboardData(data)
+        setErrorMessage('')
 
-        if (contractsError) {
-          console.error('契約データの取得に失敗:', contractsError)
-        } else {
-          // 案件情報を取得
-          const projectIds = Array.from(new Set(contractsData?.map(c => c.project_id) || []))
-          let projectMap: any = {}
-          
-          if (projectIds.length > 0) {
-            const { data: projects } = await supabase
-              .from('projects')
-              .select('id, title')
-              .in('id', projectIds)
-            
-            projectMap = projects?.reduce((acc: any, project: any) => {
-              acc[project.id] = project
-              return acc
-            }, {}) || {}
-          }
-
-          // 受注者情報を取得
-          const contractorIds = Array.from(new Set(contractsData?.map(c => c.contractor_id) || []))
-          let contractorMap: any = {}
-          
-          if (contractorIds.length > 0) {
-            const { data: contractors } = await supabase
-              .from('users')
-              .select('id, display_name')
-              .in('id', contractorIds)
-            
-            contractorMap = contractors?.reduce((acc: any, contractor: any) => {
-              acc[contractor.id] = contractor
-              return acc
-            }, {}) || {}
-          }
-
-          const formattedContracts = contractsData?.map(contract => ({
-            id: contract.id,
-            project_id: contract.project_id,
-            project_title: projectMap[contract.project_id]?.title || '',
-            contractor_name: contractorMap[contract.contractor_id]?.display_name || '',
-            status: contract.status,
-            amount: contract.contract_amount,
-            signed_date: contract.org_signed_at || contract.contractor_signed_at
-          })) || []
-          setContracts(formattedContracts)
-        }
-
-        // 請求データを取得（会社間分離）
-        // 注意: billingテーブルが存在しない場合は空の配列を設定
-        try {
-          const { data: billingData, error: billingError } = await supabase
-            .from('billing')
-            .select(`
-              id,
-              project_id,
-              amount,
-              status,
-              due_date,
-              paid_date
-            `)
-            .eq('org_id', company.id) // 組織IDでフィルタリング
-
-          if (billingError) {
-            console.error('請求データの取得に失敗:', billingError)
-            setBilling([])
-          } else {
-            const formattedBilling = billingData?.map(bill => ({
-              id: bill.id,
-              project_id: bill.project_id,
-              project_title: '', // 案件タイトルは別途取得が必要
-              amount: bill.amount,
-              status: bill.status,
-              due_date: bill.due_date,
-              paid_date: bill.paid_date
-            })) || []
-            setBilling(formattedBilling)
-          }
-        } catch (error) {
-          console.error('請求データの取得エラー:', error)
-          setBilling([])
-        }
-
-        // お気に入り受注者を取得（会社間分離）
-        // 注意: favorite_contractorsテーブルが存在しない場合は空の配列を設定
-        try {
-          const { data: favoritesData, error: favoritesError } = await supabase
-            .from('favorite_contractors')
-            .select(`
-              contractor_id
-            `)
-            .eq('org_id', company.id) // 組織IDでフィルタリング
-
-          if (favoritesError) {
-            console.error('お気に入り受注者データの取得に失敗:', favoritesError)
-            setFavoriteContractors([])
-          } else {
-            // 受注者情報を取得
-            const contractorIds = favoritesData?.map(fav => fav.contractor_id) || []
-            let contractorMap: any = {}
-            
-            if (contractorIds.length > 0) {
-              const { data: contractors } = await supabase
-                .from('users')
-                .select('id, display_name, specialties, rating')
-                .in('id', contractorIds)
-              
-              contractorMap = contractors?.reduce((acc: any, contractor: any) => {
-                acc[contractor.id] = contractor
-                return acc
-              }, {}) || {}
-            }
-
-            const formattedFavorites = favoritesData?.map(fav => ({
-              id: fav.contractor_id,
-              name: contractorMap[fav.contractor_id]?.display_name || '',
-              specialties: contractorMap[fav.contractor_id]?.specialties || [],
-              rating: contractorMap[fav.contractor_id]?.rating || 0,
-              completed_projects: Math.floor(Math.random() * 20) + 1 // 実際の完了プロジェクト数に置き換え
-            })) || []
-            setFavoriteContractors(formattedFavorites)
-          }
-        } catch (error) {
-          console.error('お気に入り受注者データの取得エラー:', error)
-          setFavoriteContractors([])
-        }
-
-      } catch (error) {
-        console.error('データ取得エラー:', error)
+      } catch (error: any) {
+        console.error('❌ データ取得エラー:', error)
+        setErrorMessage(error.message || '予期しないエラーが発生しました')
       } finally {
         setDataLoading(false)
       }
     }
 
-    fetchCompanyData()
+    fetchDashboardData()
   }, [userProfile, userRole])
 
   // メトリクス計算
-  const metrics = [
+  const metrics = dashboardData ? [
     {
-      title: "アクティブ案件",
-      value: projects.filter(p => p.status === 'in_progress').length.toString(),
-      icon: <Building className="w-6 h-6" />,
-      trend: { value: 12, isPositive: true }
+      title: "全案件",
+      value: dashboardData.stats.projects.total.toString(),
+      icon: <Briefcase className="w-6 h-6" />,
+      trend: { value: 0, isPositive: true }
     },
     {
-      title: "契約件数",
-      value: contracts.length.toLocaleString('ja-JP'),
+      title: "進行中",
+      value: dashboardData.stats.projects.in_progress.toString(),
+      icon: <Building className="w-6 h-6" />,
+      trend: { value: dashboardData.stats.projects.in_progress > 0 ? 10 : 0, isPositive: true }
+    },
+    {
+      title: "契約数",
+      value: dashboardData.stats.contracts.total.toString(),
       icon: <FileCheck className="w-6 h-6" />,
       trend: { value: 0, isPositive: true }
     },
     {
-      title: "契約済み受注者",
-      value: contracts.filter(c => c.status === 'signed').length.toString(),
-      icon: <Users className="w-6 h-6" />,
-      trend: { value: 3, isPositive: true }
-    },
-    {
-      title: "契約金額合計",
-      value: formatCurrency(
-        contracts.reduce((sum, contract) => sum + (contract.amount || 0), 0)
-      ),
+      title: "契約金額",
+      value: formatCurrency(dashboardData.stats.contracts.totalAmount),
       icon: <DollarSign className="w-6 h-6" />,
       trend: { value: 0, isPositive: true }
     }
-  ]
+  ] : []
 
   // ローディング状態
   if (loading || dataLoading) {
@@ -385,14 +241,74 @@ function DashboardPageContent() {
   }
 
   // 権限チェック
-  if (userRole !== 'OrgAdmin') {
+  if (userRole !== 'OrgAdmin' && userRole !== 'Staff') {
     return (
       <div className="min-h-screen bg-gradient-mesh flex items-center justify-center">
         <Card className="w-full max-w-md">
           <CardContent className="p-6 text-center">
             <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
             <h2 className="text-xl font-semibold text-gray-900 mb-2">アクセス権限がありません</h2>
-            <p className="text-gray-600">このページは発注者（組織管理者）のみアクセス可能です。</p>
+            <p className="text-gray-600">このページは発注者組織のメンバーのみアクセス可能です。</p>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  // データがない場合
+  if (!dashboardData) {
+    return (
+      <div className="min-h-screen bg-gradient-mesh flex items-center justify-center p-4">
+        <Card className="w-full max-w-lg">
+          <CardContent className="p-6 text-center">
+            <AlertCircle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">データの取得に失敗しました</h2>
+            <div className="text-left bg-gray-50 rounded-lg p-4 mb-4">
+              <pre className="text-sm text-gray-700 whitespace-pre-wrap font-mono">
+                {errorMessage || 'ページを再読み込みしてください。'}
+              </pre>
+            </div>
+            <div className="flex flex-col gap-2 items-center">
+              <div className="flex gap-2">
+                <button
+                  onClick={() => window.location.reload()}
+                  className="px-6 py-3 bg-engineering-blue text-white rounded-lg hover:bg-engineering-blue/90 transition-colors font-medium"
+                >
+                  ページを再読み込み
+                </button>
+                <button
+                  onClick={runDiagnostics}
+                  className="px-6 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-medium"
+                >
+                  🔍 診断を実行
+                </button>
+              </div>
+              {debugInfo && (
+                <div className="mt-4 w-full max-w-2xl bg-gray-100 rounded-lg p-4 text-left">
+                  <h3 className="font-semibold mb-2">診断結果:</h3>
+                  <div className="space-y-2 text-xs font-mono">
+                    {debugInfo.checks?.map((check: any, idx: number) => (
+                      <div key={idx} className={`p-2 rounded ${check.status === 'success' ? 'bg-green-50' : 'bg-red-50'}`}>
+                        <span className={check.status === 'success' ? 'text-green-700' : 'text-red-700'}>
+                          {check.status === 'success' ? '✅' : '❌'} {check.check}
+                        </span>
+                        {check.error && <div className="text-red-600 mt-1">エラー: {check.error}</div>}
+                        {check.count !== undefined && <div className="text-gray-600">件数: {check.count}</div>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <p className="text-xs text-gray-500 mt-2">
+                問題が続く場合は、以下を確認してください：
+              </p>
+              <ul className="text-xs text-gray-500 text-left list-disc list-inside space-y-1">
+                <li>「診断を実行」ボタンをクリックして問題を特定</li>
+                <li>ブラウザのコンソール（F12キー）でエラー詳細を確認</li>
+                <li>発注者組織（OrgAdminまたはStaffロール）に所属しているか確認</li>
+                <li>管理者に組織への追加を依頼</li>
+              </ul>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -415,11 +331,19 @@ function DashboardPageContent() {
               <div>
                 <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
                   <Building className="w-6 h-6 text-engineering-blue" />
-                  {companyData?.name || '発注者ダッシュボード'}
+                  {dashboardData.organization.name}
                 </h1>
-                <p className="text-gray-600">土木設計業務管理プラットフォーム</p>
+                <p className="text-gray-600">発注者ダッシュボード</p>
               </div>
               <div className="flex items-center gap-3">
+                {dashboardData.notifications.length > 0 && (
+                  <Link href="/notifications">
+                    <Badge variant="outline" className="cursor-pointer hover:bg-engineering-blue/10">
+                      <Bell className="w-4 h-4 mr-1" />
+                      {dashboardData.notifications.length}件の通知
+                    </Badge>
+                  </Link>
+                )}
                 <Badge variant="engineering" className="animate-pulse">
                   <span className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-ping" />
                   システム稼働中
@@ -532,6 +456,56 @@ function DashboardPageContent() {
             </motion.div>
           </div>
 
+          {/* 承認待ち案件 */}
+          {dashboardData.pendingApprovals.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="mb-8"
+            >
+              <Card className="border-orange-200 bg-orange-50/50">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-orange-700">
+                    <AlertCircle className="w-5 h-5" />
+                    承認待ち案件（{dashboardData.pendingApprovals.length}件）
+                  </CardTitle>
+                  <CardDescription>
+                    あなたの承認が必要な案件があります
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {dashboardData.pendingApprovals.map((project, index) => (
+                      <Link key={project.id} href={`/projects/${project.id}`}>
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.95 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ delay: index * 0.1 }}
+                          className="p-4 bg-white rounded-lg border border-orange-200 hover:border-orange-400 hover:shadow-md transition-all cursor-pointer"
+                        >
+                          <h4 className="font-semibold text-gray-900 mb-2">{project.title}</h4>
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-gray-600">予算</span>
+                            <span className="font-semibold text-engineering-blue">
+                              {formatCurrency(project.budget)}
+                            </span>
+                          </div>
+                          {project.deadline && (
+                            <div className="flex items-center gap-1 text-xs text-gray-500 mt-2">
+                              <Calendar className="w-3 h-3" />
+                              期限: {new Date(project.deadline).toLocaleDateString('ja-JP')}
+                            </div>
+                          )}
+                        </motion.div>
+                      </Link>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
+
           {/* Metrics Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             {metrics.map((metric, index) => (
@@ -546,9 +520,12 @@ function DashboardPageContent() {
             ))}
           </div>
 
-          {/* Charts Section */}
+          {/* Charts and Stats Section */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            {/* プロジェクトチャート */}
             <ProjectChart />
+
+            {/* 契約状況 */}
             <Card className="hover-lift">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -561,13 +538,17 @@ function DashboardPageContent() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="p-4 bg-engineering-blue/5 rounded-lg">
                     <p className="text-sm text-gray-600">契約数</p>
-                    <p className="text-2xl font-semibold text-gray-900">{contracts.length.toLocaleString('ja-JP')}件</p>
-                    <p className="text-xs text-gray-500">承認済み・締結済みの契約数</p>
+                    <p className="text-2xl font-semibold text-gray-900">
+                      {dashboardData.stats.contracts.total}件
+                    </p>
+                    <p className="text-xs text-gray-500">全契約数</p>
                   </div>
                   <div className="p-4 bg-emerald-50 rounded-lg">
                     <p className="text-sm text-gray-600">契約金額合計</p>
-                    <p className="text-2xl font-semibold text-gray-900">{formatCurrency(contracts.reduce((sum, contract) => sum + (contract.amount || 0), 0))}</p>
-                    <p className="text-xs text-gray-500">現在有効な契約金額の合計</p>
+                    <p className="text-2xl font-semibold text-gray-900">
+                      {formatCurrency(dashboardData.stats.contracts.totalAmount)}
+                    </p>
+                    <p className="text-xs text-gray-500">現在有効な契約金額</p>
                   </div>
                 </div>
                 <div className="mt-6 space-y-4">
@@ -581,7 +562,9 @@ function DashboardPageContent() {
                         <p className="text-sm text-gray-600">署名が完了した契約</p>
                       </div>
                     </div>
-                    <span className="font-semibold text-engineering-blue">{contracts.filter(contract => contract.status === 'signed').length.toLocaleString('ja-JP')}件</span>
+                    <span className="font-semibold text-engineering-blue">
+                      {dashboardData.stats.contracts.signed}件
+                    </span>
                   </div>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -593,14 +576,16 @@ function DashboardPageContent() {
                         <p className="text-sm text-gray-600">署名待ちの契約</p>
                       </div>
                     </div>
-                    <span className="font-semibold text-orange-500">{contracts.filter(contract => contract.status !== 'signed').length.toLocaleString('ja-JP')}件</span>
+                    <span className="font-semibold text-orange-500">
+                      {dashboardData.stats.contracts.pending}件
+                    </span>
                   </div>
                 </div>
               </CardContent>
             </Card>
           </div>
 
-          {/* Recent Projects & Tasks */}
+          {/* Recent Projects & Activities */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Recent Projects */}
             <Card className="lg:col-span-2 hover-lift">
@@ -610,88 +595,86 @@ function DashboardPageContent() {
                   最近の案件
                 </CardTitle>
                 <CardDescription>
-                  進行中の主要案件の状況
+                  最近登録された案件
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {projects.slice(0, 3).map((project, index) => (
-                    <motion.div
-                      key={project.id}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: index * 0.1 }}
-                      className="p-4 rounded-lg border border-gray-200 hover:border-engineering-blue/50 transition-colors hover-lift"
-                    >
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex-1">
-                          <h4 className="font-semibold text-gray-900">{project.title}</h4>
-                          <p className="text-sm text-gray-600">{project.contractor_name}</p>
-                        </div>
-                        <StatusIndicator status={project.status} size="sm" />
-                      </div>
+                  {dashboardData.recentProjects.length === 0 ? (
+                    <p className="text-gray-500 text-center py-8">案件がまだありません</p>
+                  ) : (
+                    dashboardData.recentProjects.map((project, index) => (
+                      <Link key={project.id} href={`/projects/${project.id}`}>
+                        <motion.div
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: index * 0.1 }}
+                          className="p-4 rounded-lg border border-gray-200 hover:border-engineering-blue/50 transition-colors hover-lift cursor-pointer"
+                        >
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex-1">
+                              <h4 className="font-semibold text-gray-900">{project.title}</h4>
+                              <p className="text-xs text-gray-500">
+                                {new Date(project.created_at).toLocaleDateString('ja-JP')}
+                              </p>
+                            </div>
+                            <StatusIndicator status={project.status} size="sm" />
+                          </div>
 
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium text-gray-700">進捗</span>
-                        <span className="text-sm text-gray-600">{project.progress}%</span>
-                      </div>
-                      <Progress
-                        value={project.progress}
-                        variant="engineering"
-                        className="mb-3"
-                      />
-
-                      <div className="flex items-center justify-between text-sm">
-                        <div className="flex items-center gap-2 text-gray-600">
-                          <Calendar className="w-4 h-4" />
-                          納期: {new Date(project.end_date).toLocaleDateString('ja-JP')}
-                        </div>
-                        <div className="font-semibold text-engineering-blue">
-                          {formatCurrency(project.budget)}
-                        </div>
-                      </div>
-                    </motion.div>
-                  ))}
+                          <div className="flex items-center justify-between text-sm">
+                            <div className="flex items-center gap-2 text-gray-600">
+                              <Calendar className="w-4 h-4" />
+                              {project.deadline ? new Date(project.deadline).toLocaleDateString('ja-JP') : '未設定'}
+                            </div>
+                            <div className="font-semibold text-engineering-blue">
+                              {formatCurrency(project.budget)}
+                            </div>
+                          </div>
+                        </motion.div>
+                      </Link>
+                    ))
+                  )}
                 </div>
               </CardContent>
             </Card>
 
-            {/* Upcoming Tasks */}
+            {/* Recent Activities */}
             <Card className="hover-lift">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Clock className="w-5 h-5 text-engineering-green" />
-                  今後のタスク
+                  <TrendingUp className="w-5 h-5 text-engineering-green" />
+                  最近のアクティビティ
                 </CardTitle>
                 <CardDescription>
-                  期限が近いタスク
+                  システム内の最近の動き
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {billing.filter(b => b.status === 'pending').slice(0, 3).map((bill, index) => (
-                    <motion.div
-                      key={bill.id}
-                      initial={{ opacity: 0, scale: 0.95 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: index * 0.1 }}
-                      className="p-3 rounded-lg bg-gradient-to-r from-engineering-blue/5 to-engineering-green/5 border border-gray-200 hover:border-engineering-blue/50 transition-colors"
-                    >
-                      <div className="flex items-start justify-between mb-2">
-                        <h5 className="font-medium text-gray-900 text-sm">
-                          支払い処理
-                        </h5>
-                        <Badge variant="outline" className="text-xs">
-                          {Math.ceil((new Date(bill.due_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))}日
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-gray-600 mb-1">{bill.project_title}</p>
-                      <div className="flex items-center gap-1 text-xs text-gray-500">
-                        <Calendar className="w-3 h-3" />
-                        {new Date(bill.due_date).toLocaleDateString('ja-JP')}
-                      </div>
-                    </motion.div>
-                  ))}
+                  {dashboardData.recentActivities.length === 0 ? (
+                    <p className="text-gray-500 text-center py-8 text-sm">アクティビティがありません</p>
+                  ) : (
+                    dashboardData.recentActivities.slice(0, 5).map((activity, index) => (
+                      <motion.div
+                        key={index}
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: index * 0.1 }}
+                        className="p-3 rounded-lg bg-gradient-to-r from-engineering-blue/5 to-engineering-green/5 border border-gray-200 hover:border-engineering-blue/50 transition-colors"
+                      >
+                        <div className="flex items-start justify-between mb-1">
+                          <h5 className="font-medium text-gray-900 text-sm">
+                            {activity.title}
+                          </h5>
+                        </div>
+                        <p className="text-xs text-gray-600 mb-1">{activity.description}</p>
+                        <div className="flex items-center gap-1 text-xs text-gray-500">
+                          <Clock className="w-3 h-3" />
+                          {new Date(activity.timestamp).toLocaleString('ja-JP')}
+                        </div>
+                      </motion.div>
+                    ))
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -711,13 +694,13 @@ function DashboardPageContent() {
                     <CheckCircle className="w-6 h-6 text-green-500" />
                     <div>
                       <h3 className="font-semibold text-gray-900">システム稼働状況</h3>
-                      <p className="text-sm text-gray-600">全サービス正常稼働中 - {companyData?.name}</p>
+                      <p className="text-sm text-gray-600">全サービス正常稼働中 - {dashboardData.organization.name}</p>
                     </div>
                   </div>
                   <div className="text-right">
                     <div className="flex items-center gap-2 text-sm text-gray-600 mb-1">
                       <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                      Supabase API: 正常
+                      API: 正常
                     </div>
                     <div className="flex items-center gap-2 text-sm text-gray-600">
                       <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>

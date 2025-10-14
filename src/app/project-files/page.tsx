@@ -395,7 +395,7 @@ export default function ProjectFilesPage() {
                 ) : (
                   <FolderOpen className="w-4 h-4 text-blue-500" />
                 )}
-                <span className="font-medium">{item.name}</span>
+                <span className="font-medium">{normalizeFolderName(item.name)}</span>
                 <span className="text-xs text-gray-500 ml-2">
                   {new Date(item.modified_at).toLocaleDateString('ja-JP')}
                 </span>
@@ -511,6 +511,28 @@ export default function ProjectFilesPage() {
       '契約': '契約フォルダ'
     }
     return nameMap[subfolderKey] || subfolderKey
+  }
+
+  // フォルダ名を番号付きに正規化する関数
+  const normalizeFolderName = (folderName: string): string => {
+    const folderMapping: Record<string, string> = {
+      '作業内容': '00_作業内容',
+      '受取': '01_受取データ',
+      '受取データ': '01_受取データ',
+      '作業': '02_作業フォルダ',
+      '作業フォルダ': '02_作業フォルダ',
+      '納品': '03_納品データ',
+      '納品データ': '03_納品データ',
+      '契約': '04_契約資料',
+      '契約資料': '04_契約資料'
+    }
+
+    // 既に番号付きの場合はそのまま返す
+    if (/^\d{2}_/.test(folderName)) {
+      return folderName
+    }
+
+    return folderMapping[folderName] || folderName
   }
 
   const filteredProjects = projects.filter(project =>
@@ -1044,7 +1066,7 @@ export default function ProjectFilesPage() {
                       <div className="flex items-center gap-3">
                         <FolderOpen className="w-6 h-6 text-blue-600" />
                         <div>
-                          <h2 className="text-xl font-semibold text-gray-900">{selectedFolder.name}</h2>
+                          <h2 className="text-xl font-semibold text-gray-900">{normalizeFolderName(selectedFolder.name)}</h2>
                           <p className="text-sm text-gray-600">フォルダID: {selectedFolder.id}</p>
                         </div>
                       </div>
@@ -1077,7 +1099,9 @@ export default function ProjectFilesPage() {
                               <div className="flex items-center gap-3">
                                 {getFileIcon(item.name, item.type)}
                                 <div className="min-w-0 flex-1">
-                                  <p className="font-medium text-sm truncate">{item.name}</p>
+                                  <p className="font-medium text-sm truncate">
+                                    {item.type === 'folder' ? normalizeFolderName(item.name) : item.name}
+                                  </p>
                                   <p className="text-xs text-gray-500">
                                     {item.type === 'folder' ? 'フォルダ' : formatFileSize(item.size)}
                                   </p>

@@ -170,7 +170,7 @@ export async function POST(
             const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/box/provision`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ name, parentId, subfolders: ['受取','作業','納品','契約'] })
+              body: JSON.stringify({ name, parentId, subfolders: ['00_作業内容', '01_受取データ', '02_作業フォルダ', '03_納品データ', '04_契約資料'] })
             })
             if (res.ok) {
               const json = await res.json()

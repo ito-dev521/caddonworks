@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { boxSignAPI } from '@/lib/box-sign'
+import { getAppAuthAccessToken, moveBoxFile, getBoxFolderItems } from '@/lib/box'
 
 export const dynamic = 'force-dynamic'
 
@@ -98,6 +99,33 @@ export async function POST(
     const signedFileId = signatureStatus.signFiles?.files?.[0]?.id
 
     const project = contract.projects
+
+    // 署名済みPDFを「04_契約資料」フォルダに移動
+    if (signedFileId && project.box_folder_id) {
+      try {
+        console.log('📁 04_契約資料フォルダを検索中...')
+
+        // プロジェクトフォルダのアイテムを取得
+        const items = await getBoxFolderItems(project.box_folder_id)
+
+        // 「04_契約資料」フォルダを探す
+        const contractFolder = items.find((item: any) =>
+          item.type === 'folder' &&
+          (item.name.includes('04_契約') || item.name === '契約資料' || item.name === '契約')
+        )
+
+        if (contractFolder) {
+          console.log(`📄 署名済みPDFを移動: ${signedFileId} -> ${contractFolder.id} (${contractFolder.name})`)
+          await moveBoxFile(signedFileId, contractFolder.id)
+          console.log('✅ 署名済みPDFを04_契約資料フォルダに移動しました')
+        } else {
+          console.warn('⚠️ 04_契約資料フォルダが見つかりません。署名済みPDFはBox Signのデフォルトフォルダに残ります。')
+        }
+      } catch (moveError: any) {
+        // ファイル移動に失敗してもエラーにはしない（署名完了処理は続行）
+        console.error('❌ 署名済みPDFの移動に失敗しました（処理は続行）:', moveError.message)
+      }
+    }
 
     // データベースを更新
     const signedAt = new Date().toISOString()

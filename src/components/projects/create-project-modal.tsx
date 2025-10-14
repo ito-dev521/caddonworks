@@ -52,7 +52,7 @@ export function CreateProjectModal({ isOpen, onClose, onSuccess }: CreateProject
   ]
 
   const categories = [
-    "道路", "河川", "橋梁", "構造物", "上下水道", "共同溝", "造成", "電気設備"
+    "道路", "河川", "橋梁", "構造物", "トンネル", "上下水道", "共同溝", "造成", "電気設備"
   ]
 
   const standardsList = [
