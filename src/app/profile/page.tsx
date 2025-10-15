@@ -18,7 +18,10 @@ import {
   MapPin,
   Phone,
   LinkedinIcon,
-  GithubIcon
+  GithubIcon,
+  Briefcase,
+  ChevronDown,
+  ChevronUp
 } from "lucide-react"
 import { AuthGuard } from "@/components/auth/auth-guard"
 import { Navigation } from "@/components/layouts/navigation"
@@ -54,6 +57,10 @@ function ProfilePageContent() {
   const [showLevelChangeModal, setShowLevelChangeModal] = useState(false)
   const [levelChangeLoading, setLevelChangeLoading] = useState(false)
   const [requestedLevel, setRequestedLevel] = useState<MemberLevel>(userProfile?.member_level ?? 'beginner')
+  const [contractHistory, setContractHistory] = useState<any[]>([])
+  const [contractHistoryLoading, setContractHistoryLoading] = useState(false)
+  const [showAllHistory, setShowAllHistory] = useState(false)
+  const [totalContracts, setTotalContracts] = useState(0)
   const [formData, setFormData] = useState({
     display_name: userProfile?.display_name || '',
     specialties: userProfile?.specialties || [],
@@ -161,7 +168,7 @@ function ProfilePageContent() {
   // バッジデータを取得
   const fetchBadgeData = async () => {
     if (!userProfile) return
-    
+
     setBadgeLoading(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
@@ -184,10 +191,48 @@ function ProfilePageContent() {
     }
   }
 
+  // 案件履歴を取得
+  const fetchContractHistory = async (limit?: number) => {
+    if (!userProfile || userRole !== 'Contractor') return
+
+    setContractHistoryLoading(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
+      const url = limit
+        ? `/api/contracts/history?limit=${limit}`
+        : '/api/contracts/history?limit=5'
+
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`
+        }
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        setContractHistory(result.contracts || [])
+        setTotalContracts(result.total || 0)
+      }
+    } catch (error) {
+      console.error('案件履歴取得エラー:', error)
+    } finally {
+      setContractHistoryLoading(false)
+    }
+  }
+
+  // もっと見るボタンのハンドラー
+  const handleShowMore = () => {
+    setShowAllHistory(true)
+    fetchContractHistory(totalContracts) // 全件取得
+  }
+
   // コンポーネントマウント時にデータを取得
   React.useEffect(() => {
     fetchEvaluationData()
     fetchBadgeData()
+    fetchContractHistory()
   }, [userProfile, userRole])
 
   React.useEffect(() => {
@@ -993,6 +1038,104 @@ function ProfilePageContent() {
                   badges={badgeData || []}
                   loading={badgeLoading}
                 />
+              </motion.div>
+            )}
+
+            {/* 案件履歴表示 */}
+            {userRole === 'Contractor' && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.5 }}
+              >
+                <Card className="hover-lift">
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="flex items-center gap-2">
+                        <Briefcase className="w-5 h-5" />
+                        過去の案件履歴
+                      </CardTitle>
+                      <Badge variant="outline">
+                        {totalContracts}件
+                      </Badge>
+                    </div>
+                    <CardDescription>
+                      完了した案件の履歴と評価
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {contractHistoryLoading ? (
+                      <div className="flex items-center justify-center py-8">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-engineering-blue"></div>
+                      </div>
+                    ) : contractHistory.length === 0 ? (
+                      <div className="text-center py-8 text-gray-500">
+                        まだ完了した案件はありません
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {contractHistory.map((contract, index) => (
+                          <motion.div
+                            key={contract.id}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: index * 0.05 }}
+                            className="p-4 border border-gray-200 rounded-lg hover:border-engineering-blue hover:shadow-md transition-all"
+                          >
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex-1">
+                                <h4 className="font-semibold text-gray-900 mb-1">
+                                  {contract.project_title}
+                                </h4>
+                                <p className="text-sm text-gray-600">
+                                  {contract.organization_name}
+                                </p>
+                              </div>
+                              {contract.evaluation && (
+                                <div className="flex items-center gap-1 bg-yellow-50 px-3 py-1 rounded-full">
+                                  <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
+                                  <span className="text-sm font-semibold text-yellow-700">
+                                    {contract.evaluation.overall_rating.toFixed(1)}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600">
+                              <div className="flex items-center gap-1">
+                                <Calendar className="w-4 h-4" />
+                                <span>
+                                  完了日: {new Date(contract.completed_at).toLocaleDateString('ja-JP')}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <span className="font-semibold text-engineering-blue">
+                                  ¥{contract.contract_amount?.toLocaleString() || '---'}
+                                </span>
+                              </div>
+                              <Badge variant="success" className="text-xs">
+                                完了
+                              </Badge>
+                            </div>
+                          </motion.div>
+                        ))}
+
+                        {/* もっと見るボタン */}
+                        {!showAllHistory && totalContracts > 5 && (
+                          <div className="text-center pt-4">
+                            <Button
+                              onClick={handleShowMore}
+                              variant="outline"
+                              className="w-full"
+                            >
+                              <ChevronDown className="w-4 h-4 mr-2" />
+                              もっと見る（残り{totalContracts - contractHistory.length}件）
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
               </motion.div>
             )}
           </div>
