@@ -87,6 +87,44 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // 進行中の案件があるかチェック（初級、中級、上級全てのレベルで制限）
+    const { data: ongoingContracts, error: ongoingError } = await supabaseAdmin
+      .from('contracts')
+      .select(`
+        id,
+        project_id,
+        status,
+        projects!inner(
+          id,
+          title,
+          status
+        )
+      `)
+      .eq('contractor_id', userProfile.id)
+      .eq('status', 'signed') // 署名済み契約のみ
+      .in('projects.status', ['in_progress', 'approved', 'bidding', 'priority_invitation']) // 完了していない案件
+
+    if (ongoingError) {
+      console.error('進行中案件チェックエラー:', ongoingError)
+      return NextResponse.json(
+        { message: '進行中案件の確認に失敗しました' },
+        { status: 500 }
+      )
+    }
+
+    // 進行中の案件が1件でもあれば入札不可
+    if (ongoingContracts && ongoingContracts.length > 0) {
+      const ongoingProject = ongoingContracts[0].projects as any
+      return NextResponse.json(
+        {
+          message: `現在進行中の案件「${ongoingProject?.title || '不明'}」があるため、新しい案件への入札はできません。案件完了後に再度お試しください。`,
+          ongoing_project_id: ongoingContracts[0].project_id,
+          ongoing_project_title: ongoingProject?.title
+        },
+        { status: 400 }
+      )
+    }
+
     // 案件が存在し、入札可能な状態かチェック
     const { data: project, error: projectError } = await supabaseAdmin
       .from('projects')

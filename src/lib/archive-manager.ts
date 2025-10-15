@@ -1,8 +1,8 @@
 // ファイル管理アーカイブ機能
-// プロジェクト完了後30日でファイル表示を非表示にする（BOX内は保持）
+// プロジェクト完了後14日でファイル表示を非表示にする（BOX内は保持）
 
 export interface ArchiveSettings {
-  file_retention_days: number // デフォルト30日
+  file_retention_days: number // デフォルト14日
   enable_auto_archive: boolean
   admin_override: boolean
 }
@@ -18,7 +18,7 @@ export interface ProjectArchiveStatus {
 
 // デフォルト設定
 export const DEFAULT_ARCHIVE_SETTINGS: ArchiveSettings = {
-  file_retention_days: 30,
+  file_retention_days: 14,
   enable_auto_archive: true,
   admin_override: false
 }
@@ -26,7 +26,7 @@ export const DEFAULT_ARCHIVE_SETTINGS: ArchiveSettings = {
 // プロジェクトが完了してから指定日数経過しているかチェック
 export function isProjectArchiveDue(
   completedAt: string | null,
-  retentionDays: number = 30
+  retentionDays: number = 14
 ): boolean {
   if (!completedAt) return false
 
@@ -40,7 +40,7 @@ export function isProjectArchiveDue(
 // アーカイブまでの残り日数を計算
 export function getDaysUntilArchive(
   completedAt: string | null,
-  retentionDays: number = 30
+  retentionDays: number = 14
 ): number | null {
   if (!completedAt) return null
 
@@ -121,7 +121,7 @@ export function getArchiveWarningMessage(
   return null
 }
 
-// 30日経過プロジェクトの自動削除処理
+// 14日経過プロジェクトの自動削除処理
 export async function processAutoArchiveDeletion(
   projectId: string,
   supabaseAdmin: any
@@ -138,7 +138,7 @@ export async function processAutoArchiveDeletion(
       return { success: false, error: 'プロジェクトが見つかりません' }
     }
 
-    // 30日経過チェック
+    // 14日経過チェック
     if (!isProjectArchiveDue(project.completed_at)) {
       return { success: false, error: 'アーカイブ対象期間に達していません' }
     }
@@ -165,10 +165,10 @@ export async function processAutoArchiveDeletion(
   }
 }
 
-// 30日経過プロジェクトを検索
+// 14日経過プロジェクトを検索
 export async function findProjectsForAutoArchive(
   supabaseAdmin: any,
-  retentionDays: number = 30
+  retentionDays: number = 14
 ): Promise<string[]> {
   try {
     const { data: projects, error } = await supabaseAdmin

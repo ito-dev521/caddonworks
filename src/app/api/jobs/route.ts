@@ -98,6 +98,30 @@ export async function GET(request: NextRequest) {
     // ユーザーの会員レベルを計算
     const userLevel = userProfile.member_level || calculateMemberLevel(userProfile.experience_years, userProfile.specialties || [])
 
+    // 進行中の案件があるかチェック（初級、中級、上級全てのレベルで制限）
+    const { data: ongoingContracts, error: ongoingError } = await supabaseAdmin
+      .from('contracts')
+      .select(`
+        id,
+        project_id,
+        status,
+        projects!inner(
+          id,
+          title,
+          status
+        )
+      `)
+      .eq('contractor_id', userProfile.id)
+      .eq('status', 'signed') // 署名済み契約のみ
+      .in('projects.status', ['in_progress', 'approved', 'bidding', 'priority_invitation']) // 完了していない案件
+
+    const hasOngoingProject = ongoingContracts && ongoingContracts.length > 0
+    const ongoingProjectInfo = hasOngoingProject ? {
+      id: ongoingContracts[0].project_id,
+      title: (ongoingContracts[0].projects as any)?.title || '不明',
+      status: (ongoingContracts[0].projects as any)?.status
+    } : null
+
     // 1. 入札可能な案件を取得
     const { data: biddingJobs, error: biddingError } = await supabaseAdmin
       .from('projects')
@@ -397,7 +421,9 @@ export async function GET(request: NextRequest) {
         is_full: isFull,
         is_expired: isExpired,
         is_declined: isDeclined,
-        can_bid: !isFull && !isExpired && (job.status === 'bidding' || job.status === 'priority_invitation') && !isDeclined,
+        can_bid: !isFull && !isExpired && (job.status === 'bidding' || job.status === 'priority_invitation') && !isDeclined && !hasOngoingProject,
+        has_ongoing_project: hasOngoingProject,
+        ongoing_project: ongoingProjectInfo,
         advice: advice,
         contract_amount: job.contract_amount, // 契約金額を追加
         support_enabled: job.support_enabled || false, // プロジェクトレベルのサポート

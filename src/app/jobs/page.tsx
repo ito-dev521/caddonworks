@@ -57,6 +57,8 @@ interface JobData {
   contract_amount?: number // 契約金額（落札案件の場合）
   support_enabled?: boolean // プロジェクトレベルのサポート
   contract_support_enabled?: boolean // 契約レベルのサポート
+  has_ongoing_project?: boolean // 進行中の案件がある
+  ongoing_project?: { id: string; title: string; status: string } // 進行中の案件情報
 }
 
 interface BidData {
@@ -636,6 +638,27 @@ function JobsPageContent() {
             </div>
           </div>
 
+          {/* 進行中案件の警告メッセージ */}
+          {jobs.length > 0 && jobs[0]?.has_ongoing_project && jobs[0]?.ongoing_project && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg"
+            >
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5 flex-shrink-0" />
+                <div>
+                  <h3 className="font-semibold text-yellow-900 mb-1">
+                    進行中の案件があります
+                  </h3>
+                  <p className="text-sm text-yellow-800">
+                    現在「{jobs[0].ongoing_project.title}」が進行中です。この案件が完了するまで、新しい案件への入札はできません。
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
           {/* 案件カード一覧 */}
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
             <AnimatePresence mode="wait">
@@ -834,10 +857,16 @@ function JobsPageContent() {
                                   onClick={() => openBidModal(job.id)}
                                   disabled={!job.can_bid}
                                   className={!job.can_bid ? 'opacity-50 cursor-not-allowed' : ''}
-                                  title={job.is_full ? '募集人数に達しました' : '入札する'}
+                                  title={
+                                    job.has_ongoing_project
+                                      ? `進行中の案件「${job.ongoing_project?.title || '不明'}」があるため入札できません`
+                                      : job.is_full
+                                        ? '募集人数に達しました'
+                                        : '入札する'
+                                  }
                                 >
                                   <Hand className="w-4 h-4 mr-1" />
-                                  {job.is_full ? '募集終了' : '入札'}
+                                  {job.has_ongoing_project ? '進行中案件あり' : job.is_full ? '募集終了' : '入札'}
                                 </Button>
                               )}
                             </>
@@ -935,6 +964,19 @@ function JobsPageContent() {
           {/* 募集状況表示 */}
           {(() => {
             const job = jobs.find(j => j.id === showBidModal)
+            if (job && job.has_ongoing_project) {
+              return (
+                <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertCircle className="w-5 h-5 text-yellow-600" />
+                    <span className="font-medium text-yellow-900">進行中の案件があります</span>
+                  </div>
+                  <div className="text-sm text-yellow-700">
+                    現在「{job.ongoing_project?.title || '不明'}」が進行中です。この案件が完了するまで、新しい案件への入札はできません。
+                  </div>
+                </div>
+              )
+            }
             if (job && job.is_declined) {
               return (
                 <div className="bg-red-50 p-4 rounded-lg border border-red-200">
@@ -1279,9 +1321,16 @@ function JobsPageContent() {
                               }}
                               disabled={!job.can_bid}
                               className={!job.can_bid ? 'opacity-50 cursor-not-allowed' : ''}
+                              title={
+                                job.has_ongoing_project
+                                  ? `進行中の案件「${job.ongoing_project?.title || '不明'}」があるため入札できません`
+                                  : job.is_full
+                                    ? '募集人数に達しました'
+                                    : '入札する'
+                              }
                             >
                               <Hand className="w-4 h-4 mr-2" />
-                              {job.is_full ? '募集人数に達しました' : '入札する'}
+                              {job.has_ongoing_project ? '進行中案件あり' : job.is_full ? '募集人数に達しました' : '入札する'}
                             </Button>
                           )}
                           {job.status !== 'bidding' && (

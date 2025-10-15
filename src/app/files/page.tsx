@@ -67,11 +67,21 @@ export default function FilesPage() {
 
         if (response.ok) {
           const result = await response.json()
-          setProjects(result.projects || [])
+
+          // 完了から14日経過したプロジェクトをフィルタリング
+          const projectsFiltered = (result.projects || []).filter((project: any) => {
+            if (project.status !== 'completed') return true
+            if (!project.completed_at) return true
+            const completedAt = new Date(project.completed_at).getTime()
+            const diffDays = (Date.now() - completedAt) / (1000 * 60 * 60 * 24)
+            return diffDays <= 14
+          })
+
+          setProjects(projectsFiltered)
 
           // 全プロジェクトからファイルを抽出
           const allFiles: any[] = []
-          result.projects?.forEach((project: any) => {
+          projectsFiltered.forEach((project: any) => {
             if (project.box_items) {
               project.box_items.forEach((item: any) => {
                 if (item.type === 'file') {

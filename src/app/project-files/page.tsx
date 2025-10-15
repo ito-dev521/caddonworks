@@ -871,7 +871,7 @@ export default function ProjectFilesPage() {
                                 <div className="text-center py-4 bg-gray-50 rounded-lg">
                                   <Archive className="w-8 h-8 text-gray-400 mx-auto mb-2" />
                                   <p className="text-xs text-gray-500">
-                                    プロジェクト完了から30日が経過したため、ファイルは非表示になっています。
+                                    プロジェクト完了から14日が経過したため、ファイルは非表示になっています。
                                   </p>
                                   <p className="text-xs text-gray-400 mt-1">
                                     BOX内にはファイルが保持されています。
@@ -950,7 +950,7 @@ export default function ProjectFilesPage() {
                                 <div className="text-center py-8">
                                   <Archive className="w-8 h-8 text-gray-400 mx-auto mb-2" />
                                   <p className="text-sm text-gray-500">
-                                    プロジェクト完了から30日が経過したため、ファイルは非表示になっています。
+                                    プロジェクト完了から14日が経過したため、ファイルは非表示になっています。
                                   </p>
                                   <p className="text-xs text-gray-400 mt-1">
                                     BOX内にはファイルが保持されています。
