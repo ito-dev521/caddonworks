@@ -592,7 +592,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // 発注者(OrgAdmin/Staff)は案件管理へ、受注者は案件一覧へ
     if (!userRole) return '/dashboard'
     if (userRole === 'OrgAdmin' || userRole === 'Staff') return '/projects'
-    if (userRole === 'Contractor') return '/contracts'
+    if (userRole === 'Contractor') return '/jobs'
     if (userRole === 'Admin') return '/admin/users'
     if (userRole === 'Reviewer') return '/reviews'
     return '/dashboard'
