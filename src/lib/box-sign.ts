@@ -67,60 +67,90 @@ class BoxSignAPI {
     data?: any,
     retryCount: number = 0
   ): Promise<any> {
-    const accessToken = await getAppAuthAccessToken()
+    try {
+      const accessToken = await getAppAuthAccessToken()
 
-    const response = await fetch(`https://api.box.com/2.0/sign_requests${endpoint}`, {
-      method,
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: data ? JSON.stringify(data) : undefined
-    })
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.error(`Box Sign API Error (${method} ${endpoint}):`, {
-        status: response.status,
-        statusText: response.statusText,
-        responseText: errorText,
-        requestData: data,
-        retryCount
+      const response = await fetch(`https://api.box.com/2.0/sign_requests${endpoint}`, {
+        method,
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: data ? JSON.stringify(data) : undefined,
+        signal: AbortSignal.timeout(30000) // 30秒でタイムアウト
       })
 
-      // レート制限エラーの場合はリトライ
-      if (response.status === 429 && retryCount < 3) {
-        const retryAfter = response.headers.get('Retry-After')
-        const delay = retryAfter ? parseInt(retryAfter) * 1000 : Math.pow(2, retryCount) * 1000
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error(`Box Sign API Error (${method} ${endpoint}):`, {
+          status: response.status,
+          statusText: response.statusText,
+          responseText: errorText,
+          requestData: data,
+          retryCount
+        })
 
-        console.log(`⏳ レート制限によりリトライ中... ${delay}ms後に再試行 (${retryCount + 1}/3)`)
+        // リトライ可能なエラーかチェック
+        const isRetryableStatus =
+          response.status === 429 || // Rate limit
+          response.status === 502 || // Bad gateway
+          response.status === 503 || // Service unavailable
+          response.status === 504    // Gateway timeout
+
+        if (isRetryableStatus && retryCount < 3) {
+          const retryAfter = response.headers.get('Retry-After')
+          const delay = retryAfter ? parseInt(retryAfter) * 1000 : Math.pow(2, retryCount) * 1000
+
+          console.log(`⏳ ${response.status}エラーによりリトライ中... ${delay}ms後に再試行 (${retryCount + 1}/3)`)
+          await new Promise(resolve => setTimeout(resolve, delay))
+
+          return this.makeBoxSignRequest(method, endpoint, data, retryCount + 1)
+        }
+
+        throw new Error(`Box Sign API failed: ${response.status} - ${errorText}`)
+      }
+
+      // レスポンスボディが空の場合はnullを返す（例：204 No Content）
+      const contentLength = response.headers.get('content-length')
+      if (contentLength === '0' || response.status === 204) {
+        return null
+      }
+
+      // Content-Typeをチェックしてテキストとして処理すべきかどうかを確認
+      const contentType = response.headers.get('content-type')
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text()
+        // 空のテキストまたは空白のみの場合はnullを返す
+        if (!text || text.trim() === '') {
+          return null
+        }
+        // JSONではないレスポンスの場合はテキストをそのまま返す
+        return text
+      }
+
+      return response.json()
+
+    } catch (error: any) {
+      // ネットワークエラーやタイムアウトの場合はリトライ
+      const isNetworkError =
+        error.name === 'AbortError' || // タイムアウト
+        error.message?.includes('fetch') ||
+        error.message?.includes('network') ||
+        error.message?.includes('ECONNRESET') ||
+        error.message?.includes('ETIMEDOUT')
+
+      if (isNetworkError && retryCount < 3) {
+        const delay = Math.pow(2, retryCount) * 1000
+        console.log(`⏳ ネットワークエラーによりリトライ中... ${delay}ms後に再試行 (${retryCount + 1}/3)`)
+        console.log(`   エラー詳細: ${error.message}`)
         await new Promise(resolve => setTimeout(resolve, delay))
 
         return this.makeBoxSignRequest(method, endpoint, data, retryCount + 1)
       }
 
-      throw new Error(`Box Sign API failed: ${response.status} - ${errorText}`)
+      // リトライできないエラーまたはリトライ上限到達
+      throw error
     }
-
-    // レスポンスボディが空の場合はnullを返す（例：204 No Content）
-    const contentLength = response.headers.get('content-length')
-    if (contentLength === '0' || response.status === 204) {
-      return null
-    }
-
-    // Content-Typeをチェックしてテキストとして処理すべきかどうかを確認
-    const contentType = response.headers.get('content-type')
-    if (!contentType || !contentType.includes('application/json')) {
-      const text = await response.text()
-      // 空のテキストまたは空白のみの場合はnullを返す
-      if (!text || text.trim() === '') {
-        return null
-      }
-      // JSONではないレスポンスの場合はテキストをそのまま返す
-      return text
-    }
-
-    return response.json()
   }
 
   // ファイルの存在と権限を確認

@@ -124,13 +124,18 @@ export async function POST(
 
     if (project.box_folder_id) {
       try {
+        console.log('📁 プロジェクトフォルダから04_契約資料フォルダを検索中...', {
+          projectFolderId: project.box_folder_id
+        })
+
         const accessToken = await getAppAuthAccessToken()
 
-        // プロジェクトフォルダのアイテムを取得
+        // プロジェクトフォルダのアイテムを取得（タイムアウト付き）
         const response = await fetch(`https://api.box.com/2.0/folders/${project.box_folder_id}/items?limit=100`, {
           headers: {
             'Authorization': `Bearer ${accessToken}`
-          }
+          },
+          signal: AbortSignal.timeout(10000) // 10秒でタイムアウト
         })
 
         if (response.ok) {
@@ -142,11 +147,28 @@ export async function POST(
 
           if (contractFolder) {
             contractFolderId = contractFolder.id
+            console.log('✅ 04_契約資料フォルダを発見:', {
+              folderId: contractFolderId,
+              folderName: contractFolder.name
+            })
+          } else {
+            console.warn('⚠️ 04_契約資料フォルダが見つかりません。署名済みドキュメントはデフォルトフォルダに保存されます。')
           }
+        } else {
+          console.error('❌ プロジェクトフォルダのアイテム取得に失敗:', {
+            status: response.status,
+            statusText: response.statusText
+          })
         }
-      } catch (error) {
-        console.error('❌ 契約フォルダの取得に失敗:', error)
+      } catch (error: any) {
+        console.error('❌ 契約フォルダの取得に失敗:', {
+          error: error.message,
+          projectFolderId: project.box_folder_id
+        })
+        // エラーが発生してもデフォルトフォルダを使用して処理を続行
       }
+    } else {
+      console.warn('⚠️ プロジェクトにBoxフォルダIDが設定されていません。署名済みドキュメントはデフォルトフォルダに保存されます。')
     }
 
     // Box Sign署名リクエストを作成（受注者のみ署名）
@@ -171,8 +193,22 @@ export async function POST(
 
     if (!signatureRequest.success) {
       console.error('❌ Box Sign署名リクエスト作成エラー:', signatureRequest.error)
+
+      // エラーメッセージをユーザーフレンドリーに変換
+      let userMessage = '署名リクエストの作成に失敗しました'
+
+      if (signatureRequest.error?.includes('404') || signatureRequest.error?.includes('not found')) {
+        userMessage = '注文請書ファイルが見つかりません。再度ファイルを生成してください。'
+      } else if (signatureRequest.error?.includes('403') || signatureRequest.error?.includes('permission')) {
+        userMessage = 'Box Signの権限がありません。管理者に連絡してください。'
+      } else if (signatureRequest.error?.includes('timeout') || signatureRequest.error?.includes('network')) {
+        userMessage = 'ネットワークエラーが発生しました。しばらく待ってから再度お試しください。'
+      } else if (signatureRequest.error?.includes('disabled')) {
+        userMessage = 'Box Sign機能が無効化されています。管理者に連絡してください。'
+      }
+
       return NextResponse.json({
-        message: '署名リクエストの作成に失敗しました',
+        message: userMessage,
         error: signatureRequest.error
       }, { status: 500 })
     }

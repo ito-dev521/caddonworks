@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { boxSignAPI } from '@/lib/box-sign'
-import { getAppAuthAccessToken, moveBoxFile, getBoxFolderItems } from '@/lib/box'
 
 export const dynamic = 'force-dynamic'
 
@@ -80,11 +79,27 @@ export async function POST(
     }
 
     // Box Signステータスを確認
+    console.log('🔍 署名ステータスを確認中...', {
+      signRequestId: contract.order_acceptance_sign_request_id
+    })
+
     const signatureStatus = await boxSignAPI.getSignatureStatus(contract.order_acceptance_sign_request_id)
 
     if (!signatureStatus) {
-      return NextResponse.json({ message: '署名ステータスの取得に失敗しました' }, { status: 500 })
+      console.error('❌ 署名ステータスの取得に失敗:', {
+        signRequestId: contract.order_acceptance_sign_request_id,
+        contractId: contract.id
+      })
+      return NextResponse.json({
+        message: '署名ステータスの取得に失敗しました。ネットワーク接続を確認してから再度お試しください。',
+        details: 'Box Sign APIからのレスポンスがありませんでした'
+      }, { status: 500 })
     }
+
+    console.log('✅ 署名ステータス取得成功:', {
+      status: signatureStatus.status,
+      signRequestId: signatureStatus.id
+    })
 
     // 署名が完了しているかチェック
     if (signatureStatus.status !== 'signed') {
@@ -100,35 +115,20 @@ export async function POST(
 
     const project = contract.projects
 
-    // 署名済みPDFを「04_契約資料」フォルダに移動
-    if (signedFileId && project.box_folder_id) {
-      try {
-        console.log('📁 04_契約資料フォルダを検索中...')
-
-        // プロジェクトフォルダのアイテムを取得
-        const items = await getBoxFolderItems(project.box_folder_id)
-
-        // 「04_契約資料」フォルダを探す
-        const contractFolder = items.find((item: any) =>
-          item.type === 'folder' &&
-          (item.name.includes('04_契約') || item.name === '契約資料' || item.name === '契約')
-        )
-
-        if (contractFolder) {
-          console.log(`📄 署名済みPDFを移動: ${signedFileId} -> ${contractFolder.id} (${contractFolder.name})`)
-          await moveBoxFile(signedFileId, contractFolder.id)
-          console.log('✅ 署名済みPDFを04_契約資料フォルダに移動しました')
-        } else {
-          console.warn('⚠️ 04_契約資料フォルダが見つかりません。署名済みPDFはBox Signのデフォルトフォルダに残ります。')
-        }
-      } catch (moveError: any) {
-        // ファイル移動に失敗してもエラーにはしない（署名完了処理は続行）
-        console.error('❌ 署名済みPDFの移動に失敗しました（処理は続行）:', moveError.message)
-      }
+    // 署名済みPDFはBox Signが署名リクエスト作成時に指定されたparentFolderIdに自動保存するため、
+    // 移動処理は不要。ログのみ出力して確認。
+    if (signedFileId) {
+      console.log('✅ 署名済みPDFファイルID:', signedFileId)
+      console.log('📁 署名済みPDFは04_契約資料フォルダに自動保存されています')
     }
 
     // データベースを更新
     const signedAt = new Date().toISOString()
+    console.log('💾 契約データベースを更新中...', {
+      contractId,
+      signedFileId
+    })
+
     const { error: updateError } = await supabaseAdmin
       .from('contracts')
       .update({
@@ -138,9 +138,19 @@ export async function POST(
       .eq('id', contractId)
 
     if (updateError) {
-      console.error('❌ データベース更新エラー:', updateError)
-      return NextResponse.json({ message: 'データベースの更新に失敗しました' }, { status: 500 })
+      console.error('❌ データベース更新エラー:', {
+        error: updateError,
+        contractId,
+        signedAt,
+        signedFileId
+      })
+      return NextResponse.json({
+        message: 'データベースの更新に失敗しました。管理者に連絡してください。',
+        error: updateError.message
+      }, { status: 500 })
     }
+
+    console.log('✅ 契約データベースを更新完了')
 
     // プロジェクトのステータスを進行中に更新
     await supabaseAdmin

@@ -46,6 +46,53 @@ function isTokenValid(): boolean {
   return tokenCache !== null && Date.now() < tokenCache.expiresAt
 }
 
+// リトライヘルパー関数
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 3,
+  baseDelay: number = 1000,
+  operation: string = 'API call'
+): Promise<T> {
+  let lastError: Error | null = null
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn()
+    } catch (error: any) {
+      lastError = error
+
+      // 最後の試行の場合はエラーを投げる
+      if (attempt === maxRetries - 1) {
+        console.error(`❌ ${operation} failed after ${maxRetries} attempts:`, error.message)
+        throw error
+      }
+
+      // リトライ可能なエラーかチェック
+      const isRetryable =
+        error.message?.includes('timeout') ||
+        error.message?.includes('network') ||
+        error.message?.includes('ECONNRESET') ||
+        error.message?.includes('ETIMEDOUT') ||
+        error.message?.includes('429') || // Rate limit
+        error.message?.includes('502') || // Bad gateway
+        error.message?.includes('503') || // Service unavailable
+        error.message?.includes('504')    // Gateway timeout
+
+      if (!isRetryable) {
+        // リトライ不可能なエラー（404, 403など）は即座に投げる
+        throw error
+      }
+
+      // エクスポネンシャルバックオフでリトライ
+      const delay = baseDelay * Math.pow(2, attempt)
+      console.warn(`⚠️ ${operation} failed (attempt ${attempt + 1}/${maxRetries}), retrying in ${delay}ms...`, error.message)
+      await new Promise(resolve => setTimeout(resolve, delay))
+    }
+  }
+
+  throw lastError || new Error(`${operation} failed after ${maxRetries} retries`)
+}
+
 export async function getAppAuthAccessToken(): Promise<string> {
   // キャッシュされたトークンが有効な場合は再利用
   if (isTokenValid() && tokenCache) {
@@ -122,16 +169,19 @@ export async function getAppAuthAccessToken(): Promise<string> {
 }
 
 export async function getBoxFolderItems(folderId: string): Promise<any[]> {
-  const accessToken = await getAppAuthAccessToken()
-  const res = await fetch(`https://api.box.com/2.0/folders/${folderId}/items?fields=id,name,type,size,modified_at,created_at,path_collection`, {
-    headers: { 'Authorization': `Bearer ${accessToken}` }
-  })
-  if (!res.ok) {
-    const errorText = await res.text()
-    throw new Error(`Box folder items error ${res.status}: ${errorText}`)
-  }
-  const data: any = await res.json()
-  return data.entries || []
+  return retryWithBackoff(async () => {
+    const accessToken = await getAppAuthAccessToken()
+    const res = await fetch(`https://api.box.com/2.0/folders/${folderId}/items?fields=id,name,type,size,modified_at,created_at,path_collection`, {
+      headers: { 'Authorization': `Bearer ${accessToken}` },
+      signal: AbortSignal.timeout(30000) // 30秒でタイムアウト
+    })
+    if (!res.ok) {
+      const errorText = await res.text()
+      throw new Error(`Box folder items error ${res.status}: ${errorText}`)
+    }
+    const data: any = await res.json()
+    return data.entries || []
+  }, 3, 1000, `getBoxFolderItems(${folderId})`)
 }
 
 export async function downloadBoxFile(fileId: string): Promise<Response> {
@@ -523,7 +573,7 @@ export async function renameBoxFolder(folderId: string, newName: string): Promis
 }
 
 export async function moveBoxFile(fileId: string, newParentFolderId: string): Promise<any> {
-  try {
+  return retryWithBackoff(async () => {
     const accessToken = await getAppAuthAccessToken()
 
     const res = await fetch(`https://api.box.com/2.0/files/${fileId}`, {
@@ -534,7 +584,8 @@ export async function moveBoxFile(fileId: string, newParentFolderId: string): Pr
       },
       body: JSON.stringify({
         parent: { id: newParentFolderId }
-      })
+      }),
+      signal: AbortSignal.timeout(30000) // 30秒でタイムアウト
     })
 
     if (!res.ok) {
@@ -545,11 +596,7 @@ export async function moveBoxFile(fileId: string, newParentFolderId: string): Pr
     const file: any = await res.json()
     console.log(`📄 Moved file: ${file.name} to folder ${newParentFolderId}`)
     return file
-
-  } catch (error) {
-    console.error('❌ Box file move failed:', error)
-    throw error
-  }
+  }, 3, 1000, `moveBoxFile(${fileId} -> ${newParentFolderId})`)
 }
 
 export async function deleteBoxFolder(folderId: string, recursive: boolean = true): Promise<void> {
