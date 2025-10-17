@@ -1,5 +1,6 @@
 import jwt, { SignOptions } from 'jsonwebtoken'
 import crypto from 'crypto'
+import { cache, CacheKeys } from './cache'
 
 function getEnv(name: string): string {
   const v = process.env[name]
@@ -169,7 +170,18 @@ export async function getAppAuthAccessToken(): Promise<string> {
 }
 
 export async function getBoxFolderItems(folderId: string): Promise<any[]> {
-  return retryWithBackoff(async () => {
+  // キャッシュチェック
+  const cacheKey = CacheKeys.boxFolderItems(folderId)
+  const cached = cache.get<any[]>(cacheKey)
+
+  if (cached) {
+    console.log(`📦 Cache hit: getBoxFolderItems(${folderId})`)
+    return cached
+  }
+
+  // キャッシュミス - API呼び出し
+  console.log(`🌐 Cache miss: getBoxFolderItems(${folderId}) - calling API`)
+  const items = await retryWithBackoff(async () => {
     const accessToken = await getAppAuthAccessToken()
     const res = await fetch(`https://api.box.com/2.0/folders/${folderId}/items?fields=id,name,type,size,modified_at,created_at,path_collection`, {
       headers: { 'Authorization': `Bearer ${accessToken}` },
@@ -182,6 +194,11 @@ export async function getBoxFolderItems(folderId: string): Promise<any[]> {
     const data: any = await res.json()
     return data.entries || []
   }, 3, 1000, `getBoxFolderItems(${folderId})`)
+
+  // キャッシュに保存（5分間）
+  cache.set(cacheKey, items, 5 * 60 * 1000)
+
+  return items
 }
 
 export async function downloadBoxFile(fileId: string): Promise<Response> {
@@ -376,8 +393,14 @@ export async function uploadFileToBox(
     }
 
     const result = await res.json()
-    // レスポンスからファイルIDを返す（entries[0].id）
-    return result.entries?.[0]?.id || result.id
+    const fileId = result.entries?.[0]?.id || result.id
+
+    // キャッシュを無効化（アップロードされたフォルダのキャッシュをクリア）
+    const cacheKey = CacheKeys.boxFolderItems(folderId)
+    cache.delete(cacheKey)
+    console.log(`🗑️ Cache invalidated: ${cacheKey}`)
+
+    return fileId
   } catch (error: any) {
     console.error('Upload file error:', error)
     throw error
