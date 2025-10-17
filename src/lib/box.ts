@@ -195,8 +195,8 @@ export async function getBoxFolderItems(folderId: string): Promise<any[]> {
     return data.entries || []
   }, 3, 1000, `getBoxFolderItems(${folderId})`)
 
-  // キャッシュに保存（5分間）
-  cache.set(cacheKey, items, 5 * 60 * 1000)
+  // キャッシュに保存（デフォルト3分間）
+  cache.set(cacheKey, items)
 
   return items
 }

@@ -10,7 +10,7 @@ interface CacheEntry<T> {
 
 class MemoryCache {
   private cache: Map<string, CacheEntry<any>> = new Map()
-  private defaultTTL: number = 5 * 60 * 1000 // デフォルト5分
+  private defaultTTL: number = 3 * 60 * 1000 // デフォルト3分
 
   /**
    * キャッシュに値を設定
