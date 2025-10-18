@@ -182,11 +182,11 @@ export async function findProjectsForAutoArchive(
       return []
     }
 
-    const archiveCandidates = projects.filter(project =>
+    const archiveCandidates = projects.filter((project: any) =>
       isProjectArchiveDue(project.completed_at, retentionDays)
     )
 
-    return archiveCandidates.map(p => p.id)
+    return archiveCandidates.map((p: any) => p.id)
 
   } catch (error) {
     console.error('Error in findProjectsForAutoArchive:', error)

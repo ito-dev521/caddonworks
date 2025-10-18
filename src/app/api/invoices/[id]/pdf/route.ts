@@ -73,21 +73,21 @@ export async function GET(
       // 請求元（運営者から発注者への請求の場合）
       contractorName: invoice.direction === 'from_operator'
         ? '株式会社キャドン' // 運営者名
-        : invoice.users?.display_name || '',
+        : (invoice as any).users?.display_name || '',
       contractorEmail: invoice.direction === 'from_operator'
         ? 'info@caddon.works'
-        : invoice.users?.email || '',
+        : (invoice as any).users?.email || '',
       contractorAddress: invoice.direction === 'from_operator'
         ? '東京都'
-        : invoice.users?.address || '',
+        : (invoice as any).users?.address || '',
 
       // 請求先
-      clientName: invoice.projects?.organizations?.name || '',
-      clientEmail: invoice.projects?.organizations?.email || '',
-      clientAddress: invoice.projects?.organizations?.address || '',
+      clientName: (invoice as any).projects?.organizations?.name || '',
+      clientEmail: (invoice as any).projects?.organizations?.email || '',
+      clientAddress: (invoice as any).projects?.organizations?.address || '',
 
       // プロジェクト情報
-      projectTitle: invoice.projects?.title || '',
+      projectTitle: (invoice as any).projects?.title || '',
       projectAmount: invoice.base_amount,
 
       // 請求書固有の情報
@@ -97,7 +97,7 @@ export async function GET(
 
       // プロジェクト一覧（月次請求の場合）
       projectList: [{
-        title: invoice.projects?.title || '',
+        title: (invoice as any).projects?.title || '',
         amount: invoice.base_amount || 0,
         completionDate: invoice.issue_date || '',
         systemFee: invoice.system_fee || 0
@@ -110,7 +110,7 @@ export async function GET(
     // PDFを生成
     const pdfBuffer = await documentGenerator.generateDocument('monthly_invoice', documentData)
 
-    return new NextResponse(pdfBuffer, {
+    return new NextResponse(pdfBuffer as any, {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',

@@ -71,7 +71,7 @@ export default function AdminCompletionReportsPage() {
         })
       )
 
-      setReports(reportsWithInvoiceStatus)
+      setReports(reportsWithInvoiceStatus as any)
     } catch (error) {
       console.error('完了届取得エラー:', error)
     } finally {
@@ -127,16 +127,16 @@ export default function AdminCompletionReportsPage() {
                   {reports.map((report) => (
                     <tr key={report.id}>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {report.projects?.title || '-'}
+                        {(report as any).projects?.title || '-'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {report.projects?.organizations?.name || '-'}
+                        {(report as any).projects?.organizations?.name || '-'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {formatDate(report.completion_date)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {formatCurrency(report.contracts?.bid_amount || 0)}
+                        {formatCurrency((report as any).contracts?.bid_amount || 0)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
                         {report.has_invoice ? (

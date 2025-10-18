@@ -41,7 +41,7 @@ export async function GET() {
     console.log('✅ PDF生成完了:', pdfBuffer.length, 'bytes')
 
     // PDFをレスポンスとして返す
-    return new NextResponse(pdfBuffer, {
+    return new NextResponse(pdfBuffer as any, {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',

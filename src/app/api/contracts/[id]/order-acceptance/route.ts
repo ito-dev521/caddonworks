@@ -323,7 +323,7 @@ export async function GET(
         generatedAt: contract.order_acceptance_generated_at,
         boxFileId: contract.order_acceptance_box_id,
         orderNumber: contract.order_acceptance_number,
-        projectTitle: contract.projects.title,
+        projectTitle: (contract as any).projects.title,
         sharedLink: contract.order_acceptance_shared_link
       } : null
     })

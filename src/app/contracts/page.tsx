@@ -262,7 +262,7 @@ function ContractsPageContent() {
 
         // 完了届の状態を確認
         if (completionReportsResponse.ok) {
-          const completionReportsResult = await completionReportsResponse.json()
+          const completionReportsResult = await (completionReportsResponse as any).json()
           const reports = (completionReportsResult || []) as Array<{ project_id: string }>
           const reportProjectIds = new Set<string>(reports.map(report => report.project_id))
           setCompletionReportProjects(reportProjectIds)

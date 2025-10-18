@@ -99,8 +99,8 @@ export async function POST(
     const supportPercent = Number(sysSettings?.support_fee_percent ?? 8)
 
     // 契約金額とサポート手数料を計算
-    const contractAmount = completionReport.contracts?.bid_amount || 0
-    const supportEnabled = completionReport.contracts?.support_enabled || false
+    const contractAmount = (completionReport as any).contracts?.bid_amount || 0
+    const supportEnabled = (completionReport as any).contracts?.support_enabled || false
     const supportFee = supportEnabled ? Math.round((contractAmount * supportPercent) / 100) : 0
     const baseAmount = contractAmount
     const totalAmount = baseAmount + supportFee
@@ -130,8 +130,8 @@ export async function POST(
       .insert({
         project_id: completionReport.project_id,
         contract_id: completionReport.contract_id,
-        contractor_id: completionReport.projects?.contractor_id,
-        org_id: completionReport.projects?.org_id,
+        contractor_id: (completionReport as any).projects?.contractor_id,
+        org_id: (completionReport as any).projects?.org_id,
         invoice_number: invoiceNumber,
         direction: 'from_operator', // 運営者から発注者への請求
         base_amount: baseAmount,
@@ -157,14 +157,14 @@ export async function POST(
     const { data: orgAdmins } = await supabase
       .from('memberships')
       .select('user_id')
-      .eq('org_id', completionReport.projects?.org_id)
+      .eq('org_id', (completionReport as any).projects?.org_id)
       .eq('role', 'OrgAdmin')
 
     if (orgAdmins && orgAdmins.length > 0) {
       const notifications = orgAdmins.map(admin => ({
         user_id: admin.user_id,
         title: '請求書が発行されました',
-        message: `プロジェクト「${completionReport.projects?.title}」の請求書が発行されました。`,
+        message: `プロジェクト「${(completionReport as any).projects?.title}」の請求書が発行されました。`,
         type: 'invoice_issued',
         data: {
           project_id: completionReport.project_id,

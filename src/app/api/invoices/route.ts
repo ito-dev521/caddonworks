@@ -428,7 +428,7 @@ export async function GET(request: NextRequest) {
         orderNo = orderNo.replace(/[！-～]/g, (s: string) => String.fromCharCode(s.charCodeAt(0) - 0xFEE0))
 
         // 英数字とハイフンのみを残す（それ以外の文字は全て削除）
-        orderNo = orderNo.split('').filter(c => /[a-zA-Z0-9\-]/.test(c)).join('')
+        orderNo = orderNo.split('').filter((c: string) => /[a-zA-Z0-9\-]/.test(c)).join('')
 
         console.log('クリーニング後:', JSON.stringify(orderNo), 'length:', orderNo.length)
 

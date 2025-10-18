@@ -328,7 +328,7 @@ export async function uploadFileToBox(
       name: sanitizedFileName,
       parent: { id: folderId }
     }))
-    formData.append('file', new Blob([fileData]), sanitizedFileName)
+    formData.append('file', new Blob([fileData as any]), sanitizedFileName)
 
     const res = await fetch('https://upload.box.com/api/2.0/files/content', {
       method: 'POST',
@@ -377,9 +377,9 @@ export async function uploadFileToBox(
         } catch (versionError) {
           console.error('❌ 新しいバージョンのアップロードに失敗しました:', versionError)
           console.error('❌ エラー詳細:', {
-            name: versionError.name,
-            message: versionError.message,
-            stack: versionError.stack
+            name: (versionError as any).name,
+            message: (versionError as any).message,
+            stack: (versionError as any).stack
           })
           throw new Error('同名のファイルが既に存在します')
         }

@@ -59,7 +59,7 @@ class MemoryCache {
   deletePattern(pattern: string): void {
     const keysToDelete: string[] = []
 
-    for (const key of this.cache.keys()) {
+    for (const key of Array.from(this.cache.keys())) {
       if (key.startsWith(pattern)) {
         keysToDelete.push(key)
       }
@@ -82,7 +82,7 @@ class MemoryCache {
     const now = Date.now()
     const keysToDelete: string[] = []
 
-    for (const [key, entry] of this.cache.entries()) {
+    for (const [key, entry] of Array.from(this.cache.entries())) {
       if (now > entry.expiresAt) {
         keysToDelete.push(key)
       }

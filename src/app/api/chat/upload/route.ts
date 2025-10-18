@@ -177,8 +177,21 @@ export async function POST(request: NextRequest) {
       .from(bucketName)
       .getPublicUrl(filePath)
 
-    // sender_typeを決定
-    const senderType = membership?.org_id === project.org_id ? 'client' : 'contractor'
+    // sender_typeを判定：Auditor > 組織メンバー > 受注者の優先順位
+    let senderType = 'contractor' // デフォルト
+    if (membership?.role === 'Auditor') {
+      senderType = 'auditor'
+    } else if (membership?.org_id === project.org_id) {
+      senderType = 'client'
+    }
+
+    // message_typeを決定
+    let messageType: 'file' | 'image' | 'video' = 'file'
+    if (file.type.startsWith('image/')) {
+      messageType = 'image'
+    } else if (file.type.startsWith('video/')) {
+      messageType = 'video'
+    }
 
     // メッセージ内容を決定（コメントがある場合はコメント、ない場合はファイル名）
     const messageContent = comment.trim() ? comment : file.name
@@ -187,12 +200,17 @@ export async function POST(request: NextRequest) {
     const { data: messageData, error: messageError } = await supabaseAdmin
       .from('chat_messages')
       .insert({
+        project_id: projectId,
         room_id: chatRoom.id,
         sender_id: userProfile.id,
+        sender_type: senderType,
+        message: messageContent,
+        message_type: messageType,
         content: messageContent,
         file_url: publicUrl,
         file_name: file.name,
-        file_size: file.size
+        file_size: file.size,
+        reply_to: replyTo || null
       })
       .select()
       .single()

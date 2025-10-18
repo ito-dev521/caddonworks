@@ -156,13 +156,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // サポート要請者のsender_typeを判定
+    const requesterSenderType = isClient ? 'client' : isContractor ? 'contractor' : 'contractor'
+
     // サポート要請メッセージを送信
     const { error: supportMessageError } = await supabaseAdmin
       .from('chat_messages')
       .insert({
+        project_id: (project as any).id,
         room_id: room_id,
-        // chat_messages.sender_id を使うスキーマも存在するため互換対応
         sender_id: requester.auth_user_id,
+        sender_type: requesterSenderType,
+        message: message || `${requesterType}からサポートを要請します`,
         content: message || `${requesterType}からサポートを要請します`,
         message_type: 'support_request'
       })
@@ -175,8 +180,11 @@ export async function POST(request: NextRequest) {
     const { error: notificationError } = await supabaseAdmin
       .from('chat_messages')
       .insert({
+        project_id: (project as any).id,
         room_id: room_id,
         sender_id: selectedAuditor.auth_user_id,
+        sender_type: 'auditor',
+        message: `${requesterType}からのサポート要請により監査員として参加しました（対応レベル: ${selectedAuditor.member_level}）`,
         content: `${requesterType}からのサポート要請により監査員として参加しました（対応レベル: ${selectedAuditor.member_level}）`,
         message_type: 'system'
       })

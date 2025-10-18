@@ -141,21 +141,21 @@ export async function GET(request: NextRequest) {
 
     // 完了届を組織ごとに集計
     for (const report of completionReports || []) {
-      const orgId = report.projects?.org_id
+      const orgId = (report as any).projects?.org_id
       if (!orgId) continue
 
-      const contractAmount = report.contracts?.bid_amount || 0
+      const contractAmount = (report as any).contracts?.bid_amount || 0
       // 発注者サポート利用のみを請求（受注者サポートは受注者支払い時に差し引く）
-      const projectSupportEnabled = report.projects?.support_enabled || false
+      const projectSupportEnabled = (report as any).projects?.support_enabled || false
       const supportFee = projectSupportEnabled ? Math.round((contractAmount * supportPercent) / 100) : 0
       const systemFee = Math.round((contractAmount * 30) / 100)
 
       if (!organizationSummaries.has(orgId)) {
         organizationSummaries.set(orgId, {
           org_id: orgId,
-          org_name: report.projects?.organizations?.name || '',
-          org_address: report.projects?.organizations?.address || '',
-          org_email: report.projects?.organizations?.email || '',
+          org_name: (report as any).projects?.organizations?.name || '',
+          org_address: (report as any).projects?.organizations?.address || '',
+          org_email: (report as any).projects?.organizations?.email || '',
           projects: [],
           total_contract_amount: 0,
           total_support_fee: 0,
@@ -167,7 +167,7 @@ export async function GET(request: NextRequest) {
       const summary = organizationSummaries.get(orgId)!
       summary.projects.push({
         project_id: report.project_id,
-        project_title: report.projects?.title || '',
+        project_title: (report as any).projects?.title || '',
         contract_id: report.contract_id,
         contract_amount: contractAmount,
         completion_date: report.actual_completion_date,

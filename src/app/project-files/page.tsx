@@ -132,7 +132,7 @@ export default function ProjectFilesPage() {
 
       const data = await response.json()
       const now = Date.now()
-      const projectsWithArchive = (data.projects || []).map((project: BoxProject) => {
+      const projectsWithArchive = (data.projects || []).map((project: any) => {
         const archiveStatus = getProjectArchiveStatus(project, archiveSettings)
         const visibleFiles = filterVisibleFiles(project.box_items || [], archiveStatus)
         return {
@@ -140,7 +140,7 @@ export default function ProjectFilesPage() {
           archive_status: archiveStatus,
           box_items: visibleFiles
         }
-      }).filter(project => {
+      }).filter((project: any) => {
         if (project.status !== 'completed') return true
         if (!project.completed_at) return true
         const completedAt = new Date(project.completed_at).getTime()
@@ -397,7 +397,7 @@ export default function ProjectFilesPage() {
                 )}
                 <span className="font-medium">{normalizeFolderName(item.name)}</span>
                 <span className="text-xs text-gray-500 ml-2">
-                  {new Date(item.modified_at).toLocaleDateString('ja-JP')}
+                  {item.modified_at ? new Date(item.modified_at).toLocaleDateString('ja-JP') : ''}
                 </span>
               </button>
             ) : (
@@ -407,7 +407,7 @@ export default function ProjectFilesPage() {
                   <p className="truncate font-medium">{item.name}</p>
                   <p className="text-xs text-gray-500">
                     {item.size ? formatFileSize(item.size) : 'ファイル'} •
-                    {new Date(item.modified_at).toLocaleDateString('ja-JP')}
+                    {item.modified_at ? new Date(item.modified_at).toLocaleDateString('ja-JP') : ''}
                   </p>
                 </div>
                 <button
@@ -499,7 +499,7 @@ export default function ProjectFilesPage() {
     // フォールバック: box_items から取得
     return project.box_items
       .filter(item => item.type === 'file')
-      .sort((a, b) => new Date(b.modified_at).getTime() - new Date(a.modified_at).getTime())
+      .sort((a, b) => new Date(b.modified_at || 0).getTime() - new Date(a.modified_at || 0).getTime())
       .slice(0, 5)
   }
 
@@ -833,7 +833,7 @@ export default function ProjectFilesPage() {
                                     <div className="min-w-0 flex-1">
                                       <div className="truncate font-medium">{item.name}</div>
                                       <div className="flex items-center gap-1 text-[10px] text-gray-500">
-                                        <span>{formatRelativeTime(item.modified_at)}</span>
+                                        <span>{item.modified_at ? formatRelativeTime(item.modified_at) : ''}</span>
                                         {(item as any).subfolder && (
                                           <>
                                             <span>•</span>
@@ -1106,7 +1106,7 @@ export default function ProjectFilesPage() {
                                     {item.type === 'folder' ? 'フォルダ' : formatFileSize(item.size)}
                                   </p>
                                   <p className="text-xs text-gray-400">
-                                    {new Date(item.modified_at).toLocaleDateString('ja-JP')}
+                                    {item.modified_at ? new Date(item.modified_at).toLocaleDateString('ja-JP') : ''}
                                   </p>
                                 </div>
                               </div>

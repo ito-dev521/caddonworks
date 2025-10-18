@@ -34,7 +34,7 @@ interface ChatMessage {
   room_id: string
   sender_id: string
   content: string
-  message_type: 'text' | 'file' | 'image' | 'video' | 'system'
+  message_type: 'text' | 'file' | 'image' | 'video' | 'system' | 'support_request'
   file_url?: string
   file_name?: string
   file_size?: number

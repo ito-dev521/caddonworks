@@ -291,13 +291,21 @@ export async function POST(request: NextRequest) {
       .eq('user_id', userProfile.id)
       .single()
 
+    // sender_typeを判定：Auditor > 組織メンバー > 受注者の優先順位
+    let senderType = 'contractor' // デフォルト
+    if (membership?.role === 'Auditor') {
+      senderType = 'auditor'
+    } else if (membership?.org_id === project.org_id) {
+      senderType = 'client'
+    }
+
     // チャットメッセージを保存（sender_idはusers.idを使用）
     const { data: messageData, error: messageError } = await supabaseAdmin
       .from('chat_messages')
       .insert({
         project_id: projectId,
         sender_id: userProfile.id,
-        sender_type: membership?.org_id === project.org_id ? 'client' : 'contractor',
+        sender_type: senderType,
         message: content,
         message_type: message_type || 'text',
         reply_to: reply_to || null,

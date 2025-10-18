@@ -606,33 +606,33 @@ function ProfilePageContent() {
                                     >
                                       レベル変更申請
                                     </Button>
-                                    {userProfile?.level_change_status && (
+                                    {(userProfile as any)?.level_change_status && (
                                       <div className="flex items-center gap-2">
                                         <Badge
                                           className={`text-xs px-3 py-1 ${
-                                            userProfile.level_change_status === 'pending'
+                                            (userProfile as any).level_change_status === 'pending'
                                               ? 'bg-yellow-100 text-yellow-800'
-                                              : userProfile.level_change_status === 'approved'
+                                              : (userProfile as any).level_change_status === 'approved'
                                                 ? 'bg-green-100 text-green-800'
                                                 : 'bg-red-100 text-red-800'
                                           }`}
                                         >
-                                          {userProfile.level_change_status === 'pending'
+                                          {(userProfile as any).level_change_status === 'pending'
                                             ? '申請中'
-                                            : userProfile.level_change_status === 'approved'
+                                            : (userProfile as any).level_change_status === 'approved'
                                               ? '承認済み'
                                               : '却下'}
                                         </Badge>
-                                        {userProfile.level_change_status === 'rejected' && userProfile.level_change_notes && (
+                                        {(userProfile as any).level_change_status === 'rejected' && (userProfile as any).level_change_notes && (
                                           <span className="text-xs text-red-600">
-                                            却下理由: {userProfile.level_change_notes}
+                                            却下理由: {(userProfile as any).level_change_notes}
                                           </span>
                                         )}
                                       </div>
                                     )}
-                                    {userProfile?.requested_member_level && (
+                                    {(userProfile as any)?.requested_member_level && (
                                       <span className="text-xs text-gray-500">
-                                        申請レベル: {getMemberLevelInfo(userProfile.requested_member_level as MemberLevel).label}
+                                        申請レベル: {getMemberLevelInfo((userProfile as any).requested_member_level as MemberLevel).label}
                                       </span>
                                     )}
                                   </>
@@ -1095,7 +1095,7 @@ function ProfilePageContent() {
                                 <div className="flex items-center gap-1 bg-yellow-50 px-3 py-1 rounded-full">
                                   <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
                                   <span className="text-sm font-semibold text-yellow-700">
-                                    {contract.evaluation.overall_rating.toFixed(1)}
+                                    {(contract as any).evaluation.overall_rating.toFixed(1)}
                                   </span>
                                 </div>
                               )}
@@ -1104,12 +1104,12 @@ function ProfilePageContent() {
                               <div className="flex items-center gap-1">
                                 <Calendar className="w-4 h-4" />
                                 <span>
-                                  完了日: {new Date(contract.completed_at).toLocaleDateString('ja-JP')}
+                                  完了日: {new Date((contract as any).completed_at).toLocaleDateString('ja-JP')}
                                 </span>
                               </div>
                               <div className="flex items-center gap-1">
                                 <span className="font-semibold text-engineering-blue">
-                                  ¥{contract.contract_amount?.toLocaleString() || '---'}
+                                  ¥{(contract as any).contract_amount?.toLocaleString() || '---'}
                                 </span>
                               </div>
                               <Badge variant="success" className="text-xs">

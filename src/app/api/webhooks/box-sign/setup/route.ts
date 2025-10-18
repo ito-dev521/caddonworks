@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
 
     console.log('📋 Webhook一覧取得開始')
 
-    const webhooks = await boxSignAPI.listWebhooks()
+    const webhooks = await (boxSignAPI as any).listWebhooks()
 
     // Box Sign関連のWebhookのみをフィルタリング
     const boxSignWebhooks = webhooks.filter((webhook: any) =>
@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
     console.log('🔄 Webhook作成開始:', { webhookUrl, triggers })
 
     // 既に同じURLのWebhookが存在するかチェック
-    const existingWebhook = await boxSignAPI.findWebhookByUrl(webhookUrl)
+    const existingWebhook = await (boxSignAPI as any).findWebhookByUrl(webhookUrl)
     if (existingWebhook) {
       return NextResponse.json({
         message: 'このURLのWebhookは既に存在します',
@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Webhookを作成
-    const webhook = await boxSignAPI.createWebhook(webhookUrl, triggers)
+    const webhook = await (boxSignAPI as any).createWebhook(webhookUrl, triggers)
 
     return NextResponse.json({
       message: 'Webhookの作成に成功しました',
@@ -140,7 +140,7 @@ export async function DELETE(request: NextRequest) {
 
     console.log('🗑️ Webhook削除開始:', webhookId)
 
-    const success = await boxSignAPI.deleteWebhook(webhookId)
+    const success = await (boxSignAPI as any).deleteWebhook(webhookId)
 
     if (!success) {
       return NextResponse.json({

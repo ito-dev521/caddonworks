@@ -47,17 +47,17 @@ export async function POST(
     // Box Signから詳細ステータスを取得
     const signatureStatus = await boxSignAPI.getSignatureStatus(signRequestId)
 
-    if (!signatureStatus.success) {
+    if (!signatureStatus || !(signatureStatus as any).success) {
       return NextResponse.json({
         message: '署名ステータスの取得に失敗しました',
-        error: signatureStatus.error
+        error: (signatureStatus as any)?.error
       }, { status: 500 })
     }
 
-    const project = contract.projects
+    const project = (contract as any).projects
 
     // 署名完了の場合
-    if (status === 'signed' || signatureStatus.data?.status === 'signed') {
+    if (status === 'signed' || (signatureStatus as any).data?.status === 'signed') {
       // 契約に署名完了情報を記録
       const { error: updateError } = await supabaseAdmin
         .from('contracts')
@@ -103,8 +103,8 @@ export async function POST(
     }
 
     // 署名拒否の場合
-    else if (status === 'declined' || signatureStatus.data?.status === 'declined') {
-      const declinedSigner = signatureStatus.data?.signers?.find(s => s.hasDeclined)
+    else if (status === 'declined' || (signatureStatus as any).data?.status === 'declined') {
+      const declinedSigner = (signatureStatus as any).data?.signers?.find((s: any) => s.hasDeclined)
 
       const notifications = [
         {
@@ -140,7 +140,7 @@ export async function POST(
 
     return NextResponse.json({
       message: '署名ステータスを更新しました',
-      status: signatureStatus.data?.status,
+      status: (signatureStatus as any).data?.status,
       contractId
     })
 
@@ -196,15 +196,15 @@ export async function PATCH(
     // Box Signから最新ステータスを取得
     const signatureStatus = await boxSignAPI.getSignatureStatus(contract.order_acceptance_sign_request_id)
 
-    if (!signatureStatus.success) {
+    if (!signatureStatus || !(signatureStatus as any).success) {
       return NextResponse.json({
         message: '署名ステータスの取得に失敗しました',
-        error: signatureStatus.error
+        error: (signatureStatus as any)?.error
       }, { status: 500 })
     }
 
     // 署名完了していて、まだ記録されていない場合は更新
-    if (signatureStatus.data?.status === 'signed' && !contract.order_acceptance_signed_at) {
+    if ((signatureStatus as any).data?.status === 'signed' && !contract.order_acceptance_signed_at) {
       const { error: updateError } = await supabaseAdmin
         .from('contracts')
         .update({
@@ -220,7 +220,7 @@ export async function PATCH(
 
     return NextResponse.json({
       message: '署名ステータスを同期しました',
-      signatureStatus: signatureStatus.data,
+      signatureStatus: (signatureStatus as any).data,
       localSignedAt: contract.order_acceptance_signed_at
     })
 

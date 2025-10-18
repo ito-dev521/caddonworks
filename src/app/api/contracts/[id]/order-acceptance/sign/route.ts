@@ -89,16 +89,16 @@ export async function POST(
       }, { status: 409 })
     }
 
-    const project = contract.projects
+    const project = (contract as any).projects
 
     // 権限チェック：発注者のみが署名を開始可能
-    const isProjectCreator = project.created_by_user?.id === userProfile.id
+    const isProjectCreator = (project as any).created_by_user?.id === userProfile.id
 
     // 組織メンバーシップを別途クエリ
     const { data: memberships } = await supabaseAdmin
       .from('memberships')
       .select('user_id, role')
-      .eq('org_id', project.org_id)
+      .eq('org_id', (project as any).org_id)
       .eq('user_id', userProfile.id)
       .in('role', ['OrgAdmin', 'Staff'])
 
@@ -122,16 +122,16 @@ export async function POST(
     // プロジェクトの04_契約資料フォルダを取得
     let contractFolderId: string | undefined = undefined
 
-    if (project.box_folder_id) {
+    if ((project as any).box_folder_id) {
       try {
         console.log('📁 プロジェクトフォルダから04_契約資料フォルダを検索中...', {
-          projectFolderId: project.box_folder_id
+          projectFolderId: (project as any).box_folder_id
         })
 
         const accessToken = await getAppAuthAccessToken()
 
         // プロジェクトフォルダのアイテムを取得（タイムアウト付き）
-        const response = await fetch(`https://api.box.com/2.0/folders/${project.box_folder_id}/items?limit=100`, {
+        const response = await fetch(`https://api.box.com/2.0/folders/${(project as any).box_folder_id}/items?limit=100`, {
           headers: {
             'Authorization': `Bearer ${accessToken}`
           },
@@ -163,7 +163,7 @@ export async function POST(
       } catch (error: any) {
         console.error('❌ 契約フォルダの取得に失敗:', {
           error: error.message,
-          projectFolderId: project.box_folder_id
+          projectFolderId: (project as any).box_folder_id
         })
         // エラーが発生してもデフォルトフォルダを使用して処理を続行
       }
@@ -182,10 +182,10 @@ export async function POST(
     ]
 
     const signatureRequest = await boxSignAPI.createSignatureRequest({
-      documentName: `注文請書_${project.title}_${contract.order_acceptance_number}`,
+      documentName: `注文請書_${(project as any).title}_${contract.order_acceptance_number}`,
       boxFileId: contract.order_acceptance_box_id,
       signers,
-      message: `プロジェクト「${project.title}」の注文請書の署名をお願いいたします。`,
+      message: `プロジェクト「${(project as any).title}」の注文請書の署名をお願いいたします。`,
       daysUntilExpiration: 30,
       isDocumentPreparationNeeded: false, // 自動配置を使用（prepare_urlは不要）
       parentFolderId: contractFolderId // 署名済みドキュメントを04_契約資料フォルダに直接保存
@@ -217,7 +217,7 @@ export async function POST(
     const { error: updateError } = await supabaseAdmin
       .from('contracts')
       .update({
-        order_acceptance_sign_request_id: signatureRequest.signRequestId,
+        order_acceptance_sign_request_id: (signatureRequest as any).signRequestId,
         order_acceptance_sign_started_at: new Date().toISOString()
       })
       .eq('id', contractId)
@@ -240,12 +240,12 @@ export async function POST(
       user_id: contract.contractor_id,
       type: 'order_acceptance_signature_request',
       title: '注文請書への署名が必要です',
-      message: `プロジェクト「${project.title}」の注文請書への署名をお願いいたします。`,
+      message: `プロジェクト「${(project as any).title}」の注文請書への署名をお願いいたします。`,
       data: {
-        project_id: project.id,
+        project_id: (project as any).id,
         contract_id: contractId,
-        sign_request_id: signatureRequest.signRequestId,
-        signing_url: signatureRequest.signingUrls?.[0]?.url
+        sign_request_id: (signatureRequest as any).signRequestId,
+        signing_url: (signatureRequest as any).signingUrls?.[0]?.url
       }
     }
 
@@ -255,9 +255,9 @@ export async function POST(
 
     return NextResponse.json({
       message: '注文請書の署名リクエストを作成しました',
-      signRequestId: signatureRequest.signRequestId,
-      prepareUrl: signatureRequest.prepareUrl,
-      signingUrls: signatureRequest.signingUrls
+      signRequestId: (signatureRequest as any).signRequestId,
+      prepareUrl: (signatureRequest as any).prepareUrl,
+      signingUrls: (signatureRequest as any).signingUrls
     }, { status: 201 })
 
   } catch (error: any) {
@@ -345,7 +345,7 @@ export async function GET(
         signRequestId: contract.order_acceptance_sign_request_id,
         startedAt: contract.order_acceptance_sign_started_at,
         completedAt: contract.order_acceptance_signed_at,
-        projectTitle: contract.projects.title,
+        projectTitle: (contract as any).projects.title,
         contractor: contractorInfo,
         status: signatureStatus
       } : null
@@ -418,16 +418,16 @@ export async function PUT(
       return NextResponse.json({ message: '契約が見つかりません' }, { status: 404 })
     }
 
-    const project = contract.projects
+    const project = (contract as any).projects
 
     // 権限チェック：発注者のみが再送信可能
-    const isProjectCreator = project.created_by === userProfile.id
+    const isProjectCreator = (project as any).created_by === userProfile.id
 
     // 組織メンバーシップを別途クエリ
     const { data: memberships } = await supabaseAdmin
       .from('memberships')
       .select('user_id, role')
-      .eq('org_id', project.org_id)
+      .eq('org_id', (project as any).org_id)
       .eq('user_id', userProfile.id)
       .in('role', ['OrgAdmin', 'Staff'])
 

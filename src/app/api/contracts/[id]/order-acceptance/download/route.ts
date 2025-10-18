@@ -76,8 +76,8 @@ export async function GET(
 
     // 権限チェック：受注者または発注者のみダウンロード可能
     const isContractor = contract.contractor_id === userProfile.id
-    const isProjectCreator = contract.projects.created_by === userProfile.id
-    const isOrgMember = contract.projects.memberships.some(
+    const isProjectCreator = (contract as any).projects.created_by === userProfile.id
+    const isOrgMember = (contract as any).projects.memberships.some(
       (m: any) => m.user_id === userProfile.id && ['OrgAdmin', 'Staff'].includes(m.role)
     )
 
@@ -97,7 +97,7 @@ export async function GET(
     const pdfBuffer = Buffer.from(pdfArrayBuffer)
 
     // ファイル名を生成
-    const fileName = `注文請書_${contract.projects.title}_${contract.order_acceptance_number || 'N/A'}.pdf`
+    const fileName = `注文請書_${(contract as any).projects.title}_${contract.order_acceptance_number || 'N/A'}.pdf`
 
     // PDFとして返す
     return new NextResponse(pdfBuffer, {

@@ -494,8 +494,8 @@ export async function POST(
             const signRequestResult = await signRequestResponse.json()
 
             // orderAcceptanceInfoに署名リクエスト情報を追加
-            orderAcceptanceInfo.signRequestId = signRequestResult.signRequestId
-            orderAcceptanceInfo.prepareUrl = signRequestResult.prepareUrl
+            ;(orderAcceptanceInfo as any).signRequestId = signRequestResult.signRequestId
+            ;(orderAcceptanceInfo as any).prepareUrl = signRequestResult.prepareUrl
           } else {
             const errorResult = await signRequestResponse.json()
             console.error('⚠️ Box Sign署名リクエストの送信に失敗しました:', errorResult.message)
@@ -518,7 +518,7 @@ export async function POST(
     // 完了メッセージを作成
     let successMessage = '契約に署名しました'
     if (orderAcceptanceInfo) {
-      if (orderAcceptanceInfo.signRequestId) {
+      if ((orderAcceptanceInfo as any).signRequestId) {
         successMessage += '。注文請書を生成し、受注者にBox Sign署名リクエストを送信しました。'
       } else {
         successMessage += '。注文請書も生成されました。'

@@ -97,23 +97,23 @@ export async function POST(
     }
 
     console.log('✅ 署名ステータス取得成功:', {
-      status: signatureStatus.status,
-      signRequestId: signatureStatus.id
+      status: (signatureStatus as any).status,
+      signRequestId: (signatureStatus as any).id
     })
 
     // 署名が完了しているかチェック
-    if (signatureStatus.status !== 'signed') {
+    if ((signatureStatus as any).status !== 'signed') {
       return NextResponse.json({
-        message: `署名はまだ完了していません（現在のステータス: ${signatureStatus.status}）`,
-        status: signatureStatus.status,
-        signers: signatureStatus.signers
+        message: `署名はまだ完了していません（現在のステータス: ${(signatureStatus as any).status}）`,
+        status: (signatureStatus as any).status,
+        signers: (signatureStatus as any).signers
       }, { status: 200 })
     }
 
     // 署名済みファイルIDを取得
-    const signedFileId = signatureStatus.signFiles?.files?.[0]?.id
+    const signedFileId = (signatureStatus as any).signFiles?.files?.[0]?.id
 
-    const project = contract.projects
+    const project = (contract as any).projects
 
     // 署名済みPDFはBox Signが署名リクエスト作成時に指定されたparentFolderIdに自動保存するため、
     // 移動処理は不要。ログのみ出力して確認。
@@ -156,13 +156,13 @@ export async function POST(
     await supabaseAdmin
       .from('projects')
       .update({ status: 'in_progress' })
-      .eq('id', project.id)
+      .eq('id', (project as any).id)
 
     // チャットルームを作成
     const { data: existingRoom } = await supabaseAdmin
       .from('chat_rooms')
       .select('id')
-      .eq('project_id', project.id)
+      .eq('project_id', (project as any).id)
       .single()
 
     if (!existingRoom) {
@@ -170,18 +170,18 @@ export async function POST(
       const { data: creatorUser } = await supabaseAdmin
         .from('users')
         .select('auth_user_id')
-        .eq('id', project.created_by)
+        .eq('id', (project as any).created_by)
         .single()
 
-      const createdBy = isWebhookCall ? (creatorUser?.auth_user_id || project.created_by) : user.id
+      const createdBy = isWebhookCall ? (creatorUser?.auth_user_id || (project as any).created_by) : user.id
 
       // チャットルームを作成
       const { data: newRoom, error: roomError } = await supabaseAdmin
         .from('chat_rooms')
         .insert({
-          project_id: project.id,
-          name: project.title,
-          description: `${project.title}のチャットルーム`,
+          project_id: (project as any).id,
+          name: (project as any).title,
+          description: `${(project as any).title}のチャットルーム`,
           created_by: createdBy,
           is_active: true
         })
@@ -198,7 +198,7 @@ export async function POST(
         const { data: projectCreator } = await supabaseAdmin
           .from('users')
           .select('auth_user_id')
-          .eq('id', project.created_by)
+          .eq('id', (project as any).created_by)
           .single()
 
         if (projectCreator?.auth_user_id) {
@@ -209,14 +209,14 @@ export async function POST(
         }
 
         // 2. 案件承認者を追加
-        if (project.org_id) {
+        if ((project as any).org_id) {
           const { data: projectDetails } = await supabaseAdmin
             .from('projects')
             .select('approved_by')
-            .eq('id', project.id)
+            .eq('id', (project as any).id)
             .single()
 
-          if (projectDetails?.approved_by && projectDetails.approved_by !== project.created_by) {
+          if (projectDetails?.approved_by && projectDetails.approved_by !== (project as any).created_by) {
             const { data: approver } = await supabaseAdmin
               .from('users')
               .select('auth_user_id')
@@ -267,9 +267,9 @@ export async function POST(
       user_id: contract.contractor_id,
       type: 'order_acceptance_signed',
       title: '注文請書の署名が完了しました',
-      message: `プロジェクト「${project.title}」の注文請書への署名が完了しました。チャットルームでやりとりを開始できます。`,
+      message: `プロジェクト「${(project as any).title}」の注文請書への署名が完了しました。チャットルームでやりとりを開始できます。`,
       data: {
-        project_id: project.id,
+        project_id: (project as any).id,
         contract_id: contractId,
         signed_file_id: signedFileId
       }
@@ -277,12 +277,12 @@ export async function POST(
 
     // 発注者（プロジェクト作成者）に通知
     notifications.push({
-      user_id: project.created_by,
+      user_id: (project as any).created_by,
       type: 'order_acceptance_signed',
       title: '注文請書の署名が完了しました',
-      message: `プロジェクト「${project.title}」の注文請書への署名が完了しました。チャットルームでやりとりを開始できます。`,
+      message: `プロジェクト「${(project as any).title}」の注文請書への署名が完了しました。チャットルームでやりとりを開始できます。`,
       data: {
-        project_id: project.id,
+        project_id: (project as any).id,
         contract_id: contractId,
         signed_file_id: signedFileId
       }
@@ -292,17 +292,17 @@ export async function POST(
     const { data: projectDetails } = await supabaseAdmin
       .from('projects')
       .select('approved_by')
-      .eq('id', project.id)
+      .eq('id', (project as any).id)
       .single()
 
-    if (projectDetails?.approved_by && projectDetails.approved_by !== project.created_by) {
+    if (projectDetails?.approved_by && projectDetails.approved_by !== (project as any).created_by) {
       notifications.push({
         user_id: projectDetails.approved_by,
         type: 'order_acceptance_signed',
         title: '注文請書の署名が完了しました',
-        message: `プロジェクト「${project.title}」の注文請書への署名が完了しました。チャットルームでやりとりを開始できます。`,
+        message: `プロジェクト「${(project as any).title}」の注文請書への署名が完了しました。チャットルームでやりとりを開始できます。`,
         data: {
-          project_id: project.id,
+          project_id: (project as any).id,
           contract_id: contractId,
           signed_file_id: signedFileId
         }
