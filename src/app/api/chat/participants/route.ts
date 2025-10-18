@@ -432,21 +432,8 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // デバッグログ
-    console.log('🔍 参加者デバッグ情報:', {
-      projectId,
-      roomId: chatRoom?.id,
-      basicParticipantsCount: basicParticipants.length,
-      invitedParticipantsCount: invitedParticipants.length,
-      basicParticipants: basicParticipants.map(p => ({ id: p.id, email: p.email, role: p.role })),
-      invitedParticipants: invitedParticipants.map(p => ({ id: p.id, email: p.email, role: p.role })),
-      supportNeeded
-    })
-
     // 基本参加者と招待参加者を結合
     const allParticipants = [...basicParticipants, ...invitedParticipants]
-
-    console.log('✅ 最終参加者リスト:', allParticipants.map(p => ({ id: p.id, email: p.email, role: p.role })))
 
     // 組織メンバーの役割情報を取得して更新
     if (allParticipants.length > 0) {
