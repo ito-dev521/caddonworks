@@ -2822,7 +2822,7 @@ function ProjectsPageContent() {
 
 export default function ProjectsPage() {
   return (
-    <AuthGuard allowedRoles={["OrgAdmin", "Staff"]}>
+    <AuthGuard allowedRoles={["OrgAdmin", "Staff", "Member"]}>
       <ProjectsPageContent />
     </AuthGuard>
   )

@@ -33,7 +33,7 @@ interface Evaluation {
 
 export default function EvaluationsPage() {
   return (
-    <AuthGuard allowedRoles={['Contractor']}>
+    <AuthGuard requiredRole="Contractor">
       <EvaluationsPageContent />
     </AuthGuard>
   )

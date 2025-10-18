@@ -76,6 +76,12 @@ const getNavigationItems = (userRole: string, badges: any) => {
       { icon: Star, label: "受注者評価", href: "/evaluations", badge: null },
       { icon: FileText, label: "請求書・報酬", href: "/invoices", badge: null },
     ],
+    Member: [
+      { icon: FolderOpen, label: "案件管理", href: "/projects", badge: badges.projects || null },
+      { icon: MessageCircle, label: "チャット", href: "/chat", badge: badges.chat || null },
+      { icon: FileText, label: "契約管理", href: "/contracts", badge: badges.contracts || null },
+      { icon: Box, label: "ファイル管理", href: "/project-files", badge: null },
+    ],
     Reviewer: [
       { icon: Home, label: "ダッシュボード", href: "/dashboard", badge: null },
       { icon: FolderOpen, label: "審査案件", href: "/reviews", badge: badges.reviews || null },
@@ -83,10 +89,7 @@ const getNavigationItems = (userRole: string, badges: any) => {
       { icon: FileText, label: "評価履歴", href: "/evaluations", badge: null },
     ],
     Auditor: [
-      { icon: Home, label: "ダッシュボード", href: "/dashboard", badge: null },
-      { icon: FileText, label: "監査ログ", href: "/audit-logs", badge: null },
-      { icon: MessageCircle, label: "チャット", href: "/chat", badge: null },
-      { icon: BarChart3, label: "レポート", href: "/reports", badge: null },
+      { icon: MessageCircle, label: "チャット", href: "/chat", badge: badges.chat || null },
     ]
   }
 

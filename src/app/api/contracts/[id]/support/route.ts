@@ -74,6 +74,78 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     if (uErr) return NextResponse.json({ message: '更新に失敗しました' }, { status: 500 })
 
+    // サポート有効化時：運営者をチャット参加者に追加
+    if (enable && contract.project_id) {
+      // チャットルームを取得または作成
+      let { data: chatRoom } = await supabase
+        .from('chat_rooms')
+        .select('id')
+        .eq('project_id', contract.project_id)
+        .maybeSingle()
+
+      if (!chatRoom) {
+        // チャットルームが存在しない場合は作成
+        const { data: newRoom, error: roomErr } = await supabase
+          .from('chat_rooms')
+          .insert({
+            project_id: contract.project_id,
+            name: contract.contract_title || 'プロジェクトチャット',
+            is_active: true
+          })
+          .select('id')
+          .single()
+
+        if (roomErr) {
+          console.error('チャットルーム作成エラー:', roomErr)
+        } else {
+          chatRoom = newRoom
+        }
+      }
+
+      if (chatRoom) {
+        // 運営者（Admin, Reviewer, Auditor）を取得
+        const { data: supportMembers } = await supabase
+          .from('users')
+          .select(`
+            auth_user_id,
+            memberships!inner ( role )
+          `)
+          .in('memberships.role', ['Admin', 'Reviewer', 'Auditor'])
+
+        if (supportMembers && supportMembers.length > 0) {
+          // 既存の参加者を確認
+          const { data: existingParticipants } = await supabase
+            .from('chat_participants')
+            .select('user_id')
+            .eq('room_id', chatRoom.id)
+
+          const existingUserIds = new Set(existingParticipants?.map(p => p.user_id) || [])
+
+          // 新規参加者を追加
+          const newParticipants = supportMembers
+            .filter(member => member.auth_user_id && !existingUserIds.has(member.auth_user_id))
+            .map(member => ({
+              room_id: chatRoom.id,
+              user_id: member.auth_user_id,
+              role: 'member',
+              is_active: true
+            }))
+
+          if (newParticipants.length > 0) {
+            const { error: participantErr } = await supabase
+              .from('chat_participants')
+              .insert(newParticipants)
+
+            if (participantErr) {
+              console.error('運営者追加エラー:', participantErr)
+            } else {
+              console.log(`✅ ${newParticipants.length}人の運営者をチャットに追加しました`)
+            }
+          }
+        }
+      }
+    }
+
     return NextResponse.json({ success: true, support_enabled: enable }, { status: 200 })
   } catch (error) {
     console.error('contract support toggle error:', error)

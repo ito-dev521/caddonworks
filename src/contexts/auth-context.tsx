@@ -593,8 +593,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!userRole) return '/dashboard'
     if (userRole === 'OrgAdmin' || userRole === 'Staff') return '/projects'
     if (userRole === 'Contractor') return '/jobs'
+    if (userRole === 'Member') return '/projects'  // 組織の一般メンバーは案件管理へ
     if (userRole === 'Admin') return '/admin/users'
     if (userRole === 'Reviewer') return '/reviews'
+    if (userRole === 'Auditor') return '/chat'  // 監査者はチャットへ
     return '/dashboard'
   }
 

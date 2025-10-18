@@ -305,15 +305,12 @@ export async function POST(request: NextRequest) {
     }
 
     // 運営組織のmembershipを付与
-    // フロントエンドから来るroleをDBのroleにマッピング
-    // Admin/Reviewer/Auditor は全て OrgAdmin として保存（運営会社なので）
-    const dbRole = 'OrgAdmin' // 運営会社のメンバーは全てOrgAdmin
-
-    console.log('メンバーシップ作成:', { user_id: profile.id, org_id: finalOperatorOrgId, frontendRole: role, dbRole })
+    // フロントエンドから選択されたroleをそのまま使用
+    console.log('メンバーシップ作成:', { user_id: profile.id, org_id: finalOperatorOrgId, role })
 
     const { error: membershipError } = await supabaseAdmin
       .from('memberships')
-      .insert({ user_id: profile.id, org_id: finalOperatorOrgId, role: dbRole })
+      .insert({ user_id: profile.id, org_id: finalOperatorOrgId, role })
 
     if (membershipError) {
       console.error('メンバーシップ作成エラー:', membershipError)
@@ -396,13 +393,11 @@ export async function PUT(request: NextRequest) {
     }
 
     // メンバーシップの更新
-    // 運営会社のメンバーは全てOrgAdminとして保存（フロントエンドのroleは表示用）
+    // フロントエンドから選択されたroleをそのまま使用
     if (role) {
-      const dbRole = 'OrgAdmin' // 運営会社のメンバーは全てOrgAdmin
-
       const { error: membershipUpdateError } = await supabaseAdmin
         .from('memberships')
-        .update({ role: dbRole })
+        .update({ role })
         .eq('id', targetMembership.id)
 
       if (membershipUpdateError) {

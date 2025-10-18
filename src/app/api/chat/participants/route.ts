@@ -150,9 +150,13 @@ export async function GET(request: NextRequest) {
       .eq('user_id', userProfile.id)
       .single()
 
-    const hasAccess = membership?.org_id === project.org_id || 
-                     project.contractor_id === userProfile.id || 
-                     (projectParticipant && projectParticipant.status === 'active')
+    // 運営者（Admin, Reviewer, Auditor）かチェック
+    const isOperator = membership && ['Admin', 'Reviewer', 'Auditor'].includes(membership.role)
+
+    const hasAccess = membership?.org_id === project.org_id ||
+                     project.contractor_id === userProfile.id ||
+                     (projectParticipant && projectParticipant.status === 'active') ||
+                     isOperator
 
     if (!hasAccess) {
       return NextResponse.json(
@@ -428,8 +432,21 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // デバッグログ
+    console.log('🔍 参加者デバッグ情報:', {
+      projectId,
+      roomId: chatRoom?.id,
+      basicParticipantsCount: basicParticipants.length,
+      invitedParticipantsCount: invitedParticipants.length,
+      basicParticipants: basicParticipants.map(p => ({ id: p.id, email: p.email, role: p.role })),
+      invitedParticipants: invitedParticipants.map(p => ({ id: p.id, email: p.email, role: p.role })),
+      supportNeeded
+    })
+
     // 基本参加者と招待参加者を結合
     const allParticipants = [...basicParticipants, ...invitedParticipants]
+
+    console.log('✅ 最終参加者リスト:', allParticipants.map(p => ({ id: p.id, email: p.email, role: p.role })))
 
     // 組織メンバーの役割情報を取得して更新
     if (allParticipants.length > 0) {

@@ -47,7 +47,7 @@ interface AdminUser {
 
 export default function AdminUsersPage() {
   return (
-    <AuthGuard requiredRole="Admin">
+    <AuthGuard allowedRoles={['Admin', 'Reviewer', 'Auditor']}>
       <AdminUsersPageContent />
     </AuthGuard>
   )
@@ -66,15 +66,15 @@ function AdminUsersPageContent() {
   const [newDisplayName, setNewDisplayName] = useState("")
   const [newRole, setNewRole] = useState<OperatorRole>('Auditor')
 
-  // 運営者権限チェック
-  if (userRole !== 'Admin') {
+  // 運営者権限チェック（Admin, Reviewer, Auditorのいずれか）
+  if (userRole !== 'Admin' && userRole !== 'Reviewer' && userRole !== 'Auditor') {
     return (
       <div className="min-h-screen bg-gray-50">
         <Navigation />
         <div className="container mx-auto px-4 py-8">
           <div className="text-center">
             <h1 className="text-2xl font-bold text-gray-900 mb-4">アクセス拒否</h1>
-            <p className="text-gray-600">このページにアクセスするには管理者権限が必要です。</p>
+            <p className="text-gray-600">このページにアクセスするには運営者権限が必要です。</p>
           </div>
         </div>
       </div>
@@ -499,14 +499,47 @@ function AdminUsersPageContent() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                className="text-red-600 border-red-300 hover:bg-red-50"
+                                className="text-blue-600 border-blue-300 hover:bg-blue-50"
                                 onClick={async () => {
                                   try {
-                                    const ok = confirm(`選択ユーザーのパスワードをリセットします。よろしいですか？`)
+                                    const tempPassword = prompt('認証ユーザーを作成します。仮パスワード（6文字以上）を入力してください:')
+                                    if (!tempPassword) return
+                                    if (tempPassword.length < 6) {
+                                      alert('パスワードは6文字以上で入力してください')
+                                      return
+                                    }
+                                    const { data: { session } } = await supabase.auth.getSession()
+                                    if (!session) throw new Error('セッションが見つかりません')
+                                    const res = await fetch('/api/admin/users/create-auth-user', {
+                                      method: 'POST',
+                                      headers: {
+                                        'Authorization': `Bearer ${session.access_token}`,
+                                        'Content-Type': 'application/json'
+                                      },
+                                      body: JSON.stringify({ userId: user.id, temporaryPassword: tempPassword })
+                                    })
+                                    const data = await res.json()
+                                    if (!res.ok) throw new Error(data.message || '認証ユーザー作成に失敗しました')
+                                    alert(`認証ユーザーを作成しました。\n仮パスワード: ${tempPassword}\n\nユーザーにこのパスワードを伝えてログインしてもらってください。`)
+                                  } catch (e: any) {
+                                    console.error('認証ユーザー作成失敗:', e)
+                                    alert(e.message || '認証ユーザー作成に失敗しました')
+                                  }
+                                }}
+                              >
+                                認証ユーザー作成
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-orange-600 border-orange-300 hover:bg-orange-50"
+                                onClick={async () => {
+                                  try {
+                                    const ok = confirm('即時に新しいパスワードを発行して表示します（メールは送信しません）。よろしいですか？')
                                     if (!ok) return
                                     const { data: { session } } = await supabase.auth.getSession()
                                     if (!session) throw new Error('セッションが見つかりません')
-                                    const res = await fetch('/api/admin/users/send-reset-email', {
+                                    const res = await fetch('/api/admin/users/reset-password', {
                                       method: 'POST',
                                       headers: {
                                         'Authorization': `Bearer ${session.access_token}`,
@@ -515,47 +548,20 @@ function AdminUsersPageContent() {
                                       body: JSON.stringify({ userId: user.id })
                                     })
                                     const data = await res.json()
-                                    if (!res.ok) throw new Error(data.message || 'メール送信に失敗しました')
-                                    alert('リセットメールを送信しました')
+                                    if (!res.ok) throw new Error(data.message || '再発行に失敗しました')
+
+                                    // クリップボードにコピー
+                                    await navigator.clipboard.writeText(data.newPassword)
+
+                                    alert(`新しいパスワード: ${data.newPassword}\n\nパスワードはクリップボードにコピーされました。\nこのパスワードをユーザーに安全に共有してください。`)
                                   } catch (e: any) {
                                     console.error('パスワードリセット失敗:', e)
                                     alert(e.message || 'パスワードリセットに失敗しました')
                                   }
                                 }}
                               >
-                                リセットメール送信
+                                パスワードリセット
                               </Button>
-                              {(!(process.env.NEXT_PUBLIC_ENV === 'production' || process.env.NODE_ENV === 'production')) && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="text-orange-600 border-orange-300 hover:bg-orange-50"
-                                  onClick={async () => {
-                                    try {
-                                      const ok = confirm('即時に新しいパスワードを発行して表示します（メールは送信しません）。よろしいですか？')
-                                      if (!ok) return
-                                      const { data: { session } } = await supabase.auth.getSession()
-                                      if (!session) throw new Error('セッションが見つかりません')
-                                      const res = await fetch('/api/admin/users/reset-password', {
-                                        method: 'POST',
-                                        headers: {
-                                          'Authorization': `Bearer ${session.access_token}`,
-                                          'Content-Type': 'application/json'
-                                        },
-                                        body: JSON.stringify({ userId: user.id })
-                                      })
-                                      const data = await res.json()
-                                      if (!res.ok) throw new Error(data.message || '再発行に失敗しました')
-                                      alert(`新しいパスワード: ${data.newPassword}`)
-                                    } catch (e: any) {
-                                      console.error('即時再発行失敗:', e)
-                                      alert(e.message || '再発行に失敗しました')
-                                    }
-                                  }}
-                                >
-                                  即時再発行(表示)
-                                </Button>
-                              )}
                             </div>
                           )}
                         </div>
