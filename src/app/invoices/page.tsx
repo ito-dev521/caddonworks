@@ -325,13 +325,6 @@ function InvoicesPageContent() {
 
       // 各組織ごとに請求書を作成
       for (const orgGroup of orgGroups) {
-        console.log('請求書作成リクエスト:', {
-          org_id: orgGroup.org_id,
-          month: selectedMonth,
-          completion_report_ids: orgGroup.reports.map(r => r.id),
-          reports_count: orgGroup.reports.length
-        })
-
         const response = await fetch('/api/contractor-invoices', {
           method: 'POST',
           headers: {
@@ -346,8 +339,6 @@ function InvoicesPageContent() {
         })
 
         const result = await response.json()
-        console.log(`${orgGroup.org_name} 請求書作成レスポンス:`, result)
-        console.log(`ステータスコード: ${response.status}`)
 
         if (response.ok) {
           successCount++

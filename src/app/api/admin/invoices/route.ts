@@ -3,6 +3,15 @@ import { createSupabaseAdmin } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 
+// 源泉徴収税を計算
+function calculateWithholding(amount: number): number {
+  if (amount <= 1000000) {
+    return Math.floor(amount * 0.1021)
+  } else {
+    return Math.floor((amount - 1000000) * 0.2042 + 102100)
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     const supabase = createSupabaseAdmin()
@@ -49,17 +58,23 @@ export async function GET(request: NextRequest) {
     const { data, error } = await query.order('issue_date', { ascending: false })
     if (error) return NextResponse.json({ message: '取得失敗', error }, { status: 500 })
 
-    const rows = (data || []).map((d: any) => ({
-      id: d.id,
-      invoice_number: `CINV-${String(d.id).slice(0,8).toUpperCase()}`,
-      status: d.status,
-      issue_date: d.issue_date,
-      due_date: d.due_date,
-      total_amount: d.total_amount ?? 0,
-      project: { id: d.projects?.id, title: d.projects?.title },
-      client_org: { id: d.organizations?.id, name: d.organizations?.name },
-      contractor: { id: d.users?.id, name: d.users?.display_name }
-    }))
+    const rows = (data || []).map((d: any) => {
+      const subtotal = d.total_amount ?? 0  // 小計（契約金額 - サポート料）
+      const withholding = calculateWithholding(subtotal)  // 源泉税
+      const finalAmount = subtotal - withholding  // 最終請求額（振込金額）
+
+      return {
+        id: d.id,
+        invoice_number: `CINV-${String(d.id).slice(0,8).toUpperCase()}`,
+        status: d.status,
+        issue_date: d.issue_date,
+        due_date: d.due_date,
+        total_amount: finalAmount,  // 源泉税を引いた最終請求額
+        project: { id: d.projects?.id, title: d.projects?.title },
+        client_org: { id: d.organizations?.id, name: d.organizations?.name },
+        contractor: { id: d.users?.id, name: d.users?.display_name }
+      }
+    })
 
     const filtered = q
       ? rows.filter(r =>

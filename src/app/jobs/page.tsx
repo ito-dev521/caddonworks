@@ -130,9 +130,7 @@ function JobsPageContent() {
     
     const diffTime = endOfDeadlineDay.getTime() - now.getTime()
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-    
-    // デバッグログ削除
-    
+
     return diffDays
   }
 
